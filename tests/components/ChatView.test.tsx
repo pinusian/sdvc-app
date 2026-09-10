@@ -340,3 +340,57 @@ describe("[P4-5] ChatView — 답변이 잘렸을 때", () => {
     expect(screen.getByRole("button", { name: /이어서 계속/ })).toBeInTheDocument();
   });
 });
+
+describe("[P4-6] ChatView — 언제든 다음 단계로 갈 수 있어야 한다", () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("게이트 안내가 없어도 단계 이동 버튼이 늘 보인다", () => {
+    // 실제 사용 중 발견: 모델이 '아래 확인 버튼을 눌러주세요'라고만 하고
+    // 마커를 빠뜨리거나, 새로고침으로 게이트 상태가 사라지면 사용자가
+    // 다음 단계로 갈 방법이 아예 없었다.
+    render(<ChatView conversationId="conv-1" currentBlock="clarify" initialMessages={[]} />);
+
+    expect(screen.getByRole("button", { name: /다음 단계로/ })).toBeInTheDocument();
+  });
+
+  it("단계 이동 버튼을 누르면 approved:true로 보낸다", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(mockChatResponse({ type: "block", block: "plan" }, { type: "done" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ChatView conversationId="conv-1" currentBlock="clarify" initialMessages={[]} />);
+    await userEvent.click(screen.getByRole("button", { name: /다음 단계로/ }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({
+      conversationId: "conv-1",
+      approved: true,
+    });
+    await waitFor(() => expect(screen.getByText(/블록 3/)).toBeInTheDocument());
+  });
+
+  it("마지막 블록에서는 단계 이동 버튼을 감춘다 (더 갈 곳이 없다)", () => {
+    render(<ChatView conversationId="conv-1" currentBlock="implement" initialMessages={[]} />);
+
+    expect(screen.queryByRole("button", { name: /다음 단계로/ })).not.toBeInTheDocument();
+  });
+
+  it("답변을 기다리는 동안에는 단계 이동을 막는다", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(new ReadableStream<Uint8Array>({ start() {} })),
+      ),
+    );
+
+    render(<ChatView conversationId="conv-1" currentBlock="clarify" initialMessages={[]} />);
+    await userEvent.type(screen.getByLabelText("메시지"), "안녕");
+    await userEvent.click(screen.getByRole("button", { name: "보내기" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /다음 단계로/ })).toBeDisabled(),
+    );
+  });
+});
