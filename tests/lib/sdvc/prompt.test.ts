@@ -54,10 +54,31 @@ describe("[P3-3] buildSystemPrompt", () => {
     expect(prompt).toContain("값을 채우지 않는다");
   });
 
-  it("게이트 블록에서만 승인 마커 출력을 지시한다", () => {
+  it("모든 블록이 끝날 때 마커를 내도록 지시한다", () => {
+    // [P3-7] 실제 대화에서 발견: 게이트 블록에만 마커를 지시했더니
+    // 헌장·명확화 블록에서 사용자가 "예"라고 해도 다음 블록으로 갈 방법이
+    // 없었다. 단계 이동은 마커 → 승인 버튼으로만 일어나므로 모든 블록이
+    // 마커를 내야 한다.
+    expect(buildSystemPrompt({ block: "constitution_specify" })).toContain(
+      "<<SDVC_GATE:constitution_specify>>",
+    );
+    expect(buildSystemPrompt({ block: "clarify" })).toContain("<<SDVC_GATE:clarify>>");
     expect(buildSystemPrompt({ block: "plan" })).toContain("<<SDVC_GATE:plan>>");
     expect(buildSystemPrompt({ block: "tasks" })).toContain("<<SDVC_GATE:tasks>>");
-    expect(buildSystemPrompt({ block: "clarify" })).not.toContain("<<SDVC_GATE:");
+  });
+
+  it("사용자가 말로 '예'라고 해도 다음 블록 일을 미리 하지 말라고 못박는다", () => {
+    // [P3-7] 실제 대화에서 발견: 사용자가 버튼 대신 "예"라고 입력하면
+    // 서버의 진행 단계는 그대로인데 모델만 다음 블록 내용을 진행해버려
+    // 화면 표시와 실제 상태가 어긋났다.
+    const prompt = buildSystemPrompt({ block: "clarify" });
+    expect(prompt).toContain("확인 버튼");
+    expect(prompt).toMatch(/말로.*예/);
+  });
+
+  it("게이트 블록에서는 승인 없이 넘어가지 말라고 더 강하게 못박는다", () => {
+    expect(buildSystemPrompt({ block: "plan" })).toContain("승인 없이는");
+    expect(buildSystemPrompt({ block: "clarify" })).not.toContain("승인 없이는");
   });
 
   it("프로젝트 이름이 있으면 프롬프트에 포함한다", () => {
