@@ -22,7 +22,9 @@ export async function GET() {
 
   if (supabaseUrl && supabaseKey) {
     try {
-      const res = await fetch(`${supabaseUrl}/rest/v1/`, {
+      // /auth/v1/health는 publishable key로 접근 가능한 공개 헬스체크 엔드포인트.
+      // /rest/v1/(PostgREST 스키마)는 secret key가 있어야 응답하므로 여기서는 쓰지 않는다.
+      const res = await fetch(`${supabaseUrl}/auth/v1/health`, {
         headers: { apikey: supabaseKey },
         cache: "no-store",
       });
