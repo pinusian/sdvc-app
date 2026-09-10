@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { logoutAction } from "@/app/(auth)/actions";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { NewConversationButton } from "@/components/chat/NewConversationButton";
 
 const GRADE_LABEL: Record<string, string> = {
   trial: "체험",
@@ -53,7 +54,7 @@ export default async function DashboardPage() {
               </span>
             </p>
           </div>
-          <Button variant="accent">+ 새 프로젝트</Button>
+          <NewConversationButton />
         </div>
 
         <Card className="flex flex-col items-center gap-2 py-16 text-center">

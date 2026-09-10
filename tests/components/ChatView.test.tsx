@@ -152,3 +152,111 @@ describe("[P3-5] ChatView", () => {
     await waitFor(() => expect(screen.getByText(/호출 실패/)).toBeInTheDocument());
   });
 });
+
+describe("[P3-6] ChatView — 승인 게이트", () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.unstubAllGlobals());
+
+  async function sendAndReachGate(fetchMock: ReturnType<typeof vi.fn>) {
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatView conversationId="conv-1" currentBlock="plan" initialMessages={[]} />);
+    await userEvent.type(screen.getByLabelText("메시지"), "계획 세워줘");
+    await userEvent.click(screen.getByRole("button", { name: "보내기" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /예, 이대로 진행/ })).toBeInTheDocument(),
+    );
+  }
+
+  it("gate 이벤트를 받으면 승인 버튼을 보여준다", async () => {
+    await sendAndReachGate(
+      vi.fn().mockResolvedValue(
+        mockChatResponse(
+          { type: "text", text: "이 계획대로 진행할까요?" },
+          { type: "gate", block: "plan" },
+          { type: "done" },
+        ),
+      ),
+    );
+
+    expect(screen.getByRole("button", { name: /예, 이대로 진행/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /수정할 게 있어요/ })).toBeInTheDocument();
+  });
+
+  it("승인을 누르면 approved:true로 다시 요청하고 버튼은 사라진다", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        mockChatResponse(
+          { type: "text", text: "이 계획대로 진행할까요?" },
+          { type: "gate", block: "plan" },
+          { type: "done" },
+        ),
+      )
+      .mockResolvedValueOnce(
+        mockChatResponse(
+          { type: "block", block: "tasks" },
+          { type: "text", text: "작업을 나눠보겠습니다" },
+          { type: "done" },
+        ),
+      );
+
+    await sendAndReachGate(fetchMock);
+    await userEvent.click(screen.getByRole("button", { name: /예, 이대로 진행/ }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toMatchObject({
+      conversationId: "conv-1",
+      approved: true,
+    });
+
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: /예, 이대로 진행/ })).not.toBeInTheDocument(),
+    );
+  });
+
+  it("block 이벤트를 받으면 화면의 단계 표시가 바뀐다", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        mockChatResponse({ type: "text", text: "진행할까요?" }, { type: "gate", block: "plan" }),
+      )
+      .mockResolvedValueOnce(
+        mockChatResponse({ type: "block", block: "tasks" }, { type: "done" }),
+      );
+
+    await sendAndReachGate(fetchMock);
+    expect(screen.getByText(/블록 3/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /예, 이대로 진행/ }));
+
+    await waitFor(() => expect(screen.getByText(/블록 4/)).toBeInTheDocument());
+    expect(screen.getByText(/작업 분해/)).toBeInTheDocument();
+  });
+
+  it("'수정할 게 있어요'를 누르면 입력창으로 돌아가고 승인은 보내지 않는다", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      mockChatResponse({ type: "text", text: "진행할까요?" }, { type: "gate", block: "plan" }),
+    );
+
+    await sendAndReachGate(fetchMock);
+    await userEvent.click(screen.getByRole("button", { name: /수정할 게 있어요/ }));
+
+    expect(screen.queryByRole("button", { name: /예, 이대로 진행/ })).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("[P3-5] ChatView — 빈 입력", () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("빈 메시지는 보내지 않는다", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ChatView conversationId="conv-1" currentBlock="clarify" initialMessages={[]} />);
+    await userEvent.click(screen.getByRole("button", { name: "보내기" }));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

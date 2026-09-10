@@ -288,6 +288,16 @@ describe("[P3-4] POST /api/chat — 대화 상태 저장", () => {
     expect(system).toContain("현재 블록: 블록 4");
   });
 
+  it("[P3-6] 단계가 넘어갔으면 스트림 맨 앞에서 새 블록을 알려준다", async () => {
+    getConversation.mockResolvedValue({ ...CONVERSATION, currentBlock: "plan" });
+
+    const { POST } = await import("@/app/api/chat/route");
+    const res = await POST(request({ ...VALID, approved: true, message: "예" }));
+
+    const events = await eventsOf(res);
+    expect(events[0]).toEqual({ type: "block", block: "tasks" });
+  });
+
   it("승인하지 않으면 게이트 블록에 그대로 머문다 (fail-closed)", async () => {
     getConversation.mockResolvedValue({ ...CONVERSATION, currentBlock: "plan" });
 
