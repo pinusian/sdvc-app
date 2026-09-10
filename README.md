@@ -21,7 +21,20 @@
 
 세션 시작/재개: **"SDVC서버 구축"** · 중단: **"작업 휴식"** (진행 상황은 `pinusian/sdvc`의 `docs/progress.md`에 기록됩니다)
 
+## 개발 환경
+
+```bash
+npm install
+npm run dev        # 개발 서버
+npm run test        # 단위 테스트 (Vitest)
+npm run test:e2e    # 브라우저 E2E 테스트 (Playwright)
+npm run build        # 프로덕션 빌드
+```
+
+환경변수는 `.env.example`을 복사해 `.env.local`을 만들고 직접 값을 채운다 (AI는 값을 채우지 않음).
+
 ## 현재 상태
 
 - [x] [P0-7] 저장소 생성 — 2026-09-10
-- [ ] [P2-1] Next.js 프로젝트 뼈대 생성 (예정)
+- [x] [P2-1] Next.js 16(App Router)+TypeScript 뼈대, Tailwind, Vitest+Playwright 테스트 도구 설정 — 2026-09-10
+- [ ] [P2-2] Vercel 첫 배포 (예정)
