@@ -260,3 +260,58 @@ describe("[P3-5] ChatView — 빈 입력", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+describe("[P4-4] ChatView — 산출물 생성 표시", () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("구현 단계에서 답을 기다리는 동안에는 '만드는 중'이라고 알려준다", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            async start(controller) {
+              await gate;
+              controller.enqueue(new TextEncoder().encode('{"type":"done"}\n'));
+              controller.close();
+            },
+          }),
+        ),
+      ),
+    );
+
+    render(<ChatView conversationId="conv-1" currentBlock="implement" initialMessages={[]} />);
+    await userEvent.type(screen.getByLabelText("메시지"), "만들어줘");
+    await userEvent.click(screen.getByRole("button", { name: "보내기" }));
+
+    await waitFor(() => expect(screen.getByText(/만드는 중/)).toBeInTheDocument());
+    release();
+    await waitFor(() => expect(screen.queryByText(/만드는 중/)).not.toBeInTheDocument());
+  });
+
+  it("artifact 이벤트를 받으면 완성 안내와 주소를 보여준다", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        mockChatResponse(
+          { type: "text", text: "홈페이지를 만들었습니다." },
+          { type: "artifact", slug: "my-homepage", fileCount: 3 },
+          { type: "done" },
+        ),
+      ),
+    );
+
+    render(<ChatView conversationId="conv-1" currentBlock="implement" initialMessages={[]} />);
+    await userEvent.type(screen.getByLabelText("메시지"), "만들어줘");
+    await userEvent.click(screen.getByRole("button", { name: "보내기" }));
+
+    await waitFor(() => expect(screen.getByText(/파일 3개/)).toBeInTheDocument());
+    const link = screen.getByRole("link", { name: /열어보기/ });
+    expect(link).toHaveAttribute("href", "/site/my-homepage");
+    expect(screen.getByText("/site/my-homepage")).toBeInTheDocument();
+  });
+});
