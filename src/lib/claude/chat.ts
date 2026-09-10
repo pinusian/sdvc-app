@@ -18,6 +18,8 @@ export interface ChatMessage {
 
 export type ChatEvent =
   | { type: "text"; text: string }
+  /** 모델이 확장 사고 중임 — 내용은 보내지 않고 신호만 한 번 보낸다 */
+  | { type: "thinking" }
   | { type: "done" }
   | { type: "error"; message: string };
 
@@ -88,6 +90,24 @@ function encodeEvent(event: ChatEvent): Uint8Array {
 function sseToNdjson(): TransformStream<Uint8Array, Uint8Array> {
   const decoder = new TextDecoder();
   let buffer = "";
+  let thinkingAnnounced = false;
+
+  const handle = (line: string, controller: TransformStreamDefaultController<Uint8Array>) => {
+    const delta = deltaOf(line);
+    if (delta === null) return;
+
+    if (delta.kind === "thinking") {
+      // 사고 내용 자체는 화면에 보내지 않는다. 다만 화면이 멈춘 것처럼
+      // 보이지 않도록 "생각 중"이라는 신호만 한 번 보낸다.
+      if (!thinkingAnnounced) {
+        thinkingAnnounced = true;
+        controller.enqueue(encodeEvent({ type: "thinking" }));
+      }
+      return;
+    }
+
+    controller.enqueue(encodeEvent({ type: "text", text: delta.text }));
+  };
 
   return new TransformStream<Uint8Array, Uint8Array>({
     transform(chunk, controller) {
@@ -98,20 +118,20 @@ function sseToNdjson(): TransformStream<Uint8Array, Uint8Array> {
       while ((newlineAt = buffer.indexOf("\n")) !== -1) {
         const line = buffer.slice(0, newlineAt);
         buffer = buffer.slice(newlineAt + 1);
-        const text = textDeltaOf(line);
-        if (text) controller.enqueue(encodeEvent({ type: "text", text }));
+        handle(line, controller);
       }
     },
     flush(controller) {
-      const tail = textDeltaOf(buffer);
-      if (tail) controller.enqueue(encodeEvent({ type: "text", text: tail }));
+      handle(buffer, controller);
       controller.enqueue(encodeEvent({ type: "done" }));
     },
   });
 }
 
-/** SSE 한 줄에서 텍스트 델타를 뽑는다. 텍스트 델타가 아니면 null. */
-function textDeltaOf(line: string): string | null {
+type Delta = { kind: "text"; text: string } | { kind: "thinking" };
+
+/** SSE 한 줄에서 델타를 뽑는다. 우리가 쓰지 않는 줄이면 null. */
+function deltaOf(line: string): Delta | null {
   const trimmed = line.trim();
   if (!trimmed.startsWith("data:")) return null;
 
@@ -124,8 +144,10 @@ function textDeltaOf(line: string): string | null {
       delta?: { type?: string; text?: string };
     };
     if (parsed.type !== "content_block_delta") return null;
+
+    if (parsed.delta?.type === "thinking_delta") return { kind: "thinking" };
     if (parsed.delta?.type !== "text_delta") return null;
-    return parsed.delta.text ?? null;
+    return typeof parsed.delta.text === "string" ? { kind: "text", text: parsed.delta.text } : null;
   } catch {
     // 파싱할 수 없는 줄(주석·keep-alive 등)은 조용히 넘긴다.
     return null;
