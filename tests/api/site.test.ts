@@ -28,7 +28,7 @@ const PROJECT = {
   status: "deployed" as const,
 };
 
-function request(url = "http://localhost:3000/site/my-homepage") {
+function request(url = "http://localhost:3000/site/my-homepage/") {
   return new Request(url);
 }
 
@@ -55,7 +55,43 @@ describe("[P5-1] GET /site/[slug]", () => {
     expect(res.status).toBe(200);
     expect(download).toHaveBeenCalledWith("proj-1/index.html");
     expect(res.headers.get("content-type")).toContain("text/html");
-    expect(await res.text()).toBe("<h1>안녕</h1>");
+    // 기준 경로(<base>)는 심어주되 원래 내용은 그대로 남는다.
+    expect(await res.text()).toContain("<h1>안녕</h1>");
+  });
+
+  it("[P5-1] HTML에 기준 경로(<base>)를 심어 상대 경로가 깨지지 않게 한다", async () => {
+    // 실제로 겪음: /site/my-homepage 에서 <link href="css/style.css">는
+    // /site/css/style.css 로 해석돼 CSS가 안 붙었다. Next.js는 앱 전체에서
+    // 끝의 /를 떼어내므로 리다이렉트로는 못 고치고, HTML에 기준 경로를 심는다.
+    download.mockResolvedValue({
+      data: fileBlob('<html><head><title>x</title></head><body></body></html>'),
+      error: null,
+    });
+
+    const { GET } = await import("@/app/site/[slug]/[[...path]]/route");
+    const body = await (await GET(request(), context())).text();
+
+    expect(body).toContain('<base href="/site/my-homepage/">');
+    expect(body.indexOf("<base")).toBeLessThan(body.indexOf("<title>"));
+  });
+
+  it("[P5-1] 이미 기준 경로가 있는 HTML은 건드리지 않는다", async () => {
+    const html = '<html><head><base href="/somewhere/"><title>x</title></head></html>';
+    download.mockResolvedValue({ data: fileBlob(html), error: null });
+
+    const { GET } = await import("@/app/site/[slug]/[[...path]]/route");
+    const body = await (await GET(request(), context())).text();
+
+    expect(body).toBe(html);
+  });
+
+  it("[P5-1] HTML이 아닌 파일은 손대지 않는다", async () => {
+    download.mockResolvedValue({ data: fileBlob("body{}", "text/css"), error: null });
+
+    const { GET } = await import("@/app/site/[slug]/[[...path]]/route");
+    const body = await (await GET(request(), context("my-homepage", ["style.css"]))).text();
+
+    expect(body).toBe("body{}");
   });
 
   it("하위 경로 파일도 알맞은 종류로 내보낸다", async () => {
@@ -79,6 +115,29 @@ describe("[P5-1] GET /site/[slug]", () => {
     expect(download).toHaveBeenNthCalledWith(1, "proj-1/about");
     expect(download).toHaveBeenNthCalledWith(2, "proj-1/about/index.html");
     expect(res.status).toBe(200);
+  });
+
+  it("[P5-1] 저장소가 종류를 text/plain으로 알려줘도 확장자 기준으로 바로잡는다", async () => {
+    // 실제로 겪음: Supabase Storage는 html 파일을 text/plain으로 돌려준다.
+    // 그대로 내보내면 브라우저가 홈페이지를 렌더링하지 않고 소스코드를 보여준다.
+    download.mockResolvedValue({ data: fileBlob("<h1>안녕</h1>", "text/plain"), error: null });
+
+    const { GET } = await import("@/app/site/[slug]/[[...path]]/route");
+    const res = await GET(request(), context());
+
+    expect(res.headers.get("content-type")).toContain("text/html");
+  });
+
+  it("[P5-1] 남이 만든 페이지가 우리 로그인 정보에 접근하지 못하게 가둔다", async () => {
+    // 산출물은 사용자가 시킨 대로 AI가 만든 코드다. 우리 도메인에서 그대로
+    // 실행되면 그 스크립트가 같은 출처의 쿠키·저장소에 손댈 수 있다.
+    const { GET } = await import("@/app/site/[slug]/[[...path]]/route");
+    const res = await GET(request(), context());
+
+    const csp = res.headers.get("content-security-policy") ?? "";
+    expect(csp).toContain("sandbox");
+    // allow-same-origin을 주면 가두는 의미가 없다.
+    expect(csp).not.toContain("allow-same-origin");
   });
 
   it("없는 주소는 404", async () => {
