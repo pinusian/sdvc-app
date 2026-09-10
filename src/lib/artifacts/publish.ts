@@ -52,7 +52,8 @@ export async function publishArtifact(
     const fileCount = await uploadArtifactFiles(admin, project.id, files);
     await setProjectStatus(admin, project.id, ownerId, "deployed");
     await setConversationProject(admin, conversationId, ownerId, project.id);
-    return { project, fileCount };
+    // 방금 바꾼 상태를 반영해서 돌려준다 (부르는 쪽이 다시 조회하지 않도록).
+    return { project: { ...project, status: "deployed" }, fileCount };
   } catch (error) {
     // 반쯤 올라간 채로 "완료"처럼 보이지 않게 표시해둔다.
     await setProjectStatus(admin, project.id, ownerId, "failed").catch(() => {});

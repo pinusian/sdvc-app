@@ -89,7 +89,8 @@ describe("[P4-3] publishArtifact", () => {
     ]);
     expect(setProjectStatus).toHaveBeenCalledWith(admin, "proj-1", "user-1", "deployed");
     expect(setConversationProject).toHaveBeenCalledWith(admin, "conv-1", "user-1", "proj-1");
-    expect(result).toEqual({ project: PROJECT, fileCount: 2 });
+    // 돌려주는 프로젝트의 상태도 방금 바꾼 값이어야 한다 (draft가 아니라 deployed)
+    expect(result).toEqual({ project: { ...PROJECT, status: "deployed" }, fileCount: 2 });
   });
 
   it("이미 프로젝트가 연결된 대화면 새로 만들지 않고 덮어쓴다", async () => {
