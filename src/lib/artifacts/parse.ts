@@ -1,0 +1,68 @@
+/**
+ * [P4-3] Claude 답변에서 산출물 파일 뽑아내기.
+ *
+ * 구현 블록에서 모델은 파일을 이렇게 낸다:
+ *
+ *     ```file:index.html
+ *     <h1>안녕</h1>
+ *     ```
+ *
+ * 설명하려고 넣은 평범한 코드블록과 구분하기 위해 `file:` 표시를 요구한다.
+ *
+ * 여기 들어오는 것은 **모델이 만든 문자열**이므로 신뢰하지 않는다.
+ * 경로를 그대로 믿고 저장하면 `../`로 다른 프로젝트 폴더를 덮어쓸 수 있다.
+ */
+
+export interface ArtifactFile {
+  path: string;
+  content: string;
+}
+
+/** 한 프로젝트에 담을 수 있는 파일 수 */
+export const MAX_FILES = 30;
+/** 파일 하나의 최대 크기 (Storage 버킷 제한 5MB보다 낮게 잡는다) */
+export const MAX_FILE_BYTES = 512 * 1024;
+
+const ALLOWED_EXTENSIONS = new Set([
+  "html", "css", "js", "json", "txt", "md", "svg", "webmanifest",
+]);
+
+/** ```file:경로 ... ``` 블록을 모두 찾는다. */
+const FILE_BLOCK = /^```file:([^\n`]+)\n([\s\S]*?)^```/gm;
+
+export function parseArtifactFiles(answer: string): ArtifactFile[] {
+  const byPath = new Map<string, string>();
+
+  for (const match of answer.matchAll(FILE_BLOCK)) {
+    const path = normalizePath(match[1]);
+    if (!path) continue;
+
+    const content = match[2].replace(/\n$/, "");
+    if (content.trim().length === 0) continue;
+    if (Buffer.byteLength(content, "utf8") > MAX_FILE_BYTES) continue;
+
+    // 같은 경로가 두 번 나오면 나중 것이 이긴다 (모델이 고쳐 쓴 경우).
+    byPath.delete(path);
+    byPath.set(path, content);
+  }
+
+  return [...byPath].slice(0, MAX_FILES).map(([path, content]) => ({ path, content }));
+}
+
+/** 저장해도 되는 상대 경로면 정리해서 돌려주고, 아니면 null. */
+function normalizePath(raw: string): string | null {
+  const path = raw.trim();
+  if (!path) return null;
+
+  if (path.includes("\\")) return null; // 윈도우 경로·이스케이프
+  if (path.startsWith("/")) return null; // 절대 경로
+  if (/^[a-zA-Z]:/.test(path)) return null; // C: 같은 드라이브 문자
+  if (path.split("/").some((part) => part === "" || part === "." || part === "..")) return null;
+  if (path.length > 120) return null;
+  if (!/^[a-zA-Z0-9._/-]+$/.test(path)) return null; // 공백·한글·특수문자 금지
+
+  const extension = path.split(".").pop()?.toLowerCase();
+  if (!extension || !ALLOWED_EXTENSIONS.has(extension)) return null;
+
+  return path;
+}
