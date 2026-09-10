@@ -1,21 +1,28 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { createChatStream, type ChatMessage } from "@/lib/claude/chat";
-import { FIRST_BLOCK, isBlockId } from "@/lib/sdvc/blocks";
-import { buildSystemPrompt } from "@/lib/sdvc/prompt";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { createChatStream, type ChatEvent } from "@/lib/claude/chat";
+import { advanceBlock, type BlockId } from "@/lib/sdvc/blocks";
+import { buildSystemPrompt, parseGateMarker, splitPendingMarker } from "@/lib/sdvc/prompt";
+import {
+  appendMessage,
+  getConversation,
+  listMessages,
+  setCurrentBlock,
+} from "@/lib/conversations/store";
 
 /**
- * [P3-2] SDVC 엔진과의 대화 API. [P3-3]에서 진행대본 프롬프트를 연결했다.
+ * SDVC 엔진과의 대화 API.
  *
- * 이 라우트가 책임지는 것: 로그인 확인 → 입력 검증 → 서버 키 확인 →
- * 현재 블록의 진행대본을 system 프롬프트로 붙여 Claude 스트림 전달.
- * 대화 내용의 DB 저장은 [P3-4]에서 얹는다.
+ * [P3-2] 인증·입력검증·스트림 전달
+ * [P3-3] 현재 블록의 진행대본을 system 프롬프트로
+ * [P3-4] 대화 기록을 DB에서 읽고 쓴다 — 클라이언트는 대화 ID와 이번 메시지만 보낸다.
+ *        진행 단계도 클라이언트 말이 아니라 DB에 저장된 값을 쓴다(단계 건너뛰기 방지).
  */
 
 interface ChatRequestBody {
-  messages?: unknown;
-  block?: unknown;
-  projectName?: unknown;
+  conversationId?: unknown;
+  message?: unknown;
+  approved?: unknown;
 }
 
 export async function POST(request: Request) {
@@ -35,26 +42,37 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "요청 형식이 올바르지 않습니다." }, { status: 400 });
   }
 
-  const messages = parseMessages(body.messages);
-  if (!messages) {
+  const conversationId = typeof body.conversationId === "string" ? body.conversationId : "";
+  const message = typeof body.message === "string" ? body.message.trim() : "";
+  if (!conversationId || !message) {
     return NextResponse.json(
-      { error: "메시지가 비어 있거나 형식이 올바르지 않습니다." },
+      { error: "대화와 메시지를 모두 보내주세요." },
       { status: 400 },
     );
   }
 
-  const block = body.block ?? FIRST_BLOCK;
-  if (!isBlockId(block) || block === "done") {
-    return NextResponse.json(
-      { error: "알 수 없는 진행 단계입니다." },
-      { status: 400 },
-    );
+  // conversations/messages는 RLS 정책이 없어 브라우저에서 접근할 수 없다.
+  // 서버가 secret key로 접근하되, 소유자 조건은 store가 매번 직접 건다.
+  const admin = createAdminClient();
+
+  const conversation = await getConversation(admin, conversationId, user.id);
+  if (!conversation) {
+    return NextResponse.json({ error: "대화를 찾을 수 없습니다." }, { status: 404 });
   }
 
-  const projectName =
-    typeof body.projectName === "string" && body.projectName.trim().length > 0
-      ? body.projectName.trim()
-      : undefined;
+  // 단계 이동은 사용자가 명시적으로 승인했을 때만 일어난다.
+  // (게이트가 없는 블록도 마찬가지 — 대본상 "예"라고 답해야 다음으로 간다.)
+  let block: BlockId = conversation.currentBlock;
+  if (body.approved === true) {
+    const advanced = advanceBlock(block, { approved: true });
+    if (advanced !== block) {
+      await setCurrentBlock(admin, conversationId, user.id, advanced);
+      block = advanced;
+    }
+  }
+  if (block === "done") {
+    return NextResponse.json({ error: "이미 끝난 대화입니다." }, { status: 400 });
+  }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -65,13 +83,17 @@ export async function POST(request: Request) {
     );
   }
 
+  const history = await listMessages(admin, conversationId);
+  await appendMessage(admin, { conversationId, role: "user", content: message });
+
+  const title = (conversation as { title?: string }).title;
   const stream = await createChatStream({
     apiKey,
-    messages,
-    system: buildSystemPrompt({ block, projectName }),
+    system: buildSystemPrompt({ block, projectName: title }),
+    messages: [...history, { role: "user", content: message }],
   });
 
-  return new Response(stream, {
+  return new Response(stream.pipeThrough(captureAndFilter(admin, conversationId)), {
     status: 200,
     headers: {
       "content-type": "application/x-ndjson; charset=utf-8",
@@ -81,20 +103,83 @@ export async function POST(request: Request) {
 }
 
 /**
- * 클라이언트가 보낸 대화 기록을 검증한다.
- * role은 user/assistant만 허용한다 — system 역할을 클라이언트가 끼워넣어
- * 진행대본을 덮어쓰는 것을 막기 위해서다([P3-3] 대비).
+ * 흘러가는 NDJSON을 그대로 통과시키면서
+ * ① 답변 텍스트를 모아 두었다가 끝나면 DB에 저장하고
+ * ② 승인 게이트 마커를 걷어내 `gate` 이벤트로 바꾼다.
  */
-function parseMessages(value: unknown): ChatMessage[] | null {
-  if (!Array.isArray(value) || value.length === 0) return null;
+function captureAndFilter(
+  admin: ReturnType<typeof createAdminClient>,
+  conversationId: string,
+): TransformStream<Uint8Array, Uint8Array> {
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  const emit = (controller: TransformStreamDefaultController<Uint8Array>, event: ChatEvent | { type: "gate"; block: BlockId }) =>
+    controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
 
-  const messages: ChatMessage[] = [];
-  for (const item of value) {
-    if (typeof item !== "object" || item === null) return null;
-    const { role, content } = item as { role?: unknown; content?: unknown };
-    if (role !== "user" && role !== "assistant") return null;
-    if (typeof content !== "string" || content.trim().length === 0) return null;
-    messages.push({ role, content });
-  }
-  return messages;
+  let lineBuffer = "";
+  let held = ""; // 마커가 될 수 있어 아직 못 내보낸 꼬리
+  let answer = ""; // DB에 저장할 답변 전문(마커 제외)
+
+  const handleLine = (
+    line: string,
+    controller: TransformStreamDefaultController<Uint8Array>,
+  ) => {
+    if (!line.trim()) return;
+
+    let event: ChatEvent;
+    try {
+      event = JSON.parse(line) as ChatEvent;
+    } catch {
+      return;
+    }
+
+    if (event.type !== "text") {
+      emit(controller, event);
+      return;
+    }
+
+    const [safe, pending] = splitPendingMarker(held + event.text);
+    held = pending;
+    if (safe) {
+      answer += safe;
+      emit(controller, { type: "text", text: safe });
+    }
+  };
+
+  return new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      lineBuffer += decoder.decode(chunk, { stream: true });
+      let newlineAt: number;
+      while ((newlineAt = lineBuffer.indexOf("\n")) !== -1) {
+        const line = lineBuffer.slice(0, newlineAt);
+        lineBuffer = lineBuffer.slice(newlineAt + 1);
+        handleLine(line, controller);
+      }
+    },
+    async flush(controller) {
+      handleLine(lineBuffer, controller);
+
+      // 붙들어 둔 꼬리가 진짜 마커였는지 확인한다.
+      const gate = parseGateMarker(held);
+      if (gate) {
+        emit(controller, { type: "gate", block: gate });
+      } else if (held) {
+        answer += held;
+        emit(controller, { type: "text", text: held });
+      }
+
+      const content = answer.trim();
+      if (content) {
+        try {
+          await appendMessage(admin, { conversationId, role: "assistant", content });
+        } catch (error) {
+          // 저장 실패로 이미 보여준 답변을 되돌릴 수는 없으니, 알리기만 한다.
+          emit(controller, {
+            type: "error",
+            message: error instanceof Error ? error.message : "답변 저장에 실패했습니다.",
+          });
+        }
+      }
+    },
+  });
 }

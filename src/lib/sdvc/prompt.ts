@@ -83,3 +83,28 @@ export function parseGateMarker(text: string): BlockId | null {
 export function stripGateMarker(text: string): string {
   return text.replace(GATE_MARKER_PATTERN, "").trimEnd();
 }
+
+const MARKER_START = "<<SDVC_GATE:";
+
+/**
+ * [P3-4] 스트리밍 도중 마커가 화면에 새어나가지 않게 자른다.
+ *
+ * 마커는 여러 청크에 걸쳐 한 글자씩 도착하므로, "아직 마커가 될 수 있는 꼬리"는
+ * 완성될 때까지 붙들어 둔다. `[내보내도 되는 부분, 붙들어 둘 부분]`을 돌려준다.
+ */
+export function splitPendingMarker(text: string): [string, string] {
+  for (let i = Math.max(0, text.length - MARKER_START.length - 32); i < text.length; i++) {
+    if (text[i] !== "<") continue;
+    const tail = text.slice(i);
+
+    // 마커가 완성된 뒤라면 그 뒤 내용은 없다고 보고 통째로 붙든다.
+    if (GATE_MARKER_PATTERN.test(tail)) return [text.slice(0, i), tail];
+
+    // 아직 완성되지 않았지만 마커가 될 수 있는 꼬리인가?
+    const couldBecomeMarker = tail.length < MARKER_START.length
+      ? MARKER_START.startsWith(tail)
+      : tail.startsWith(MARKER_START) && !tail.includes(">>");
+    if (couldBecomeMarker) return [text.slice(0, i), tail];
+  }
+  return [text, ""];
+}
