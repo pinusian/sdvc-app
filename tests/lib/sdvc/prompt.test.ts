@@ -1,0 +1,96 @@
+import { describe, expect, it, afterEach } from "vitest";
+import {
+  buildSystemPrompt,
+  parseGateMarker,
+  stripGateMarker,
+  GATE_MARKER_PATTERN,
+} from "@/lib/sdvc/prompt";
+
+/**
+ * [P3-3] 진행대본의 "전체를 관통하는 규칙"이 시스템 프롬프트에 실제로
+ * 담기는지 검증한다. Claude Code에서 사람이 대본을 읽고 지키던 것을
+ * 서버 프롬프트로 옮기는 작업이므로, 규칙 누락이 곧 기능 결함이다.
+ */
+
+describe("[P3-3] buildSystemPrompt", () => {
+  afterEach(() => {
+    delete process.env.ANTHROPIC_API_KEY;
+  });
+
+  it("전체 흐름(5블록 7단계)과 현재 블록을 함께 알려준다", () => {
+    const prompt = buildSystemPrompt({ block: "clarify" });
+
+    expect(prompt).toContain("Constitution");
+    expect(prompt).toContain("Implement");
+    expect(prompt).toContain("현재 블록");
+    expect(prompt).toContain("블록 2");
+    expect(prompt).toContain("Clarify");
+  });
+
+  it("블록마다 그 블록의 지시만 '현재 할 일'로 준다", () => {
+    const planPrompt = buildSystemPrompt({ block: "plan" });
+    expect(planPrompt).toContain("docs/plan.md");
+    expect(planPrompt).toContain("현재 블록: 블록 3");
+
+    const tasksPrompt = buildSystemPrompt({ block: "tasks" });
+    expect(tasksPrompt).toContain("현재 블록: 블록 4");
+    expect(tasksPrompt).toContain("버티컬 슬라이스");
+  });
+
+  it("관통 규칙 4가지가 모든 블록의 프롬프트에 들어간다", () => {
+    for (const block of ["constitution_specify", "clarify", "plan", "tasks", "implement"] as const) {
+      const prompt = buildSystemPrompt({ block });
+      expect(prompt, `${block}: 예시 답안 규칙`).toContain("예시 답안");
+      expect(prompt, `${block}: 용어 풀이 규칙`).toContain("쉬운 말");
+      expect(prompt, `${block}: 증거 기반 보고 규칙`).toContain("실행하지 않은");
+      expect(prompt, `${block}: 승인 게이트 규칙`).toContain("승인");
+    }
+  });
+
+  it("헌장의 보안 규칙(키 값을 AI가 채우지 않는다)을 프롬프트에 명시한다", () => {
+    const prompt = buildSystemPrompt({ block: "implement" });
+    expect(prompt).toContain("API 키");
+    expect(prompt).toContain("값을 채우지 않는다");
+  });
+
+  it("게이트 블록에서만 승인 마커 출력을 지시한다", () => {
+    expect(buildSystemPrompt({ block: "plan" })).toContain("<<SDVC_GATE:plan>>");
+    expect(buildSystemPrompt({ block: "tasks" })).toContain("<<SDVC_GATE:tasks>>");
+    expect(buildSystemPrompt({ block: "clarify" })).not.toContain("<<SDVC_GATE:");
+  });
+
+  it("프로젝트 이름이 있으면 프롬프트에 포함한다", () => {
+    const prompt = buildSystemPrompt({ block: "plan", projectName: "독서기록 앱" });
+    expect(prompt).toContain("독서기록 앱");
+  });
+
+  it("서버 비밀값을 프롬프트에 절대 넣지 않는다", () => {
+    process.env.ANTHROPIC_API_KEY = "sk-ant-should-never-appear";
+    const prompt = buildSystemPrompt({ block: "implement" });
+    expect(prompt).not.toContain("sk-ant-should-never-appear");
+  });
+});
+
+describe("[P3-3] 승인 게이트 마커", () => {
+  it("모델 응답에서 게이트 마커를 찾아낸다", () => {
+    expect(parseGateMarker("이 계획대로 진행할까요?\n<<SDVC_GATE:plan>>")).toBe("plan");
+    expect(parseGateMarker("작업 순서입니다.\n<<SDVC_GATE:tasks>>\n")).toBe("tasks");
+  });
+
+  it("마커가 없거나 모르는 블록이면 null을 준다", () => {
+    expect(parseGateMarker("그냥 설명입니다.")).toBeNull();
+    expect(parseGateMarker("<<SDVC_GATE:모르는블록>>")).toBeNull();
+  });
+
+  it("사용자에게 보여줄 때는 마커를 지운다", () => {
+    expect(stripGateMarker("계획입니다.\n<<SDVC_GATE:plan>>\n")).toBe("계획입니다.");
+    expect(stripGateMarker("마커 없음")).toBe("마커 없음");
+  });
+
+  it("마커 정규식은 전역 플래그 없이 재사용해도 안전하다", () => {
+    // 전역 플래그가 붙으면 lastIndex 때문에 두 번째 호출이 실패한다.
+    expect(GATE_MARKER_PATTERN.global).toBe(false);
+    expect(parseGateMarker("<<SDVC_GATE:plan>>")).toBe("plan");
+    expect(parseGateMarker("<<SDVC_GATE:plan>>")).toBe("plan");
+  });
+});

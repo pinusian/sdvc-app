@@ -115,3 +115,67 @@ describe("[P3-2] POST /api/chat", () => {
     ]);
   });
 });
+
+describe("[P3-3] POST /api/chat — 진행대본 프롬프트 연결", () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.ANTHROPIC_API_KEY = "test-key";
+    loggedIn();
+    createChatStream.mockResolvedValue(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.close();
+        },
+      }),
+    );
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  function systemOf() {
+    return (createChatStream.mock.calls[0][0] as { system?: string }).system ?? "";
+  }
+
+  it("block을 지정하면 그 블록의 진행대본 프롬프트를 붙여 호출한다", async () => {
+    const { POST } = await import("@/app/api/chat/route");
+    await POST(
+      request({ block: "plan", messages: [{ role: "user", content: "계획 보여줘" }] }),
+    );
+
+    expect(systemOf()).toContain("현재 블록: 블록 3");
+    expect(systemOf()).toContain("<<SDVC_GATE:plan>>");
+  });
+
+  it("block이 없으면 첫 블록(헌장+명세)으로 시작한다", async () => {
+    const { POST } = await import("@/app/api/chat/route");
+    await POST(request({ messages: [{ role: "user", content: "홈페이지 만들고 싶어" }] }));
+
+    expect(systemOf()).toContain("현재 블록: 블록 1");
+  });
+
+  it("프로젝트 이름을 넘기면 프롬프트에 포함한다", async () => {
+    const { POST } = await import("@/app/api/chat/route");
+    await POST(
+      request({
+        projectName: "독서기록 앱",
+        messages: [{ role: "user", content: "안녕" }],
+      }),
+    );
+
+    expect(systemOf()).toContain("독서기록 앱");
+  });
+
+  it("모르는 block이면 400을 반환한다", async () => {
+    const { POST } = await import("@/app/api/chat/route");
+    const res = await POST(
+      request({ block: "무단승격", messages: [{ role: "user", content: "안녕" }] }),
+    );
+
+    expect(res.status).toBe(400);
+    expect(createChatStream).not.toHaveBeenCalled();
+  });
+});
