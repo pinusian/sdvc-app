@@ -69,50 +69,43 @@ export async function createChatStream({
     });
   }
 
-  return toNdjsonStream(res.body);
+  return res.body.pipeThrough(sseToNdjson());
 }
 
-/** Anthropic SSE 본문을 NDJSON 이벤트 스트림으로 변환한다. */
-function toNdjsonStream(body: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {
+const encoder = new TextEncoder();
+
+function encodeEvent(event: ChatEvent): Uint8Array {
+  return encoder.encode(JSON.stringify(event) + "\n");
+}
+
+/**
+ * Anthropic SSE 본문을 NDJSON 이벤트로 바꾸는 변환 스트림.
+ *
+ * ReadableStream을 직접 만들어 읽어치우는 대신 TransformStream을 쓰는 이유는,
+ * 브라우저가 천천히 읽으면 그만큼 Anthropic 쪽 읽기도 느려지도록(역압)
+ * 두기 위해서다.
+ */
+function sseToNdjson(): TransformStream<Uint8Array, Uint8Array> {
   const decoder = new TextDecoder();
-  const encoder = new TextEncoder();
   let buffer = "";
 
-  return new ReadableStream<Uint8Array>({
-    async start(controller) {
-      const write = (event: ChatEvent) =>
-        controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
-
-      const reader = body.getReader();
-      try {
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          // 청크가 줄 중간에서 잘려 들어올 수 있으므로 버퍼에 이어붙인 뒤
-          // 완결된 줄만 꺼내 처리한다.
-          buffer += decoder.decode(value, { stream: true });
-          let newlineAt: number;
-          while ((newlineAt = buffer.indexOf("\n")) !== -1) {
-            const line = buffer.slice(0, newlineAt);
-            buffer = buffer.slice(newlineAt + 1);
-            const text = textDeltaOf(line);
-            if (text) write({ type: "text", text });
-          }
-        }
-
-        const tail = textDeltaOf(buffer);
-        if (tail) write({ type: "text", text: tail });
-        write({ type: "done" });
-      } catch (error) {
-        write({
-          type: "error",
-          message: error instanceof Error ? error.message : "스트림 처리 중 오류가 발생했습니다.",
-        });
-      } finally {
-        reader.releaseLock();
-        controller.close();
+  return new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      // 청크가 줄 중간에서 잘려 들어올 수 있으므로 버퍼에 이어붙인 뒤
+      // 완결된 줄만 꺼내 처리한다.
+      buffer += decoder.decode(chunk, { stream: true });
+      let newlineAt: number;
+      while ((newlineAt = buffer.indexOf("\n")) !== -1) {
+        const line = buffer.slice(0, newlineAt);
+        buffer = buffer.slice(newlineAt + 1);
+        const text = textDeltaOf(line);
+        if (text) controller.enqueue(encodeEvent({ type: "text", text }));
       }
+    },
+    flush(controller) {
+      const tail = textDeltaOf(buffer);
+      if (tail) controller.enqueue(encodeEvent({ type: "text", text: tail }));
+      controller.enqueue(encodeEvent({ type: "done" }));
     },
   });
 }
@@ -140,10 +133,9 @@ function textDeltaOf(line: string): string | null {
 }
 
 function singleEventStream(event: ChatEvent): ReadableStream<Uint8Array> {
-  const encoder = new TextEncoder();
   return new ReadableStream<Uint8Array>({
     start(controller) {
-      controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
+      controller.enqueue(encodeEvent(event));
       controller.close();
     },
   });
