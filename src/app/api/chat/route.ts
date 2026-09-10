@@ -9,6 +9,7 @@ import {
   listMessages,
   setCurrentBlock,
 } from "@/lib/conversations/store";
+import { publishArtifact } from "@/lib/artifacts/publish";
 
 /**
  * SDVC 엔진과의 대화 API.
@@ -86,7 +87,7 @@ export async function POST(request: Request) {
   const history = await listMessages(admin, conversationId);
   await appendMessage(admin, { conversationId, role: "user", content: message });
 
-  const title = (conversation as { title?: string }).title;
+  const title = conversation.title ?? undefined;
   const stream = await createChatStream({
     apiKey,
     system: buildSystemPrompt({ block, projectName: title }),
@@ -97,30 +98,48 @@ export async function POST(request: Request) {
   const initialEvents: StreamEvent[] =
     block === conversation.currentBlock ? [] : [{ type: "block", block }];
 
-  return new Response(stream.pipeThrough(captureAndFilter(admin, conversationId, initialEvents)), {
-    status: 200,
-    headers: {
-      "content-type": "application/x-ndjson; charset=utf-8",
-      "cache-control": "no-store",
+  const publishContext: PublishContext = {
+    ownerId: user.id,
+    projectName: title ?? "내 프로젝트",
+    projectId: conversation.projectId,
+  };
+
+  return new Response(
+    stream.pipeThrough(captureAndFilter(admin, conversationId, initialEvents, publishContext)),
+    {
+      status: 200,
+      headers: {
+        "content-type": "application/x-ndjson; charset=utf-8",
+        "cache-control": "no-store",
+      },
     },
-  });
+  );
 }
 
 /** 화면으로 흘려보내는 이벤트 — Claude 쪽 이벤트에 SDVC 진행 이벤트를 더한 것. */
 type StreamEvent =
   | ChatEvent
   | { type: "gate"; block: BlockId }
-  | { type: "block"; block: BlockId };
+  | { type: "block"; block: BlockId }
+  | { type: "artifact"; slug: string; fileCount: number };
+
+interface PublishContext {
+  ownerId: string;
+  projectName: string;
+  projectId: string | null;
+}
 
 /**
  * 흘러가는 NDJSON을 그대로 통과시키면서
  * ① 답변 텍스트를 모아 두었다가 끝나면 DB에 저장하고
- * ② 승인 게이트 마커를 걷어내 `gate` 이벤트로 바꾼다.
+ * ② 승인 게이트 마커를 걷어내 `gate` 이벤트로 바꾸고
+ * ③ [P4-3] 답변에 파일이 들어 있으면 산출물로 발행한다.
  */
 function captureAndFilter(
   admin: ReturnType<typeof createAdminClient>,
   conversationId: string,
   initialEvents: StreamEvent[] = [],
+  publish?: PublishContext,
 ): TransformStream<Uint8Array, Uint8Array> {
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
@@ -193,6 +212,32 @@ function captureAndFilter(
           emit(controller, {
             type: "error",
             message: error instanceof Error ? error.message : "답변 저장에 실패했습니다.",
+          });
+        }
+      }
+
+      // [P4-3] 답변에 파일이 들어 있으면 산출물로 발행한다. 실패해도 대화는
+      // 그대로 살리고 오류만 알린다 — 대화 기록까지 잃으면 다시 만들 수 없다.
+      if (content && publish) {
+        try {
+          const published = await publishArtifact(admin, {
+            ownerId: publish.ownerId,
+            conversationId,
+            answer: content,
+            projectName: publish.projectName,
+            projectId: publish.projectId,
+          });
+          if (published) {
+            emit(controller, {
+              type: "artifact",
+              slug: published.project.slug,
+              fileCount: published.fileCount,
+            });
+          }
+        } catch (error) {
+          emit(controller, {
+            type: "error",
+            message: error instanceof Error ? error.message : "산출물 저장에 실패했습니다.",
           });
         }
       }

@@ -18,18 +18,32 @@ export interface Conversation {
   id: string;
   ownerId: string;
   currentBlock: BlockId;
+  /** 프로젝트 이름으로도 쓰인다([P4-3]). 아직 없으면 null */
+  title: string | null;
+  /** 이 대화로 만들어진 산출물 프로젝트. 아직 없으면 null */
+  projectId: string | null;
 }
 
 interface ConversationRow {
   id: string;
   owner_id: string;
   current_block: BlockId;
+  title?: string | null;
+  project_id?: string | null;
 }
 
 type Client = SupabaseClient;
 
+const COLUMNS = "id, owner_id, current_block, title, project_id";
+
 function toConversation(row: ConversationRow): Conversation {
-  return { id: row.id, ownerId: row.owner_id, currentBlock: row.current_block };
+  return {
+    id: row.id,
+    ownerId: row.owner_id,
+    currentBlock: row.current_block,
+    title: row.title ?? null,
+    projectId: row.project_id ?? null,
+  };
 }
 
 function assertNoError(error: unknown, what: string): void {
@@ -52,7 +66,7 @@ export async function createConversation(
   const { data, error } = await client
     .from("conversations")
     .insert({ owner_id: ownerId, title: title ?? null, current_block: currentBlock })
-    .select("id, owner_id, current_block")
+    .select(COLUMNS)
     .single();
 
   assertNoError(error, "대화 생성");
@@ -67,7 +81,7 @@ export async function getConversation(
 ): Promise<Conversation | null> {
   const { data, error } = await client
     .from("conversations")
-    .select("id, owner_id, current_block")
+    .select(COLUMNS)
     .eq("id", conversationId)
     .eq("owner_id", ownerId)
     .maybeSingle();
@@ -110,6 +124,24 @@ export async function listMessages(
 
   assertNoError(error, "메시지 조회");
   return (data ?? []) as ChatMessage[];
+}
+
+/** [P4-3] 이 대화로 만들어진 프로젝트를 연결한다. */
+export async function setConversationProject(
+  client: Client,
+  conversationId: string,
+  ownerId: string,
+  projectId: string,
+): Promise<void> {
+  const { error } = await client
+    .from("conversations")
+    .update({ project_id: projectId })
+    .eq("id", conversationId)
+    .eq("owner_id", ownerId)
+    .select("id")
+    .single();
+
+  assertNoError(error, "프로젝트 연결");
 }
 
 export async function setCurrentBlock(

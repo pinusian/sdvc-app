@@ -76,6 +76,8 @@ describe("[P3-4] 대화 상태 저장소", () => {
       id: "conv-1",
       ownerId: "user-1",
       currentBlock: "constitution_specify",
+      title: null,
+      projectId: null,
     });
   });
 
@@ -90,6 +92,39 @@ describe("[P3-4] 대화 상태 저장소", () => {
     expect(calls.eq).toContainEqual(["id", "conv-1"]);
     expect(calls.eq).toContainEqual(["owner_id", "user-1"]);
     expect(conversation?.currentBlock).toBe("plan");
+  });
+
+  it("[P4-3] 제목과 연결된 프로젝트도 함께 읽어온다", async () => {
+    // 제목은 프롬프트의 프로젝트 이름으로, project_id는 산출물을 다시 낼 때
+    // 새 프로젝트를 또 만들지 않기 위해 필요하다. 읽어오지 않으면 조용히
+    // 매번 새 프로젝트가 생긴다.
+    const { client, calls } = fakeSupabase({
+      data: {
+        id: "conv-1",
+        owner_id: "user-1",
+        current_block: "implement",
+        title: "독서기록 앱",
+        project_id: "proj-1",
+      },
+      error: null,
+    });
+
+    const conversation = await getConversation(client, "conv-1", "user-1");
+
+    expect(String(calls.select[0])).toContain("title");
+    expect(String(calls.select[0])).toContain("project_id");
+    expect(conversation).toMatchObject({ title: "독서기록 앱", projectId: "proj-1" });
+  });
+
+  it("[P4-3] 제목·프로젝트가 아직 없으면 null로 준다", async () => {
+    const { client } = fakeSupabase({
+      data: { id: "conv-1", owner_id: "user-1", current_block: "clarify", title: null, project_id: null },
+      error: null,
+    });
+
+    const conversation = await getConversation(client, "conv-1", "user-1");
+    expect(conversation?.title).toBeNull();
+    expect(conversation?.projectId).toBeNull();
   });
 
   it("없는 대화(또는 남의 대화)를 조회하면 null을 준다", async () => {
