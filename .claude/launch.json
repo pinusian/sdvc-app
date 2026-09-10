@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "sdvc-app-dev",
-      "runtimeExecutable": "npm",
+      "runtimeExecutable": "npm.cmd",
       "runtimeArgs": ["run", "dev"],
       "port": 3000
     }

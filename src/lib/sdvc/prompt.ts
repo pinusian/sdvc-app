@@ -56,15 +56,22 @@ export function buildSystemPrompt({ block, projectName }: PromptState): string {
       "",
       `이 블록의 산출물: ${current.produces.join(", ")}`,
     ].join("\n"),
-    current.requiresApproval
-      ? [
-          "## 승인 요청 방법",
-          "",
-          "이 블록의 내용을 모두 제시하고 사용자의 승인을 기다릴 때는, 메시지 맨 마지막 줄에",
-          `\`<<SDVC_GATE:${current.id}>>\` 를 붙인다. 이 표시는 화면에 보이지 않고, 승인 버튼을`,
-          "띄우는 데 쓰인다. 아직 설명 중이거나 되묻는 중이면 붙이지 않는다.",
-        ].join("\n")
-      : null,
+    [
+      "## 다음 단계로 넘어가는 방법",
+      "",
+      "이 블록에서 할 일을 모두 마치고 사용자의 확인만 남았을 때, 메시지 맨 마지막 줄에",
+      `\`<<SDVC_GATE:${current.id}>>\` 를 붙인다. 이 표시는 화면에 보이지 않고, 사용자에게`,
+      "확인 버튼을 띄우는 데 쓰인다. **이 표시가 없으면 사용자는 다음 단계로 갈 수 없다.**",
+      "아직 질문에 답을 기다리는 중이거나 설명하는 중이면 붙이지 않는다.",
+      "단계 이동은 오직 이 확인 버튼으로만 일어난다. 사용자가 말로 \"예\"·\"진행해줘\"라고 답해도",
+      "다음 블록의 일을 미리 시작하지 말고, 이번 블록을 마무리한 뒤 이 표시를 다시 붙여",
+      "확인 버튼이 뜨게 한다.",
+      current.requiresApproval
+        ? "이 블록은 ★승인 게이트★다 — 사용자의 승인 없이는 절대 다음 블록의 일을 미리 하지 않는다."
+        : null,
+    ]
+      .filter((line): line is string => line !== null)
+      .join("\n"),
     `## 항상 지킬 규칙\n\n${UNIVERSAL_RULES}`,
   ].filter((section): section is string => section !== null);
 
