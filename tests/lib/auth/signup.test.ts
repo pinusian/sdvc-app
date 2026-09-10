@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { signUpDeveloper } from "@/lib/auth/signup";
 
 function fakeSupabase(signUpImpl: (...args: unknown[]) => unknown) {
-  return { auth: { signUp: vi.fn(signUpImpl) } } as never;
+  return {
+    auth: { signUp: vi.fn(signUpImpl) },
+  } as unknown as SupabaseClient;
 }
 
 describe("[P2-5] signUpDeveloper", () => {
