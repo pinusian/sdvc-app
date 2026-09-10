@@ -1,9 +1,10 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { logoutAction } from "@/app/(auth)/actions";
-import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { NewConversationButton } from "@/components/chat/NewConversationButton";
+import { ProjectList } from "@/components/projects/ProjectList";
+import { listProjects } from "@/lib/projects/store";
 
 const GRADE_LABEL: Record<string, string> = {
   trial: "체험",
@@ -28,6 +29,10 @@ export default async function DashboardPage() {
     .single();
 
   const grade = profile?.grade ?? "trial";
+
+  // projects는 RLS 정책이 없어 브라우저 키로는 못 읽는다([P4-2]) — 서버가
+  // secret key로 읽되 소유자 조건은 store가 직접 건다.
+  const projects = await listProjects(createAdminClient(), user.id);
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
@@ -57,12 +62,7 @@ export default async function DashboardPage() {
           <NewConversationButton />
         </div>
 
-        <Card className="flex flex-col items-center gap-2 py-16 text-center">
-          <p className="text-ink-muted">아직 만든 프로젝트가 없어요.</p>
-          <p className="text-sm text-ink-faint">
-            &ldquo;새 프로젝트&rdquo;를 눌러 SDVC와 대화하며 첫 프로젝트를 만들어보세요.
-          </p>
-        </Card>
+        <ProjectList projects={projects} />
       </main>
     </div>
   );

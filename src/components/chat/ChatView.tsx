@@ -30,6 +30,8 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
   const [block, setBlock] = useState<BlockId>(currentBlock);
   /** [P3-6] 승인 대기 중인 게이트. null이면 대기 중이 아니다. */
   const [gate, setGate] = useState<BlockId | null>(null);
+  /** [P4-4] 방금 만들어진 산출물 */
+  const [artifact, setArtifact] = useState<{ slug: string; fileCount: number } | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
   const blockInfo = SDVC_BLOCKS.find((b) => b.id === block);
@@ -42,6 +44,7 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
     setError(null);
     setStreaming(true);
     setGate(null);
+    setArtifact(null);
     setMessages((prev) => [...prev, { role: "user", content: message }]);
 
     try {
@@ -71,6 +74,7 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
         onError: (message) => setError(message),
         onGate: (gateBlock) => setGate(gateBlock),
         onBlock: (nextBlock) => setBlock(nextBlock),
+        onArtifact: (published) => setArtifact(published),
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "알 수 없는 오류가 발생했습니다.");
@@ -121,6 +125,26 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
 
         {thinking && (
           <p className="text-sm text-ink-faint">생각하는 중…</p>
+        )}
+        {streaming && !thinking && block === "implement" && (
+          <p className="text-sm text-ink-faint">홈페이지 파일을 만드는 중…</p>
+        )}
+
+        {artifact && (
+          <div className="rounded-lg border border-accent bg-accent-soft px-4 py-3">
+            <p className="mb-1 text-sm font-medium text-accent-ink">
+              홈페이지가 만들어졌습니다 (파일 {artifact.fileCount}개)
+            </p>
+            <p className="mb-3 font-mono text-xs text-accent-ink">/site/{artifact.slug}</p>
+            <a
+              href={`/site/${artifact.slug}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center rounded-sm bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-hover"
+            >
+              열어보기 ↗
+            </a>
+          </div>
         )}
 
         {gate && !streaming && (
@@ -202,6 +226,7 @@ interface EventHandlers {
   onError: (message: string) => void;
   onGate: (block: BlockId) => void;
   onBlock: (block: BlockId) => void;
+  onArtifact: (artifact: { slug: string; fileCount: number }) => void;
 }
 
 /** NDJSON 스트림을 한 줄씩 읽어 이벤트로 넘긴다. */
@@ -212,7 +237,14 @@ async function readEvents(body: ReadableStream<Uint8Array>, handlers: EventHandl
 
   const handleLine = (line: string) => {
     if (!line.trim()) return;
-    let event: { type: string; text?: string; message?: string; block?: BlockId };
+    let event: {
+      type: string;
+      text?: string;
+      message?: string;
+      block?: BlockId;
+      slug?: string;
+      fileCount?: number;
+    };
     try {
       event = JSON.parse(line);
     } catch {
@@ -222,6 +254,8 @@ async function readEvents(body: ReadableStream<Uint8Array>, handlers: EventHandl
     else if (event.type === "thinking") handlers.onThinking();
     else if (event.type === "gate" && event.block) handlers.onGate(event.block);
     else if (event.type === "block" && event.block) handlers.onBlock(event.block);
+    else if (event.type === "artifact" && event.slug)
+      handlers.onArtifact({ slug: event.slug, fileCount: event.fileCount ?? 0 });
     else if (event.type === "error") handlers.onError(event.message ?? "오류가 발생했습니다.");
   };
 
