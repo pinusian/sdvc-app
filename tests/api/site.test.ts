@@ -128,16 +128,33 @@ describe("[P5-1] GET /site/[slug]", () => {
     expect(res.headers.get("content-type")).toContain("text/html");
   });
 
-  it("[P5-1] 남이 만든 페이지가 우리 로그인 정보에 접근하지 못하게 가둔다", async () => {
-    // 산출물은 사용자가 시킨 대로 AI가 만든 코드다. 우리 도메인에서 그대로
-    // 실행되면 그 스크립트가 같은 출처의 쿠키·저장소에 손댈 수 있다.
+  it("[P5-1] 공개된 페이지는 우리 로그인 정보에 접근하지 못하게 가둔다", async () => {
+    // 남이 만든 산출물을 로그인한 다른 개발자가 열어볼 수 있으므로,
+    // 그 스크립트가 같은 출처의 쿠키에 손대지 못하게 가둔다.
+    for (const visibility of ["link", "public"] as const) {
+      getProjectBySlug.mockResolvedValue({ ...PROJECT, visibility });
+
+      const { GET } = await import("@/app/site/[slug]/[[...path]]/route");
+      const csp = (await GET(request(), context())).headers.get("content-security-policy") ?? "";
+
+      expect(csp, visibility).toContain("sandbox");
+      // allow-same-origin을 주면 가두는 의미가 없다.
+      expect(csp, visibility).not.toContain("allow-same-origin");
+    }
+  });
+
+  it("[P5-1] 비공개 페이지는 주인 본인만 보므로 가두지 않는다", async () => {
+    // 프로덕션에서 실제로 겪음: 가둬두면 그 문서의 요청은 쿠키 없이 나가고,
+    // 비공개 산출물은 로그인 확인을 못 해 CSS·JS가 전부 404가 됐다.
+    // 비공개는 주인 본인만 보는 자기 코드라 바깥에 노출될 일이 없다.
+    getProjectBySlug.mockResolvedValue({ ...PROJECT, visibility: "private" });
+    getUser.mockResolvedValue({ data: { user: { id: "owner-1" } }, error: null });
+
     const { GET } = await import("@/app/site/[slug]/[[...path]]/route");
     const res = await GET(request(), context());
 
-    const csp = res.headers.get("content-security-policy") ?? "";
-    expect(csp).toContain("sandbox");
-    // allow-same-origin을 주면 가두는 의미가 없다.
-    expect(csp).not.toContain("allow-same-origin");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-security-policy")).toBeNull();
   });
 
   it("없는 주소는 404", async () => {

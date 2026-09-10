@@ -126,13 +126,20 @@ function responseHeaders(
     // text/plain으로 돌려주는데(그대로 쓰면 홈페이지가 소스코드로 보인다),
     // 확장자를 모르는 경우에만 저장소가 알려준 값을 쓴다.
     "content-type": knownContentType(filePath) ?? blobType ?? "text/plain; charset=utf-8",
-
-    // 산출물은 사용자 요청으로 AI가 만든 남의 코드다. 우리 도메인에서 그대로
-    // 실행되면 그 스크립트가 같은 출처의 로그인 쿠키에 손댈 수 있으므로,
-    // sandbox로 별개 출처처럼 가둔다(allow-same-origin은 절대 주지 않는다).
-    "content-security-policy": "sandbox allow-scripts allow-forms allow-popups",
     "x-content-type-options": "nosniff",
   };
+
+  // 공개된 산출물은 로그인한 다른 개발자도 열어볼 수 있다. 그 페이지의
+  // 스크립트가 같은 출처의 로그인 쿠키에 손대지 못하도록 sandbox로 가둔다
+  // (allow-same-origin은 절대 주지 않는다).
+  //
+  // **비공개는 가두지 않는다.** 가둬두면 그 문서의 요청이 쿠키 없이 나가서
+  // 로그인 확인을 할 수 없고, CSS·JS가 전부 404가 된다(프로덕션에서 겪음).
+  // 비공개는 주인 본인만 보는 자기 코드라 남의 세션이 걸릴 일이 없다.
+  // 근본 해결은 산출물을 **별도 도메인**에서 서빙하는 것 — Phase 6 이후 과제.
+  if (visibility === "link" || visibility === "public") {
+    headers["content-security-policy"] = "sandbox allow-scripts allow-forms allow-popups";
+  }
 
   // **공용 캐시(CDN)에는 어떤 경우에도 남기지 않는다.**
   // 프로덕션에서 실제로 겪은 문제: 전체공개일 때 CDN이 60초 캐시했는데,
