@@ -132,6 +132,46 @@ describe("[P3-2] createChatStream", () => {
     expect(JSON.stringify(events)).not.toContain("내부 추론 내용");
   });
 
+  it("[P4-5] 최대 길이에 걸려 답변이 잘리면 truncated 이벤트로 알린다", async () => {
+    // 실제 검증에서 발견: 구현 단계에서 파일을 쓰다 max_tokens에 걸리면
+    // 답변이 문장 중간에서 끊기고, 닫히지 않은 파일 블록은 저장되지 않는데도
+    // 사용자에게는 아무 설명이 없었다.
+    const fetchImpl = vi.fn().mockResolvedValue(
+      sseResponse([
+        'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"```file:index.html"}}\n\n',
+        'data: {"type":"message_delta","delta":{"stop_reason":"max_tokens"}}\n\n',
+      ]),
+    );
+
+    const stream = await createChatStream({
+      apiKey: "test-key",
+      messages: [{ role: "user", content: "만들어줘" }],
+      fetchImpl,
+    });
+
+    const events = await readEvents(stream);
+    expect(events).toContainEqual({ type: "truncated" });
+    // 잘렸어도 done은 온다 (화면이 "보내는 중"에 멈추면 안 되므로)
+    expect(events[events.length - 1]).toEqual({ type: "done" });
+  });
+
+  it("[P4-5] 정상 종료(end_turn)에는 truncated를 보내지 않는다", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      sseResponse([
+        'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"끝"}}\n\n',
+        'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"}}\n\n',
+      ]),
+    );
+
+    const stream = await createChatStream({
+      apiKey: "test-key",
+      messages: [{ role: "user", content: "안녕" }],
+      fetchImpl,
+    });
+
+    expect(await readEvents(stream)).toEqual([{ type: "text", text: "끝" }, { type: "done" }]);
+  });
+
   it("Anthropic이 오류를 반환하면 error 이벤트로 알리고 키 값은 노출하지 않는다", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(
       sseResponse(['{"error":{"type":"authentication_error","message":"invalid x-api-key"}}'], {

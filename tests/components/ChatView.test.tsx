@@ -315,3 +315,28 @@ describe("[P4-4] ChatView — 산출물 생성 표시", () => {
     expect(screen.getByText("/site/my-homepage")).toBeInTheDocument();
   });
 });
+
+describe("[P4-5] ChatView — 답변이 잘렸을 때", () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("truncated 이벤트를 받으면 이어서 요청하라고 안내한다", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        mockChatResponse(
+          { type: "text", text: "만드는 중이었습니다..." },
+          { type: "truncated" },
+          { type: "done" },
+        ),
+      ),
+    );
+
+    render(<ChatView conversationId="conv-1" currentBlock="implement" initialMessages={[]} />);
+    await userEvent.type(screen.getByLabelText("메시지"), "만들어줘");
+    await userEvent.click(screen.getByRole("button", { name: "보내기" }));
+
+    await waitFor(() => expect(screen.getByText(/길어서 중간에 끊겼습니다/)).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: /이어서 계속/ })).toBeInTheDocument();
+  });
+});

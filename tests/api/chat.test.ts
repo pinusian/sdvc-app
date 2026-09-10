@@ -380,3 +380,37 @@ describe("[P4-3] POST /api/chat — 산출물 발행", () => {
     expect(events.some((e) => e.type === "error" && /quota exceeded/.test(e.message))).toBe(true);
   });
 });
+
+describe("[P4-5] POST /api/chat — 구현 단계 응답 길이", () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.ANTHROPIC_API_KEY = "test-key";
+    happyPath();
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  function maxTokensOf() {
+    return (createChatStream.mock.calls[0][0] as { maxTokens?: number }).maxTokens;
+  }
+
+  it("구현 단계는 파일을 통째로 써야 하므로 더 긴 답변을 허용한다", async () => {
+    getConversation.mockResolvedValue({ ...CONVERSATION, currentBlock: "implement" });
+
+    const { POST } = await import("@/app/api/chat/route");
+    await POST(request(VALID));
+
+    expect(maxTokensOf()).toBeGreaterThanOrEqual(32000);
+  });
+
+  it("대화만 하는 단계는 기본 길이를 쓴다", async () => {
+    const { POST } = await import("@/app/api/chat/route");
+    await POST(request(VALID));
+
+    expect(maxTokensOf()).toBeLessThan(32000);
+  });
+});
