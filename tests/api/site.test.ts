@@ -203,6 +203,23 @@ describe("[P5-1] GET /site/[slug]", () => {
     expect(res.headers.get("x-robots-tag")).toBeNull();
   });
 
+  it("[P5-1] 어떤 공개범위든 공용 캐시(CDN)에 저장하지 않는다", async () => {
+    // 실제 프로덕션에서 겪음: 전체공개일 때 CDN이 60초 캐시한 뒤 비공개로
+    // 바꿨는데도 캐시된 사본이 계속 200으로 나갔다(X-Vercel-Cache: HIT).
+    // 공개범위는 언제든 바뀌고 해지 시 즉시 닫혀야 하므로(FR-023),
+    // 공용 캐시에는 아예 남기지 않는다.
+    for (const visibility of ["public", "link", "private"] as const) {
+      getProjectBySlug.mockResolvedValue({ ...PROJECT, visibility });
+      getUser.mockResolvedValue({ data: { user: { id: "owner-1" } }, error: null });
+
+      const { GET } = await import("@/app/site/[slug]/[[...path]]/route");
+      const cacheControl = (await GET(request(), context())).headers.get("cache-control") ?? "";
+
+      expect(cacheControl, visibility).not.toMatch(/(^|[\s,])public/);
+      expect(cacheControl, visibility).toMatch(/no-store|private/);
+    }
+  });
+
   it("비공개 산출물은 캐시에 남기지 않는다", async () => {
     getProjectBySlug.mockResolvedValue({ ...PROJECT, visibility: "private" });
     getUser.mockResolvedValue({ data: { user: { id: "owner-1" } }, error: null });

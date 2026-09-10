@@ -134,14 +134,18 @@ function responseHeaders(
     "x-content-type-options": "nosniff",
   };
 
+  // **공용 캐시(CDN)에는 어떤 경우에도 남기지 않는다.**
+  // 프로덕션에서 실제로 겪은 문제: 전체공개일 때 CDN이 60초 캐시했는데,
+  // 그 사이 비공개로 바꿔도 캐시된 사본이 계속 나갔다. 공개범위는 언제든
+  // 바뀌고 구독 해지 시 즉시 닫혀야 하므로(FR-023) 캐시보다 정확함을 택한다.
+  // (나중에 트래픽이 문제되면 공개범위 변경 시 캐시를 지우는 방식으로 개선)
   if (visibility === "public") {
-    headers["cache-control"] = "public, max-age=60";
+    headers["cache-control"] = "private, max-age=0, must-revalidate";
   } else if (visibility === "link") {
     headers["cache-control"] = "private, max-age=0, must-revalidate";
     // 주소를 아는 사람만 보라는 뜻이므로 검색에는 걸리지 않게 한다.
     headers["x-robots-tag"] = "noindex, nofollow";
   } else {
-    // 비공개는 공용 캐시·프록시에 남으면 안 된다.
     headers["cache-control"] = "no-store";
     headers["x-robots-tag"] = "noindex, nofollow";
   }
