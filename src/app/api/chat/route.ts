@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { createChatStream, type ChatEvent } from "@/lib/claude/chat";
+import { createChatStream, DEFAULT_MAX_TOKENS, type ChatEvent } from "@/lib/claude/chat";
+
+/** 구현 단계는 파일을 통째로 써야 하므로 훨씬 긴 답변을 허용한다([P4-5]). */
+const IMPLEMENT_MAX_TOKENS = 32_000;
 import { advanceBlock, type BlockId } from "@/lib/sdvc/blocks";
 import { buildSystemPrompt, parseGateMarker, splitPendingMarker } from "@/lib/sdvc/prompt";
 import {
@@ -92,6 +95,9 @@ export async function POST(request: Request) {
     apiKey,
     system: buildSystemPrompt({ block, projectName: title }),
     messages: [...history, { role: "user", content: message }],
+    // 구현 단계는 파일을 통째로 써야 해서 기본 길이로는 중간에 끊긴다([P4-5]
+    // 검증에서 실제로 겪음). max_tokens는 상한일 뿐이라 늘려도 안 쓰면 비용은 없다.
+    maxTokens: block === "implement" ? IMPLEMENT_MAX_TOKENS : DEFAULT_MAX_TOKENS,
   });
 
   // 단계가 넘어갔으면 화면이 표시를 갱신할 수 있게 맨 앞에서 알려준다.

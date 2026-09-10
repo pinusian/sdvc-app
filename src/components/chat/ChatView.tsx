@@ -32,6 +32,8 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
   const [gate, setGate] = useState<BlockId | null>(null);
   /** [P4-4] 방금 만들어진 산출물 */
   const [artifact, setArtifact] = useState<{ slug: string; fileCount: number } | null>(null);
+  /** [P4-5] 답변이 최대 길이에 걸려 끊겼는가 */
+  const [truncated, setTruncated] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
   const blockInfo = SDVC_BLOCKS.find((b) => b.id === block);
@@ -45,6 +47,7 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
     setStreaming(true);
     setGate(null);
     setArtifact(null);
+    setTruncated(false);
     setMessages((prev) => [...prev, { role: "user", content: message }]);
 
     try {
@@ -75,6 +78,7 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
         onGate: (gateBlock) => setGate(gateBlock),
         onBlock: (nextBlock) => setBlock(nextBlock),
         onArtifact: (published) => setArtifact(published),
+        onTruncated: () => setTruncated(true),
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "알 수 없는 오류가 발생했습니다.");
@@ -128,6 +132,21 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
         )}
         {streaming && !thinking && block === "implement" && (
           <p className="text-sm text-ink-faint">홈페이지 파일을 만드는 중…</p>
+        )}
+
+        {truncated && !streaming && (
+          <div className="rounded-lg border border-border bg-surface-muted px-4 py-3">
+            <p className="mb-2 text-sm text-ink-muted">
+              답변이 길어서 중간에 끊겼습니다. 이어서 마저 받아야 파일이 저장됩니다.
+            </p>
+            <Button
+              variant="secondary"
+              className="!px-3 !py-1.5 text-xs"
+              onClick={() => void send({ message: "이어서 계속해주세요." })}
+            >
+              이어서 계속
+            </Button>
+          </div>
         )}
 
         {artifact && (
@@ -227,6 +246,7 @@ interface EventHandlers {
   onGate: (block: BlockId) => void;
   onBlock: (block: BlockId) => void;
   onArtifact: (artifact: { slug: string; fileCount: number }) => void;
+  onTruncated: () => void;
 }
 
 /** NDJSON 스트림을 한 줄씩 읽어 이벤트로 넘긴다. */
@@ -256,6 +276,7 @@ async function readEvents(body: ReadableStream<Uint8Array>, handlers: EventHandl
     else if (event.type === "block" && event.block) handlers.onBlock(event.block);
     else if (event.type === "artifact" && event.slug)
       handlers.onArtifact({ slug: event.slug, fileCount: event.fileCount ?? 0 });
+    else if (event.type === "truncated") handlers.onTruncated();
     else if (event.type === "error") handlers.onError(event.message ?? "오류가 발생했습니다.");
   };
 

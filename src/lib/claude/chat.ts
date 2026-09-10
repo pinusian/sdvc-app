@@ -20,6 +20,8 @@ export type ChatEvent =
   | { type: "text"; text: string }
   /** 모델이 확장 사고 중임 — 내용은 보내지 않고 신호만 한 번 보낸다 */
   | { type: "thinking" }
+  /** [P4-5] 최대 길이에 걸려 답변이 중간에서 끊겼음 */
+  | { type: "truncated" }
   | { type: "done" }
   | { type: "error"; message: string };
 
@@ -91,8 +93,14 @@ function sseToNdjson(): TransformStream<Uint8Array, Uint8Array> {
   const decoder = new TextDecoder();
   let buffer = "";
   let thinkingAnnounced = false;
+  let truncated = false;
 
   const handle = (line: string, controller: TransformStreamDefaultController<Uint8Array>) => {
+    if (isMaxTokensStop(line)) {
+      truncated = true;
+      return;
+    }
+
     const delta = deltaOf(line);
     if (delta === null) return;
 
@@ -123,20 +131,43 @@ function sseToNdjson(): TransformStream<Uint8Array, Uint8Array> {
     },
     flush(controller) {
       handle(buffer, controller);
+      // 잘렸더라도 done은 반드시 보낸다 — 화면이 "보내는 중"에 멈추면 안 된다.
+      if (truncated) controller.enqueue(encodeEvent({ type: "truncated" }));
       controller.enqueue(encodeEvent({ type: "done" }));
     },
   });
 }
 
+/** [P4-5] 최대 길이에 걸려 끊긴 응답인가? */
+function isMaxTokensStop(line: string): boolean {
+  const payload = payloadOf(line);
+  if (!payload) return false;
+  try {
+    const parsed = JSON.parse(payload) as {
+      type?: string;
+      delta?: { stop_reason?: string };
+    };
+    return parsed.type === "message_delta" && parsed.delta?.stop_reason === "max_tokens";
+  } catch {
+    return false;
+  }
+}
+
 type Delta = { kind: "text"; text: string } | { kind: "thinking" };
+
+/** SSE 한 줄에서 `data:` 뒤의 JSON 문자열을 꺼낸다. 아니면 null. */
+function payloadOf(line: string): string | null {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("data:")) return null;
+  const payload = trimmed.slice("data:".length).trim();
+  if (!payload || payload === "[DONE]") return null;
+  return payload;
+}
 
 /** SSE 한 줄에서 델타를 뽑는다. 우리가 쓰지 않는 줄이면 null. */
 function deltaOf(line: string): Delta | null {
-  const trimmed = line.trim();
-  if (!trimmed.startsWith("data:")) return null;
-
-  const payload = trimmed.slice("data:".length).trim();
-  if (!payload || payload === "[DONE]") return null;
+  const payload = payloadOf(line);
+  if (!payload) return null;
 
   try {
     const parsed = JSON.parse(payload) as {
