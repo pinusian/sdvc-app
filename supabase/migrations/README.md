@@ -18,6 +18,6 @@
 | `0001_profiles.sql` | `profiles` 테이블(역할·등급·구독상태) + RLS 정책 + 신규가입 자동생성 트리거 | 2026-09-10 적용됨 |
 | `0002_profiles_lockdown.sql` | **보안 수정**: 자기수정 정책 제거(권한 탈취 허점 차단). 쓰기는 서버 secret key로만 | 2026-09-10 적용됨 (자기수정 시도 0행 변경으로 확인) |
 | `0003_conversations.sql` | `conversations`·`messages` 표. 둘 다 RLS 켜고 정책 없음 = 서버 전용 | 2026-09-10 적용됨 |
-| `0004_projects.sql` | `projects` 표(주소 slug·공개범위·상태) + `conversations.project_id` 외래키 연결 | 미적용 |
+| `0004_projects.sql` | `projects` 표(주소 slug·공개범위·상태) + `conversations.project_id` 외래키 연결 | 2026-09-11 적용됨 (제약·RLS 실검증 완료) |
 
 > Storage(파일 저장소) 설정은 SQL이 아니라 `scripts/setup-storage.mjs`로 만든다 — `node scripts/setup-storage.mjs`.
