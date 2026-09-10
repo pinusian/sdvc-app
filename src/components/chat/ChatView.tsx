@@ -90,7 +90,7 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b border-border bg-surface px-7 py-3 text-sm text-ink-muted">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-surface px-7 py-3 text-sm text-ink-muted">
         {blockInfo ? (
           <span>
             <span className="rounded-pill bg-accent-soft px-2.5 py-0.5 text-xs font-medium text-accent-ink">
@@ -100,6 +100,23 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
           </span>
         ) : (
           <span>대화가 끝났습니다.</span>
+        )}
+
+        {/*
+          [P4-6] 단계 이동 버튼은 늘 여기에 있다.
+          모델이 승인 마커를 빠뜨리거나, 새로고침으로 게이트 안내가 사라져도
+          사용자가 스스로 다음 단계로 갈 수 있어야 하기 때문이다.
+          누르는 것 자체가 명시적 승인이므로 승인 게이트 원칙에 어긋나지 않는다.
+        */}
+        {blockInfo && blockInfo.id !== "implement" && (
+          <Button
+            variant="secondary"
+            className="!px-3 !py-1.5 text-xs"
+            disabled={streaming}
+            onClick={() => void send({ message: "예, 다음 단계로 진행해주세요.", approved: true })}
+          >
+            다음 단계로 →
+          </Button>
         )}
       </div>
 

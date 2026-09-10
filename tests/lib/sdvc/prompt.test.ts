@@ -85,6 +85,13 @@ describe("[P3-3] buildSystemPrompt", () => {
     expect(prompt).toMatch(/말로.*예/);
   });
 
+  it("[P4-6] 버튼을 말로 언급하면 반드시 마커를 함께 내라고 못박는다", () => {
+    // 사용자 테스트에서 발견: 모델이 "아래 확인 버튼을 눌러주세요"라고
+    // 말만 하고 마커를 빼먹어, 화면에 버튼이 없는 채로 안내만 남았다.
+    const prompt = buildSystemPrompt({ block: "clarify" });
+    expect(prompt).toMatch(/버튼.*언급|언급.*버튼/);
+  });
+
   it("게이트 블록에서는 승인 없이 넘어가지 말라고 더 강하게 못박는다", () => {
     expect(buildSystemPrompt({ block: "plan" })).toContain("승인 없이는");
     expect(buildSystemPrompt({ block: "clarify" })).not.toContain("승인 없이는");
