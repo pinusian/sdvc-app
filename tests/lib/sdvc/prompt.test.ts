@@ -2,6 +2,7 @@ import { describe, expect, it, afterEach } from "vitest";
 import {
   buildSystemPrompt,
   parseGateMarker,
+  splitPendingMarker,
   stripGateMarker,
   GATE_MARKER_PATTERN,
 } from "@/lib/sdvc/prompt";
@@ -85,6 +86,16 @@ describe("[P3-3] 승인 게이트 마커", () => {
   it("사용자에게 보여줄 때는 마커를 지운다", () => {
     expect(stripGateMarker("계획입니다.\n<<SDVC_GATE:plan>>\n")).toBe("계획입니다.");
     expect(stripGateMarker("마커 없음")).toBe("마커 없음");
+  });
+
+  it("스트리밍 중 마커가 잘려 들어와도 화면에 새어나가지 않게 붙들어 둔다", () => {
+    // [P3-4] 마커는 한 글자씩 흘러오므로, 마커 시작처럼 보이는 꼬리는
+    // 완성될 때까지 내보내지 않는다.
+    expect(splitPendingMarker("계획입니다.\n<<SDVC_")).toEqual(["계획입니다.\n", "<<SDVC_"]);
+    expect(splitPendingMarker("끝<<SDVC_GATE:plan>>")).toEqual(["끝", "<<SDVC_GATE:plan>>"]);
+    expect(splitPendingMarker("계획입니다.")).toEqual(["계획입니다.", ""]);
+    // 마커와 무관한 부등호는 그대로 내보낸다.
+    expect(splitPendingMarker("a < b 입니다")).toEqual(["a < b 입니다", ""]);
   });
 
   it("마커 정규식은 전역 플래그 없이 재사용해도 안전하다", () => {
