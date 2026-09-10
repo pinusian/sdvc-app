@@ -14,6 +14,7 @@ const getConversation = vi.fn();
 const listMessages = vi.fn();
 const appendMessage = vi.fn();
 const setCurrentBlock = vi.fn();
+const publishArtifact = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({ auth: { getUser } }),
@@ -30,6 +31,10 @@ vi.mock("@/lib/conversations/store", () => ({
   listMessages: (...args: unknown[]) => listMessages(...args),
   appendMessage: (...args: unknown[]) => appendMessage(...args),
   setCurrentBlock: (...args: unknown[]) => setCurrentBlock(...args),
+}));
+
+vi.mock("@/lib/artifacts/publish", () => ({
+  publishArtifact: (...args: unknown[]) => publishArtifact(...args),
 }));
 
 function request(body: unknown) {
@@ -69,6 +74,7 @@ function happyPath() {
   listMessages.mockResolvedValue([]);
   appendMessage.mockResolvedValue(undefined);
   setCurrentBlock.mockResolvedValue(undefined);
+  publishArtifact.mockResolvedValue(null);
   createChatStream.mockResolvedValue(streamOf({ type: "text", text: "네" }, { type: "done" }));
 }
 
@@ -307,5 +313,70 @@ describe("[P3-4] POST /api/chat — 대화 상태 저장", () => {
     expect(setCurrentBlock).not.toHaveBeenCalled();
     const { system } = createChatStream.mock.calls[0][0] as { system: string };
     expect(system).toContain("현재 블록: 블록 3");
+  });
+});
+
+describe("[P4-3] POST /api/chat — 산출물 발행", () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.ANTHROPIC_API_KEY = "test-key";
+    happyPath();
+    getConversation.mockResolvedValue({ ...CONVERSATION, currentBlock: "implement" });
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  it("답변에 파일이 있으면 발행하고 artifact 이벤트로 알린다", async () => {
+    createChatStream.mockResolvedValue(
+      streamOf(
+        { type: "text", text: "만들었습니다.\n```file:index.html\n<h1>안녕</h1>\n```" },
+        { type: "done" },
+      ),
+    );
+    publishArtifact.mockResolvedValue({
+      project: { id: "proj-1", slug: "my-homepage", name: "내 홈페이지" },
+      fileCount: 1,
+    });
+
+    const { POST } = await import("@/app/api/chat/route");
+    const res = await POST(request(VALID));
+    const events = await eventsOf(res);
+
+    expect(publishArtifact).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ ownerId: "user-1", conversationId: "conv-1" }),
+    );
+    expect(events).toContainEqual({
+      type: "artifact",
+      slug: "my-homepage",
+      fileCount: 1,
+    });
+  });
+
+  it("파일이 없으면 artifact 이벤트를 보내지 않는다", async () => {
+    const { POST } = await import("@/app/api/chat/route");
+    const res = await POST(request(VALID));
+
+    const events = await eventsOf(res);
+    expect(events.some((e) => e.type === "artifact")).toBe(false);
+  });
+
+  it("발행에 실패해도 대화는 살리고 오류만 알린다", async () => {
+    createChatStream.mockResolvedValue(
+      streamOf({ type: "text", text: "```file:index.html\n<h1>x</h1>\n```" }, { type: "done" }),
+    );
+    publishArtifact.mockRejectedValue(new Error("quota exceeded"));
+
+    const { POST } = await import("@/app/api/chat/route");
+    const res = await POST(request(VALID));
+    const events = await eventsOf(res);
+
+    expect(res.status).toBe(200);
+    expect(appendMessage).toHaveBeenCalledTimes(2); // 사용자 + AI 답변은 저장됨
+    expect(events.some((e) => e.type === "error" && /quota exceeded/.test(e.message))).toBe(true);
   });
 });

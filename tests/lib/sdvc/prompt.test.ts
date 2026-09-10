@@ -48,6 +48,15 @@ describe("[P3-3] buildSystemPrompt", () => {
     }
   });
 
+  it("[P4-3] 구현 블록에서는 파일을 정해진 형식으로 내라고 지시한다", () => {
+    const prompt = buildSystemPrompt({ block: "implement" });
+    expect(prompt).toContain("```file:");
+    expect(prompt).toContain("index.html");
+
+    // 설명용 코드블록과 구분해야 하므로, 다른 블록에는 이 지시가 없다.
+    expect(buildSystemPrompt({ block: "plan" })).not.toContain("```file:");
+  });
+
   it("헌장의 보안 규칙(키 값을 AI가 채우지 않는다)을 프롬프트에 명시한다", () => {
     const prompt = buildSystemPrompt({ block: "implement" });
     expect(prompt).toContain("API 키");
