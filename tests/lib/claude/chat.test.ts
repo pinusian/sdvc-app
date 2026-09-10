@@ -104,6 +104,34 @@ describe("[P3-2] createChatStream", () => {
     ]);
   });
 
+  it("확장 사고(thinking) 중에는 thinking 이벤트를 한 번만 알리고 내용은 흘리지 않는다", async () => {
+    // 실제 API 확인 결과, 모델은 계획 수립 같은 요청에서 스스로 확장 사고를 켠다.
+    // 사고 내용(chain of thought)은 화면에 보내지 않되, 화면이 빈 채로 멈춘 것처럼
+    // 보이지 않도록 "생각 중"이라는 신호만 한 번 보낸다.
+    const fetchImpl = vi.fn().mockResolvedValue(
+      sseResponse([
+        'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"내부 추론 내용"}}\n\n',
+        'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"더 많은 추론"}}\n\n',
+        'data: {"type":"content_block_delta","delta":{"type":"signature_delta","signature":"abc"}}\n\n',
+        'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"계획입니다"}}\n\n',
+      ]),
+    );
+
+    const stream = await createChatStream({
+      apiKey: "test-key",
+      messages: [{ role: "user", content: "계획 세워줘" }],
+      fetchImpl,
+    });
+
+    const events = await readEvents(stream);
+    expect(events).toEqual([
+      { type: "thinking" },
+      { type: "text", text: "계획입니다" },
+      { type: "done" },
+    ]);
+    expect(JSON.stringify(events)).not.toContain("내부 추론 내용");
+  });
+
   it("Anthropic이 오류를 반환하면 error 이벤트로 알리고 키 값은 노출하지 않는다", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(
       sseResponse(['{"error":{"type":"authentication_error","message":"invalid x-api-key"}}'], {
