@@ -1,0 +1,30 @@
+# --- secrets (절대 커밋 금지) ---
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# --- node / Next.js ---
+node_modules/
+.next/
+out/
+dist/
+build/
+.turbo/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# --- Vercel ---
+.vercel
+
+# --- OS / editor ---
+Thumbs.db
+desktop.ini
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# --- claude local ---
+.claude/settings.local.json
