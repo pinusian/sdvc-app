@@ -93,7 +93,11 @@ export async function POST(request: Request) {
     messages: [...history, { role: "user", content: message }],
   });
 
-  return new Response(stream.pipeThrough(captureAndFilter(admin, conversationId)), {
+  // 단계가 넘어갔으면 화면이 표시를 갱신할 수 있게 맨 앞에서 알려준다.
+  const initialEvents: StreamEvent[] =
+    block === conversation.currentBlock ? [] : [{ type: "block", block }];
+
+  return new Response(stream.pipeThrough(captureAndFilter(admin, conversationId, initialEvents)), {
     status: 200,
     headers: {
       "content-type": "application/x-ndjson; charset=utf-8",
@@ -101,6 +105,12 @@ export async function POST(request: Request) {
     },
   });
 }
+
+/** 화면으로 흘려보내는 이벤트 — Claude 쪽 이벤트에 SDVC 진행 이벤트를 더한 것. */
+type StreamEvent =
+  | ChatEvent
+  | { type: "gate"; block: BlockId }
+  | { type: "block"; block: BlockId };
 
 /**
  * 흘러가는 NDJSON을 그대로 통과시키면서
@@ -110,11 +120,14 @@ export async function POST(request: Request) {
 function captureAndFilter(
   admin: ReturnType<typeof createAdminClient>,
   conversationId: string,
+  initialEvents: StreamEvent[] = [],
 ): TransformStream<Uint8Array, Uint8Array> {
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
-  const emit = (controller: TransformStreamDefaultController<Uint8Array>, event: ChatEvent | { type: "gate"; block: BlockId }) =>
-    controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
+  const emit = (
+    controller: TransformStreamDefaultController<Uint8Array>,
+    event: StreamEvent,
+  ) => controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
 
   let lineBuffer = "";
   let held = ""; // 마커가 될 수 있어 아직 못 내보낸 꼬리
@@ -147,6 +160,9 @@ function captureAndFilter(
   };
 
   return new TransformStream<Uint8Array, Uint8Array>({
+    start(controller) {
+      for (const event of initialEvents) emit(controller, event);
+    },
     transform(chunk, controller) {
       lineBuffer += decoder.decode(chunk, { stream: true });
       let newlineAt: number;

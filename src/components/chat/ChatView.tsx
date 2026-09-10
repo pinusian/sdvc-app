@@ -28,24 +28,31 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
   const [thinking, setThinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [block, setBlock] = useState<BlockId>(currentBlock);
+  /** [P3-6] 승인 대기 중인 게이트. null이면 대기 중이 아니다. */
+  const [gate, setGate] = useState<BlockId | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
   const blockInfo = SDVC_BLOCKS.find((b) => b.id === block);
 
-  async function send() {
-    const message = draft.trim();
+  async function send(options?: { message?: string; approved?: boolean }) {
+    const message = (options?.message ?? draft).trim();
     if (!message || streaming) return;
 
-    setDraft("");
+    if (!options?.message) setDraft("");
     setError(null);
     setStreaming(true);
+    setGate(null);
     setMessages((prev) => [...prev, { role: "user", content: message }]);
 
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ conversationId, message }),
+        body: JSON.stringify({
+          conversationId,
+          message,
+          ...(options?.approved ? { approved: true } : {}),
+        }),
       });
 
       if (!res.ok || !res.body) {
@@ -62,6 +69,8 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
         },
         onThinking: () => setThinking(true),
         onError: (message) => setError(message),
+        onGate: (gateBlock) => setGate(gateBlock),
+        onBlock: (nextBlock) => setBlock(nextBlock),
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "알 수 없는 오류가 발생했습니다.");
@@ -112,6 +121,25 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
 
         {thinking && (
           <p className="text-sm text-ink-faint">생각하는 중…</p>
+        )}
+
+        {gate && !streaming && (
+          <div className="rounded-lg border border-accent bg-accent-soft px-4 py-3">
+            <p className="mb-3 text-sm text-accent-ink">
+              {gateLabel(gate)} 단계를 마쳤습니다. 이대로 다음 단계로 넘어갈까요?
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="accent"
+                onClick={() => void send({ message: "예, 이대로 진행해주세요.", approved: true })}
+              >
+                예, 이대로 진행
+              </Button>
+              <Button variant="secondary" onClick={() => setGate(null)}>
+                수정할 게 있어요
+              </Button>
+            </div>
+          </div>
         )}
         {error && (
           <p role="alert" className="text-sm text-red-700">
@@ -164,10 +192,16 @@ function appendToAssistant(messages: ChatMessage[], text: string): ChatMessage[]
   return [...messages, { role: "assistant", content: text }];
 }
 
+function gateLabel(block: BlockId): string {
+  return SDVC_BLOCKS.find((b) => b.id === block)?.title.replace(" ★승인 게이트★", "") ?? "이번";
+}
+
 interface EventHandlers {
   onText: (text: string) => void;
   onThinking: () => void;
   onError: (message: string) => void;
+  onGate: (block: BlockId) => void;
+  onBlock: (block: BlockId) => void;
 }
 
 /** NDJSON 스트림을 한 줄씩 읽어 이벤트로 넘긴다. */
@@ -178,7 +212,7 @@ async function readEvents(body: ReadableStream<Uint8Array>, handlers: EventHandl
 
   const handleLine = (line: string) => {
     if (!line.trim()) return;
-    let event: { type: string; text?: string; message?: string };
+    let event: { type: string; text?: string; message?: string; block?: BlockId };
     try {
       event = JSON.parse(line);
     } catch {
@@ -186,6 +220,8 @@ async function readEvents(body: ReadableStream<Uint8Array>, handlers: EventHandl
     }
     if (event.type === "text" && event.text) handlers.onText(event.text);
     else if (event.type === "thinking") handlers.onThinking();
+    else if (event.type === "gate" && event.block) handlers.onGate(event.block);
+    else if (event.type === "block" && event.block) handlers.onBlock(event.block);
     else if (event.type === "error") handlers.onError(event.message ?? "오류가 발생했습니다.");
   };
 
