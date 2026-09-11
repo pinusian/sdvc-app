@@ -1,0 +1,151 @@
+import { describe, expect, it, vi, beforeEach } from "vitest";
+import { applySubscriptionEvent } from "@/lib/billing/subscription";
+
+/**
+ * [P6-6] Stripe 사건 → 우리 등급/구독상태.
+ * 결제하면 올라가고, 미납·해지면 내려간다. 이 값이 [P6-4] 차단 판정의 근거다.
+ */
+
+function fakeAdmin() {
+  const updates: { table: string; values: Record<string, unknown>; where: unknown[] }[] = [];
+  const client = {
+    from(table: string) {
+      return {
+        update(values: Record<string, unknown>) {
+          const where: unknown[] = [];
+          const chain = {
+            eq(column: string, value: unknown) {
+              where.push([column, value]);
+              return chain;
+            },
+            select() {
+              return chain;
+            },
+            async maybeSingle() {
+              updates.push({ table, values, where });
+              return { data: { id: "row" }, error: null };
+            },
+          };
+          return chain;
+        },
+      };
+    },
+  };
+  return { admin: client as never, updates };
+}
+
+const PRICES = { basic: "price_basic", pro: "price_pro" };
+
+describe("[P6-6] applySubscriptionEvent", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("결제가 끝나면 등급을 올리고 활성 상태로 바꾼다", async () => {
+    const { admin, updates } = fakeAdmin();
+
+    await applySubscriptionEvent(admin, PRICES, {
+      type: "checkout.session.completed",
+      data: {
+        object: {
+          client_reference_id: "user-1",
+          customer: "cus_123",
+          subscription: "sub_123",
+          // Checkout 완료 시점엔 가격이 line_items에 있지 않을 수 있어
+          // 메타데이터로도 받을 수 있게 한다
+          metadata: { price_id: "price_pro" },
+        },
+      },
+    });
+
+    expect(updates).toHaveLength(1);
+    expect(updates[0].table).toBe("profiles");
+    expect(updates[0].where).toContainEqual(["id", "user-1"]);
+    expect(updates[0].values).toMatchObject({
+      grade: "pro",
+      subscription_status: "active",
+      stripe_customer_id: "cus_123",
+    });
+  });
+
+  it("구독이 갱신되면 상태와 등급을 따라 맞춘다", async () => {
+    const { admin, updates } = fakeAdmin();
+
+    await applySubscriptionEvent(admin, PRICES, {
+      type: "customer.subscription.updated",
+      data: {
+        object: {
+          customer: "cus_123",
+          status: "past_due",
+          items: { data: [{ price: { id: "price_basic" } }] },
+        },
+      },
+    });
+
+    expect(updates[0].where).toContainEqual(["stripe_customer_id", "cus_123"]);
+    expect(updates[0].values).toMatchObject({ subscription_status: "past_due", grade: "basic" });
+  });
+
+  it("해지되면 등급을 체험으로 내린다 (FR-023의 토대)", async () => {
+    const { admin, updates } = fakeAdmin();
+
+    await applySubscriptionEvent(admin, PRICES, {
+      type: "customer.subscription.deleted",
+      data: { object: { customer: "cus_123", status: "canceled" } },
+    });
+
+    expect(updates[0].values).toMatchObject({
+      subscription_status: "canceled",
+      grade: "trial",
+    });
+  });
+
+  it("결제 실패는 미납 상태로 표시한다", async () => {
+    const { admin, updates } = fakeAdmin();
+
+    await applySubscriptionEvent(admin, PRICES, {
+      type: "invoice.payment_failed",
+      data: { object: { customer: "cus_123" } },
+    });
+
+    expect(updates[0].values).toMatchObject({ subscription_status: "past_due" });
+  });
+
+  it("모르는 사건은 아무것도 바꾸지 않는다", async () => {
+    const { admin, updates } = fakeAdmin();
+
+    await applySubscriptionEvent(admin, PRICES, {
+      type: "customer.created",
+      data: { object: { customer: "cus_123" } },
+    });
+
+    expect(updates).toHaveLength(0);
+  });
+
+  it("누구의 결제인지 알 수 없으면 아무것도 바꾸지 않는다", async () => {
+    const { admin, updates } = fakeAdmin();
+
+    await applySubscriptionEvent(admin, PRICES, {
+      type: "checkout.session.completed",
+      data: { object: { customer: "cus_123" } }, // client_reference_id 없음
+    });
+
+    expect(updates).toHaveLength(0);
+  });
+
+  it("모르는 가격이면 등급은 건드리지 않고 상태만 반영한다", async () => {
+    const { admin, updates } = fakeAdmin();
+
+    await applySubscriptionEvent(admin, PRICES, {
+      type: "customer.subscription.updated",
+      data: {
+        object: {
+          customer: "cus_123",
+          status: "active",
+          items: { data: [{ price: { id: "price_unknown" } }] },
+        },
+      },
+    });
+
+    expect(updates[0].values).toMatchObject({ subscription_status: "active" });
+    expect(updates[0].values).not.toHaveProperty("grade");
+  });
+});
