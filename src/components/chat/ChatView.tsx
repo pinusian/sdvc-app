@@ -34,6 +34,8 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
   const [artifact, setArtifact] = useState<{ slug: string; fileCount: number } | null>(null);
   /** [P4-5] 답변이 최대 길이에 걸려 끊겼는가 */
   const [truncated, setTruncated] = useState(false);
+  /** [P6-4] 체험 만료·한도 초과로 막혔는가 — 요금제로 가는 길을 함께 보여준다 */
+  const [blocked, setBlocked] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
   const blockInfo = SDVC_BLOCKS.find((b) => b.id === block);
@@ -48,6 +50,7 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
     setGate(null);
     setArtifact(null);
     setTruncated(false);
+    setBlocked(false);
     setMessages((prev) => [...prev, { role: "user", content: message }]);
 
     try {
@@ -62,7 +65,11 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
       });
 
       if (!res.ok || !res.body) {
-        const detail = await res.json().catch(() => null);
+        const detail = (await res.json().catch(() => null)) as
+          | { error?: string; reason?: string }
+          | null;
+        // 402는 "돈 문제로 막혔다"는 뜻 — 오류가 아니라 안내에 가깝다.
+        if (res.status === 402) setBlocked(true);
         throw new Error(detail?.error ?? `요청에 실패했습니다. (상태 ${res.status})`);
       }
 
@@ -201,10 +208,22 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
             </div>
           </div>
         )}
-        {error && (
+        {error && !blocked && (
           <p role="alert" className="text-sm text-red-700">
             {error}
           </p>
+        )}
+
+        {error && blocked && (
+          <div role="alert" className="rounded-lg border border-accent bg-accent-soft px-4 py-3">
+            <p className="mb-3 text-sm text-accent-ink">{error}</p>
+            <a
+              href="/pricing"
+              className="inline-flex items-center rounded-sm bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-hover"
+            >
+              요금제 보기
+            </a>
+          </div>
         )}
         <div ref={endRef} />
       </div>

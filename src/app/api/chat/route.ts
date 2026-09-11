@@ -14,6 +14,8 @@ import {
 } from "@/lib/conversations/store";
 import { publishArtifact } from "@/lib/artifacts/publish";
 import { recordUsage } from "@/lib/usage/store";
+import { loadAccountState } from "@/lib/billing/account";
+import { canStartChat } from "@/lib/billing/access";
 
 /**
  * SDVC 엔진과의 대화 API.
@@ -63,6 +65,29 @@ export async function POST(request: Request) {
   const conversation = await getConversation(admin, conversationId, user.id);
   if (!conversation) {
     return NextResponse.json({ error: "대화를 찾을 수 없습니다." }, { status: 404 });
+  }
+
+  // [P6-4] 체험 기간·구독 상태·월 한도를 서버에서 판정한다 (FR-008·FR-026).
+  // Claude를 부르기 전에, 그리고 메시지를 저장하기 전에 막아야 한다 —
+  // 막힌 요청으로 비용이 나가거나 대화가 지저분해지면 안 되기 때문이다.
+  const account = await loadAccountState(admin, user.id);
+  const access = account
+    ? canStartChat(account)
+    : ({
+        allowed: false as const,
+        reason: "unknown_grade" as const,
+        message: "계정 정보를 확인할 수 없습니다. 관리자에게 문의해주세요.",
+      });
+
+  if (!access.allowed) {
+    return NextResponse.json(
+      {
+        error: access.message,
+        reason: access.reason,
+        ...(access.upgradeTo ? { upgradeTo: access.upgradeTo } : {}),
+      },
+      { status: 402 }, // Payment Required
+    );
   }
 
   // 단계 이동은 사용자가 명시적으로 승인했을 때만 일어난다.

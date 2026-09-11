@@ -394,3 +394,45 @@ describe("[P4-6] ChatView — 언제든 다음 단계로 갈 수 있어야 한�
     );
   });
 });
+
+describe("[P6-4] ChatView — 체험·한도로 막혔을 때", () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("402로 막히면 이유를 보여주고 요금제로 갈 길을 준다", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: "7일 체험 기간이 끝났어요. 계속 쓰시려면 요금제를 선택해주세요.",
+            reason: "trial_expired",
+            upgradeTo: "basic",
+          }),
+          { status: 402 },
+        ),
+      ),
+    );
+
+    render(<ChatView conversationId="conv-1" currentBlock="clarify" initialMessages={[]} />);
+    await userEvent.type(screen.getByLabelText("메시지"), "안녕");
+    await userEvent.click(screen.getByRole("button", { name: "보내기" }));
+
+    await waitFor(() => expect(screen.getByText(/체험 기간이 끝났어요/)).toBeInTheDocument());
+    expect(screen.getByRole("link", { name: /요금제/ })).toHaveAttribute("href", "/pricing");
+  });
+
+  it("보통 오류에는 요금제 링크를 붙이지 않는다", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(mockChatResponse({ type: "error", message: "호출 실패" })),
+    );
+
+    render(<ChatView conversationId="conv-1" currentBlock="clarify" initialMessages={[]} />);
+    await userEvent.type(screen.getByLabelText("메시지"), "안녕");
+    await userEvent.click(screen.getByRole("button", { name: "보내기" }));
+
+    await waitFor(() => expect(screen.getByText(/호출 실패/)).toBeInTheDocument());
+    expect(screen.queryByRole("link", { name: /요금제/ })).not.toBeInTheDocument();
+  });
+})
