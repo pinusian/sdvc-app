@@ -22,6 +22,8 @@ export type ChatEvent =
   | { type: "thinking" }
   /** [P4-5] 최대 길이에 걸려 답변이 중간에서 끊겼음 */
   | { type: "truncated" }
+  /** [P6-2] Anthropic이 알려준 실제 사용량 — 서버가 기록용으로 걷어간다 */
+  | { type: "usage"; model: string; inputTokens: number; outputTokens: number }
   | { type: "done" }
   | { type: "error"; message: string };
 
@@ -94,8 +96,11 @@ function sseToNdjson(): TransformStream<Uint8Array, Uint8Array> {
   let buffer = "";
   let thinkingAnnounced = false;
   let truncated = false;
+  // [P6-2] 사용량은 message_start(입력)와 message_delta(출력)에 나뉘어 온다.
+  const usage = { model: "", inputTokens: 0, outputTokens: 0 };
 
   const handle = (line: string, controller: TransformStreamDefaultController<Uint8Array>) => {
+    collectUsage(line, usage);
     if (isMaxTokensStop(line)) {
       truncated = true;
       return;
@@ -133,9 +138,41 @@ function sseToNdjson(): TransformStream<Uint8Array, Uint8Array> {
       handle(buffer, controller);
       // 잘렸더라도 done은 반드시 보낸다 — 화면이 "보내는 중"에 멈추면 안 된다.
       if (truncated) controller.enqueue(encodeEvent({ type: "truncated" }));
+      if (usage.model && usage.inputTokens + usage.outputTokens > 0) {
+        controller.enqueue(encodeEvent({ type: "usage", ...usage }));
+      }
       controller.enqueue(encodeEvent({ type: "done" }));
     },
   });
+}
+
+/**
+ * [P6-2] 사용량을 모은다. 입력 토큰은 `message_start`, 출력 토큰은
+ * `message_delta`에 **누적값**으로 온다 — 우리가 세지 않고 그대로 받는다.
+ */
+function collectUsage(
+  line: string,
+  usage: { model: string; inputTokens: number; outputTokens: number },
+): void {
+  const payload = payloadOf(line);
+  if (!payload) return;
+  try {
+    const parsed = JSON.parse(payload) as {
+      type?: string;
+      message?: { model?: string; usage?: { input_tokens?: number; output_tokens?: number } };
+      usage?: { input_tokens?: number; output_tokens?: number };
+    };
+
+    if (parsed.type === "message_start") {
+      usage.model = parsed.message?.model ?? usage.model;
+      usage.inputTokens = parsed.message?.usage?.input_tokens ?? usage.inputTokens;
+      usage.outputTokens = parsed.message?.usage?.output_tokens ?? usage.outputTokens;
+    } else if (parsed.type === "message_delta" && parsed.usage) {
+      usage.outputTokens = parsed.usage.output_tokens ?? usage.outputTokens;
+    }
+  } catch {
+    // 파싱 못 하는 줄은 무시한다.
+  }
 }
 
 /** [P4-5] 최대 길이에 걸려 끊긴 응답인가? */

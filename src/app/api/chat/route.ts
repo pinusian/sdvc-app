@@ -13,6 +13,7 @@ import {
   setCurrentBlock,
 } from "@/lib/conversations/store";
 import { publishArtifact } from "@/lib/artifacts/publish";
+import { recordUsage } from "@/lib/usage/store";
 
 /**
  * SDVC 엔진과의 대화 API.
@@ -112,7 +113,8 @@ export async function POST(request: Request) {
   const publishContext: PublishContext = {
     ownerId: user.id,
     projectName: title ?? "내 프로젝트",
-    projectId: conversation.projectId,
+    // 항상 null 또는 문자열로 맞춘다 (undefined가 DB까지 흘러가면 컬럼이 빠진다)
+    projectId: conversation.projectId ?? null,
   };
 
   return new Response(
@@ -140,6 +142,9 @@ interface PublishContext {
   projectId: string | null;
 }
 
+/** [P6-2] 스트림에서 걷어낸 사용량 — 화면에는 보내지 않고 기록만 한다. */
+type Usage = { model: string; inputTokens: number; outputTokens: number };
+
 /**
  * 흘러가는 NDJSON을 그대로 통과시키면서
  * ① 답변 텍스트를 모아 두었다가 끝나면 DB에 저장하고
@@ -162,6 +167,7 @@ function captureAndFilter(
   let lineBuffer = "";
   let held = ""; // 마커가 될 수 있어 아직 못 내보낸 꼬리
   let answer = ""; // DB에 저장할 답변 전문(마커 제외)
+  let usage: Usage | null = null; // [P6-2] 이번 호출의 사용량
 
   const handleLine = (
     line: string,
@@ -173,6 +179,16 @@ function captureAndFilter(
     try {
       event = JSON.parse(line) as ChatEvent;
     } catch {
+      return;
+    }
+
+    // [P6-2] 사용량은 과금·한도 판정용이지 보여줄 것이 아니다 — 걷어낸다.
+    if (event.type === "usage") {
+      usage = {
+        model: event.model,
+        inputTokens: event.inputTokens,
+        outputTokens: event.outputTokens,
+      };
       return;
     }
 
@@ -212,6 +228,23 @@ function captureAndFilter(
       } else if (held) {
         answer += held;
         emit(controller, { type: "text", text: held });
+      }
+
+      // [P6-2] 사용량 기록. 실패해도 대화는 망가뜨리지 않는다 — 기록보다
+      // 사용자의 대화가 우선이고, 누락분은 나중에 원가 집계에서 드러난다.
+      if (usage && publish) {
+        try {
+          await recordUsage(admin, {
+            userId: publish.ownerId,
+            conversationId,
+            projectId: publish.projectId,
+            model: usage.model,
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+          });
+        } catch {
+          // 조용히 넘긴다 (사용자에게 보일 오류가 아니다)
+        }
       }
 
       const content = answer.trim();
