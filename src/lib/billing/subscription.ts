@@ -106,6 +106,16 @@ export async function applySubscriptionEvent(
 
     case "customer.subscription.deleted": {
       if (!object.customer) return;
+
+      // [P6-7] 산출물을 즉시 비공개로 돌리고 30일 유예를 건다 (FR-023).
+      // **상태를 바꾸기 전에 잠근다** — 순서를 반대로 하면 그 사이에 해지된
+      // 사람의 홈페이지가 잠깐이라도 공개로 남는다([P6-9] 게이트에서 드러남).
+      // 잠금이 실패하면 상태도 바꾸지 않고 예외로 끝나 Stripe가 재시도한다.
+      // 미납(past_due)에는 잠그지 않는다 — 카드만 다시 넣으면 되는 상황이라
+      // 남의 홈페이지를 성급히 내려버리면 안 된다.
+      const userId = await findUserIdByCustomer(admin, object.customer);
+      if (userId) await hooks.lock(admin, userId, "canceled");
+
       // 해지되면 체험 등급으로 내린다. 접근 자체는 상태(canceled)로 막히지만,
       // 등급을 남겨두면 나중에 한도 계산이 어긋난다.
       await update(
@@ -113,12 +123,6 @@ export async function applySubscriptionEvent(
         { subscription_status: "canceled", grade: "trial" },
         ["stripe_customer_id", object.customer],
       );
-
-      // [P6-7] 산출물을 즉시 비공개로 돌리고 30일 유예를 건다 (FR-023).
-      // 미납(past_due)에는 하지 않는다 — 카드만 다시 넣으면 되는 상황이라
-      // 남의 홈페이지를 성급히 내려버리면 안 된다.
-      const userId = await findUserIdByCustomer(admin, object.customer);
-      if (userId) await hooks.lock(admin, userId, "canceled");
       return;
     }
 

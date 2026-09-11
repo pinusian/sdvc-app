@@ -192,6 +192,50 @@ describe("[P6-7] 구독 사건 → 산출물 잠금·복구", () => {
     expect(locked).toHaveLength(1);
   });
 
+  it("해지 처리는 상태를 바꾸기 **전에** 잠근다 (FR-023 즉시 비공개)", async () => {
+    // [P6-9] 게이트 G6에서 드러난 순서 문제. 상태를 먼저 바꾸면 그 사이에
+    // 해지된 사람의 홈페이지가 잠깐이라도 공개로 남는다. 잠금이 먼저다.
+    const { admin } = fakeAdmin();
+    const order: string[] = [];
+    // 상태 쓰기가 일어나는 순간을 잡으려고 update를 감싼다
+    const inner = admin as unknown as {
+      from(table: string): {
+        select: (...a: unknown[]) => unknown;
+        update: (values: Record<string, unknown>) => unknown;
+      };
+    };
+    const watched = {
+      from(table: string) {
+        const real = inner.from(table);
+        return {
+          select: (...a: unknown[]) => real.select(...a),
+          update: (values: Record<string, unknown>) => {
+            order.push("update");
+            return real.update(values);
+          },
+        };
+      },
+    } as never;
+
+    await applySubscriptionEvent(
+      watched,
+      PRICES,
+      {
+        type: "customer.subscription.deleted",
+        data: { object: { customer: "cus_123", status: "canceled" } },
+      },
+      {
+        lock: async () => {
+          order.push("lock");
+          return { lockedCount: 1, purgeAfter: "2026-10-12T00:00:00.000Z" };
+        },
+        restore: async () => ({ restoredCount: 0 }),
+      },
+    );
+
+    expect(order).toEqual(["lock", "update"]);
+  });
+
   it("결제가 끝나면 잠겨 있던 산출물을 되살린다", async () => {
     const { admin } = fakeAdmin();
     const restored: unknown[] = [];
