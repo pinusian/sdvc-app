@@ -43,6 +43,12 @@ export async function createCheckoutSession({
     cancel_url: cancelUrl,
     client_reference_id: userId,
     customer_email: userEmail,
+    // [P6-6 검증에서 발견] 결제 완료(checkout.session.completed) 이벤트에는
+    // 산 가격이 담겨 오지 않는다 — 실제 결제 후 등급이 안 올라갔다.
+    // 메타데이터로 실어 보내야 웹훅이 어떤 등급인지 판단할 수 있다.
+    "metadata[price_id]": priceId,
+    // 구독 쪽에도 남겨두면 이후 갱신 이벤트에서도 근거가 된다.
+    "subscription_data[metadata][price_id]": priceId,
   });
 
   const res = await fetchImpl(`${STRIPE_API}/checkout/sessions`, {

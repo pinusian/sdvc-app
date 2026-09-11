@@ -51,6 +51,11 @@ describe("[P6-5] createCheckoutSession", () => {
     // 웹훅에서 "누구의 결제인지" 알아내려면 우리 쪽 사용자 id가 실려야 한다
     expect(form.get("client_reference_id")).toBe("user-1");
     expect(form.get("customer_email")).toBe("dev@example.com");
+    // [P6-6 검증에서 발견] 결제 완료 이벤트에는 "어떤 가격을 샀는지"가 담겨
+    // 오지 않는다 — 실제로 결제했는데 등급이 안 올라갔다.
+    // 메타데이터에 가격을 실어 보내야 웹훅이 등급을 판단할 수 있다.
+    expect(form.get("metadata[price_id]")).toBe("price_basic");
+    expect(form.get("subscription_data[metadata][price_id]")).toBe("price_basic");
   });
 
   it("Stripe가 거절하면 이유를 알리되 키는 노출하지 않는다", async () => {
