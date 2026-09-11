@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { NewConversationButton } from "@/components/chat/NewConversationButton";
 import { ProjectList } from "@/components/projects/ProjectList";
 import { listProjects } from "@/lib/projects/store";
+import { findConversationsByProjects } from "@/lib/conversations/store";
 
 const GRADE_LABEL: Record<string, string> = {
   trial: "체험",
@@ -32,7 +33,20 @@ export default async function DashboardPage() {
 
   // projects는 RLS 정책이 없어 브라우저 키로는 못 읽는다([P4-2]) — 서버가
   // secret key로 읽되 소유자 조건은 store가 직접 건다.
-  const projects = await listProjects(createAdminClient(), user.id);
+  const admin = createAdminClient();
+  const projects = await listProjects(admin, user.id);
+
+  // [P5-4b] 각 프로젝트를 만든 대화로 돌아갈 수 있게 연결해준다 (FR-025) —
+  // 버그 수정·기능 추가는 그 대화에서 이어서 하면 같은 프로젝트에 덮어쓴다.
+  const conversationByProject = await findConversationsByProjects(
+    admin,
+    projects.map((project) => project.id),
+    user.id,
+  );
+  const projectsWithConversation = projects.map((project) => ({
+    ...project,
+    conversationId: conversationByProject[project.id] ?? null,
+  }));
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
@@ -62,7 +76,7 @@ export default async function DashboardPage() {
           <NewConversationButton />
         </div>
 
-        <ProjectList projects={projects} />
+        <ProjectList projects={projectsWithConversation} />
       </main>
     </div>
   );

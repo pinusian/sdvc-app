@@ -126,6 +126,34 @@ export async function listMessages(
   return (data ?? []) as ChatMessage[];
 }
 
+/**
+ * [P5-4b] 프로젝트 → 그 프로젝트를 만든 대화 (FR-025).
+ *
+ * 대시보드에서 "이어서 수정"으로 들어갈 문을 열어주기 위한 것.
+ * 프로젝트마다 따로 묻지 않고 한 번에 찾는다(N+1 방지).
+ */
+export async function findConversationsByProjects(
+  client: Client,
+  projectIds: string[],
+  ownerId: string,
+): Promise<Record<string, string>> {
+  if (projectIds.length === 0) return {};
+
+  const { data, error } = await client
+    .from("conversations")
+    .select("id, project_id")
+    .eq("owner_id", ownerId)
+    .in("project_id", projectIds);
+
+  assertNoError(error, "프로젝트의 대화 조회");
+
+  const map: Record<string, string> = {};
+  for (const row of (data ?? []) as { id: string; project_id: string | null }[]) {
+    if (row.project_id) map[row.project_id] = row.id;
+  }
+  return map;
+}
+
 /** [P4-3] 이 대화로 만들어진 프로젝트를 연결한다. */
 export async function setConversationProject(
   client: Client,

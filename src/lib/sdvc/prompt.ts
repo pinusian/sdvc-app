@@ -11,6 +11,8 @@ import { SDVC_BLOCKS, getBlock, type BlockId } from "@/lib/sdvc/blocks";
 export interface PromptState {
   block: Exclude<BlockId, "done">;
   projectName?: string;
+  /** [P5-4b] 이 대화로 이미 산출물을 만들어 배포한 적이 있는가 (FR-025) */
+  published?: boolean;
 }
 
 /** 게이트 승인 요청 마커. 예: `<<SDVC_GATE:plan>>` */
@@ -36,7 +38,24 @@ const UNIVERSAL_RULES = [
   "6. 한 번에 한 블록만 진행한다. 사용자가 요청해도 뒤 블록의 산출물을 미리 만들지 않는다.",
 ].join("\n");
 
-export function buildSystemPrompt({ block, projectName }: PromptState): string {
+/**
+ * [P5-4b] 이미 만들어 배포한 프로젝트를 고치는 중일 때 덧붙이는 안내 (FR-025).
+ * 이게 없으면 모델이 처음 만들 때처럼 전체 파일을 다시 써버린다.
+ */
+const MAINTENANCE_SECTION = [
+  "## 이미 만들어진 프로젝트를 고치는 중입니다",
+  "",
+  "이 프로젝트는 **이미 만들어져** 주소로 서비스되고 있습니다. 사용자가 고칠 점이나",
+  "추가할 기능을 말하면 처음부터 다시 만들지 말고 **고칠 파일만** 다시 내보낸다.",
+  "다시 내지 않은 파일은 그대로 남으므로, 바뀌지 않는 파일은 쓸 필요가 없다.",
+  "",
+  "- **버그 수정**: 먼저 그 버그를 **재현**하는 방법을 한 줄로 확인하고(무엇을 하면",
+  "  무엇이 잘못되는지), 고친 뒤 같은 방법으로 확인하도록 안내한다.",
+  "- **기능 추가**: 기존 명세를 이어받아 무엇이 달라지는지 짧게 정리한 뒤 고친다.",
+  "  처음 만들 때처럼 헌장부터 다시 묻지 않는다.",
+].join("\n");
+
+export function buildSystemPrompt({ block, projectName, published }: PromptState): string {
   const current = getBlock(block);
 
   const overview = SDVC_BLOCKS.map((b) => {
@@ -75,6 +94,7 @@ export function buildSystemPrompt({ block, projectName }: PromptState): string {
     ]
       .filter((line): line is string => line !== null)
       .join("\n"),
+    published ? MAINTENANCE_SECTION : null,
     `## 항상 지킬 규칙\n\n${UNIVERSAL_RULES}`,
   ].filter((section): section is string => section !== null);
 

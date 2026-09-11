@@ -93,7 +93,12 @@ export async function POST(request: Request) {
   const title = conversation.title ?? undefined;
   const stream = await createChatStream({
     apiKey,
-    system: buildSystemPrompt({ block, projectName: title }),
+    system: buildSystemPrompt({
+      block,
+      projectName: title,
+      // [P5-4b] 이미 만든 프로젝트면 전체를 다시 만들지 않도록 알려준다 (FR-025)
+      published: Boolean(conversation.projectId),
+    }),
     messages: [...history, { role: "user", content: message }],
     // 구현 단계는 파일을 통째로 써야 해서 기본 길이로는 중간에 끊긴다([P4-5]
     // 검증에서 실제로 겪음). max_tokens는 상한일 뿐이라 늘려도 안 쓰면 비용은 없다.

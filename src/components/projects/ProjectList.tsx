@@ -12,7 +12,10 @@ import type { Project, Visibility } from "@/lib/projects/store";
  * 않도록 같은 자리에서 한 번 더 확인을 받는다(브라우저 기본 경고창 대신).
  */
 
-type ListItem = Pick<Project, "id" | "name" | "slug" | "status" | "visibility">;
+type ListItem = Pick<Project, "id" | "name" | "slug" | "status" | "visibility"> & {
+  /** [P5-4b] 이 프로젝트를 만든 대화. 있으면 "이어서 수정"으로 들어간다 */
+  conversationId?: string | null;
+};
 
 const STATUS_LABEL: Record<string, string> = {
   draft: "작성 중",
@@ -154,6 +157,16 @@ export function ProjectList({ projects }: { projects: ListItem[] }) {
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
+            {/* [P5-4b] 버그 수정·기능 추가는 그 프로젝트를 만든 대화에서 이어서 한다 (FR-025) */}
+            {project.conversationId && (
+              <a
+                href={`/conversations/${project.conversationId}`}
+                className="inline-flex items-center rounded-sm border border-border px-3 py-1.5 text-xs font-semibold text-ink hover:border-accent hover:text-accent-ink"
+              >
+                이어서 수정
+              </a>
+            )}
+
             {project.status === "deployed" && (
               <a
                 href={`/site/${project.slug}`}
