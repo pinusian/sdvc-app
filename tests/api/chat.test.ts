@@ -414,3 +414,41 @@ describe("[P4-5] POST /api/chat — 구현 단계 응답 길이", () => {
     expect(maxTokensOf()).toBeLessThan(32000);
   });
 });
+
+describe("[P5-4b] POST /api/chat — 이미 만든 프로젝트 이어서 고치기", () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.ANTHROPIC_API_KEY = "test-key";
+    happyPath();
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  it("대화에 연결된 프로젝트가 있으면 '이미 만들어진 상태'로 알려준다", async () => {
+    getConversation.mockResolvedValue({
+      ...CONVERSATION,
+      currentBlock: "implement",
+      projectId: "proj-1",
+    });
+
+    const { POST } = await import("@/app/api/chat/route");
+    await POST(request(VALID));
+
+    const { system } = createChatStream.mock.calls[0][0] as { system: string };
+    expect(system).toContain("이미 만들어져");
+  });
+
+  it("아직 프로젝트가 없으면 그 안내를 넣지 않는다", async () => {
+    getConversation.mockResolvedValue({ ...CONVERSATION, currentBlock: "implement" });
+
+    const { POST } = await import("@/app/api/chat/route");
+    await POST(request(VALID));
+
+    const { system } = createChatStream.mock.calls[0][0] as { system: string };
+    expect(system).not.toContain("이미 만들어져");
+  });
+});

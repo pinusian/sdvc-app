@@ -142,3 +142,18 @@ describe("[P3-3] 승인 게이트 마커", () => {
     expect(parseGateMarker("<<SDVC_GATE:plan>>")).toBe("plan");
   });
 });
+
+describe("[P5-4b] 이미 만든 프로젝트를 고칠 때 (FR-025)", () => {
+  it("이미 배포된 프로젝트면 전체를 새로 만들지 말라고 알린다", () => {
+    const prompt = buildSystemPrompt({ block: "implement", published: true });
+
+    expect(prompt).toContain("이미 만들어져");
+    expect(prompt).toMatch(/고칠 파일만|바뀐 파일만/);
+    // 버그 수정은 재현 테스트가 먼저다 (SC-008)
+    expect(prompt).toContain("재현");
+  });
+
+  it("아직 안 만든 프로젝트에는 그 안내를 넣지 않는다", () => {
+    expect(buildSystemPrompt({ block: "implement" })).not.toContain("이미 만들어져");
+  });
+});

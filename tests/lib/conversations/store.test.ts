@@ -26,7 +26,7 @@ function fakeSupabase(result: Result = { data: null, error: null }) {
   };
 
   const builder: Record<string, unknown> = {};
-  for (const name of ["insert", "select", "update", "eq", "order", "limit"]) {
+  for (const name of ["insert", "select", "update", "eq", "in", "order", "limit"]) {
     builder[name] = (...args: unknown[]) => {
       record(name, ...args);
       return builder;
