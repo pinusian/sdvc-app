@@ -30,6 +30,24 @@ describe("[P6-8] AccountStatus", () => {
     expect(screen.getByText(/3일 남음/)).toBeInTheDocument();
   });
 
+  it("막 가입했으면 7일이라고 한다 — 몇 초 오차로 6일이나 8일이 되면 안 된다", () => {
+    // 가입 직후 남은 시간은 7일 경계에 걸린다. DB 시계와 서버 시계가 몇 초
+    // 어긋나므로 양쪽 다 7일로 읽혀야 한다.
+    for (const endsAt of ["2026-09-19T00:00:02.000Z", "2026-09-18T23:59:58.000Z"]) {
+      const { unmount } = render(
+        <AccountStatus {...BASE} now={new Date("2026-09-12T00:00:00.000Z")} trialEndsAt={endsAt} />,
+      );
+      expect(screen.getByText(/체험 7일 남음/), endsAt).toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  it("하루도 안 남았으면 '오늘까지'라고 한다", () => {
+    render(<AccountStatus {...BASE} trialEndsAt="2026-09-12T18:00:00.000Z" />);
+
+    expect(screen.getByText(/체험 오늘까지/)).toBeInTheDocument();
+  });
+
   it("체험이 끝났으면 끝났다고 말하고 요금제로 안내한다", () => {
     render(<AccountStatus {...BASE} trialEndsAt="2026-09-10T00:00:00.000Z" />);
 

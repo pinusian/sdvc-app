@@ -6,6 +6,8 @@ import { NewConversationButton } from "@/components/chat/NewConversationButton";
 import { ProjectList } from "@/components/projects/ProjectList";
 import { listProjects } from "@/lib/projects/store";
 import { findConversationsByProjects } from "@/lib/conversations/store";
+import { AccountStatus } from "@/components/billing/AccountStatus";
+import { loadAccountState } from "@/lib/billing/account";
 
 const GRADE_LABEL: Record<string, string> = {
   trial: "체험",
@@ -13,7 +15,13 @@ const GRADE_LABEL: Record<string, string> = {
   pro: "프로",
 };
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ checkout?: string }>;
+}) {
+  const { checkout } = await searchParams;
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -25,7 +33,7 @@ export default async function DashboardPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("email, role, grade, trial_ends_at")
+    .select("email, role, grade, trial_ends_at, stripe_customer_id")
     .eq("id", user.id)
     .single();
 
@@ -47,6 +55,10 @@ export default async function DashboardPage() {
     ...project,
     conversationId: conversationByProject[project.id] ?? null,
   }));
+
+  // [P6-8] 이용 상태는 차단 판정([P6-3])과 같은 근거로 보여준다 —
+  // 화면과 판정이 어긋나면 "된다고 했는데 막힌다"가 생긴다.
+  const account = await loadAccountState(admin, user.id);
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
@@ -75,6 +87,24 @@ export default async function DashboardPage() {
           </div>
           <NewConversationButton />
         </div>
+
+        {checkout === "success" && (
+          <p className="mb-6 rounded-lg border border-accent bg-accent-soft px-4 py-3 text-sm text-accent-ink">
+            결제가 완료되었습니다. 등급 반영에 잠시 걸릴 수 있어요 — 그대로 보이면
+            새로고침해주세요.
+          </p>
+        )}
+
+        {account && (
+          <AccountStatus
+            grade={account.grade}
+            subscriptionStatus={account.subscriptionStatus}
+            trialEndsAt={account.trialEndsAt}
+            monthlyTokensUsed={account.monthlyTokensUsed}
+            projectCount={account.projectCount}
+            canManage={Boolean(profile?.stripe_customer_id)}
+          />
+        )}
 
         <ProjectList projects={projectsWithConversation} />
       </main>
