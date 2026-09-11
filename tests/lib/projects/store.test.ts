@@ -5,6 +5,7 @@ import {
   getProjectBySlug,
   listProjects,
   setProjectStatus,
+  setProjectVisibility,
   deleteProjectRow,
   isSlugTaken,
 } from "@/lib/projects/store";
@@ -143,5 +144,26 @@ describe("[P4-3] projects 저장소", () => {
     await expect(
       createProject(client, { ownerId: "u", name: "n", slug: "s" }),
     ).rejects.toThrow(/permission denied/);
+  });
+});
+
+describe("[P5-3] 공개범위 변경", () => {
+  it("소유자 조건을 걸고 바꾼다", async () => {
+    const { client, calls } = fakeSupabase({ data: { ...ROW, visibility: "link" }, error: null });
+
+    await setProjectVisibility(client, "proj-1", "user-1", "link");
+
+    expect(calls.from).toContain("projects");
+    expect(calls.update[0]).toMatchObject({ visibility: "link" });
+    expect(calls.eq).toContainEqual(["id", "proj-1"]);
+    expect(calls.eq).toContainEqual(["owner_id", "user-1"]);
+  });
+
+  it("DB가 거부하면 알린다", async () => {
+    const { client } = fakeSupabase({ data: null, error: { message: "violates check constraint" } });
+
+    await expect(
+      setProjectVisibility(client, "proj-1", "user-1", "link"),
+    ).rejects.toThrow(/check constraint/);
   });
 });

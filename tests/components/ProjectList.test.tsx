@@ -97,3 +97,70 @@ describe("[P4-4] ProjectList", () => {
     expect(screen.getByText("내 개인 홈페이지")).toBeInTheDocument();
   });
 });
+
+describe("[P5-3] ProjectList — 공개범위 바꾸기", () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("지금 공개범위를 고를 수 있게 보여준다", () => {
+    render(<ProjectList projects={PROJECTS} />);
+
+    const select = screen.getAllByLabelText("공개범위")[0];
+    expect(select).toHaveValue("private");
+    expect(screen.getAllByRole("option", { name: /비공개/ }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("option", { name: /링크를 아는 사람만/ }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("option", { name: /누구나/ }).length).toBeGreaterThan(0);
+  });
+
+  it("바꾸면 API를 부르고 화면 표시도 바뀐다", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ visibility: "link" })));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProjectList projects={PROJECTS} />);
+    await userEvent.selectOptions(screen.getAllByLabelText("공개범위")[0], "link");
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith("/api/projects/proj-1/visibility", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ visibility: "link" }),
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getAllByLabelText("공개범위")[0]).toHaveValue("link"),
+    );
+  });
+
+  it("공개하면 남에게 줄 주소를 복사할 수 있게 해준다", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ visibility: "link" }))),
+    );
+
+    render(<ProjectList projects={PROJECTS} />);
+    // 비공개일 때는 남에게 줄 주소가 없다
+    expect(screen.queryByRole("button", { name: /주소 복사/ })).not.toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getAllByLabelText("공개범위")[0], "link");
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /주소 복사/ })).toBeInTheDocument(),
+    );
+  });
+
+  it("실패하면 원래 값으로 되돌리고 오류를 알린다", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ error: "바꾸지 못했습니다." }), { status: 500 }),
+      ),
+    );
+
+    render(<ProjectList projects={PROJECTS} />);
+    await userEvent.selectOptions(screen.getAllByLabelText("공개범위")[0], "public");
+
+    await waitFor(() => expect(screen.getByText(/바꾸지 못했습니다/)).toBeInTheDocument());
+    expect(screen.getAllByLabelText("공개범위")[0]).toHaveValue("private");
+  });
+});
