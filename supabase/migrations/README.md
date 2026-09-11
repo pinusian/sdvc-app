@@ -20,5 +20,6 @@
 | `0003_conversations.sql` | `conversations`·`messages` 표. 둘 다 RLS 켜고 정책 없음 = 서버 전용 | 2026-09-10 적용됨 |
 | `0004_projects.sql` | `projects` 표(주소 slug·공개범위·상태) + `conversations.project_id` 외래키 연결 | 2026-09-11 적용됨 (제약·RLS 실검증 완료) |
 | `0005_usage_logs.sql` | `usage_logs` 표(토큰 사용량·원가) — 등급 한도 판정과 원가 모니터링의 근거 | 2026-09-11 적용됨 (제약·RLS·실제 대화 기록까지 검증) |
+| `0006_artifact_lifecycle.sql` | 해지·체험만료 시 산출물 잠금/복구/삭제용 컬럼 (FR-023·FR-027) | 미적용 |
 
 > Storage(파일 저장소) 설정은 SQL이 아니라 `scripts/setup-storage.mjs`로 만든다 — `node scripts/setup-storage.mjs`.
