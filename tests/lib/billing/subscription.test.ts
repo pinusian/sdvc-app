@@ -11,6 +11,23 @@ function fakeAdmin() {
   const client = {
     from(table: string) {
       return {
+        // 조회는 이 테스트의 관심사가 아니므로 빈 결과를 준다
+        // (기본 lifecycle 훅이 프로젝트 목록을 읽을 때 쓰인다)
+        select() {
+          const chain = {
+            eq() {
+              return chain;
+            },
+            async maybeSingle() {
+              // 고객 id로 사용자를 찾는 조회 — 실제로는 프로필이 있다
+              return { data: { id: "user-1" }, error: null };
+            },
+            then(resolve: (r: unknown) => unknown) {
+              return resolve({ data: [], error: null });
+            },
+          };
+          return chain;
+        },
         update(values: Record<string, unknown>) {
           const where: unknown[] = [];
           const chain = {
@@ -147,5 +164,73 @@ describe("[P6-6] applySubscriptionEvent", () => {
 
     expect(updates[0].values).toMatchObject({ subscription_status: "active" });
     expect(updates[0].values).not.toHaveProperty("grade");
+  });
+});
+
+describe("[P6-7] 구독 사건 → 산출물 잠금·복구", () => {
+  it("해지되면 산출물을 잠근다 (FR-023)", async () => {
+    const { admin, updates } = fakeAdmin();
+    const locked: unknown[] = [];
+
+    await applySubscriptionEvent(
+      admin,
+      PRICES,
+      {
+        type: "customer.subscription.deleted",
+        data: { object: { customer: "cus_123", status: "canceled" } },
+      },
+      {
+        lock: async (...args: unknown[]) => {
+          locked.push(args);
+        },
+        restore: async () => {},
+      },
+    );
+
+    expect(updates[0].values).toMatchObject({ subscription_status: "canceled" });
+    expect(locked).toHaveLength(1);
+  });
+
+  it("결제가 끝나면 잠겨 있던 산출물을 되살린다", async () => {
+    const { admin } = fakeAdmin();
+    const restored: unknown[] = [];
+
+    await applySubscriptionEvent(
+      admin,
+      PRICES,
+      {
+        type: "checkout.session.completed",
+        data: {
+          object: {
+            client_reference_id: "user-1",
+            customer: "cus_123",
+            metadata: { price_id: "price_basic" },
+          },
+        },
+      },
+      {
+        lock: async () => {},
+        restore: async (...args: unknown[]) => {
+          restored.push(args);
+        },
+      },
+    );
+
+    expect(restored).toHaveLength(1);
+    expect(restored[0]).toEqual([expect.anything(), "user-1"]);
+  });
+
+  it("미납은 잠그지 않는다 (카드만 바꾸면 되는 상황이므로)", async () => {
+    const { admin } = fakeAdmin();
+    const locked: unknown[] = [];
+
+    await applySubscriptionEvent(
+      admin,
+      PRICES,
+      { type: "invoice.payment_failed", data: { object: { customer: "cus_123" } } },
+      { lock: async () => { locked.push(1); }, restore: async () => {} },
+    );
+
+    expect(locked).toHaveLength(0);
   });
 });

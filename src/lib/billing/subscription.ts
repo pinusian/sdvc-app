@@ -1,5 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Grade, SubscriptionStatus } from "@/lib/billing/access";
+import {
+  lockArtifacts as defaultLock,
+  restoreArtifacts as defaultRestore,
+} from "@/lib/billing/lifecycle";
 
 /**
  * [P6-6] Stripe 사건 → 우리 등급·구독상태.
@@ -54,10 +58,20 @@ function priceIdOf(object: StripeEvent["data"]["object"]): string | undefined {
   return object.metadata?.price_id ?? object.items?.data?.[0]?.price?.id;
 }
 
+/**
+ * [P6-7] 산출물 잠금·복구는 주입받는다 — 테스트에서 진짜 DB 없이
+ * "불렸는지"만 확인할 수 있게 하기 위해서.
+ */
+export interface LifecycleHooks {
+  lock: typeof defaultLock;
+  restore: typeof defaultRestore;
+}
+
 export async function applySubscriptionEvent(
   admin: SupabaseClient,
   prices: PriceMap,
   event: StripeEvent,
+  hooks: LifecycleHooks = { lock: defaultLock, restore: defaultRestore },
 ): Promise<void> {
   const object = event.data.object;
 
@@ -73,6 +87,8 @@ export async function applySubscriptionEvent(
       if (grade) values.grade = grade;
 
       await update(admin, values, ["id", userId]);
+      // [P6-7] 유예 중이었다면 원래 공개범위 그대로 되살린다 (FR-023).
+      await hooks.restore(admin, userId);
       return;
     }
 
@@ -97,6 +113,12 @@ export async function applySubscriptionEvent(
         { subscription_status: "canceled", grade: "trial" },
         ["stripe_customer_id", object.customer],
       );
+
+      // [P6-7] 산출물을 즉시 비공개로 돌리고 30일 유예를 건다 (FR-023).
+      // 미납(past_due)에는 하지 않는다 — 카드만 다시 넣으면 되는 상황이라
+      // 남의 홈페이지를 성급히 내려버리면 안 된다.
+      const userId = await findUserIdByCustomer(admin, object.customer);
+      if (userId) await hooks.lock(admin, userId, "canceled");
       return;
     }
 
@@ -113,6 +135,20 @@ export async function applySubscriptionEvent(
       // 우리가 쓰지 않는 사건은 조용히 넘긴다 (Stripe는 사건을 아주 많이 보낸다).
       return;
   }
+}
+
+/** 고객 id로 우리 사용자 id를 찾는다. 없으면 null(아무것도 하지 않는다). */
+async function findUserIdByCustomer(
+  admin: SupabaseClient,
+  customerId: string,
+): Promise<string | null> {
+  const { data } = await admin
+    .from("profiles")
+    .select("id")
+    .eq("stripe_customer_id", customerId)
+    .maybeSingle();
+
+  return (data as { id?: string } | null)?.id ?? null;
 }
 
 async function update(
