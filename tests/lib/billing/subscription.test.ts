@@ -180,10 +180,11 @@ describe("[P6-7] 구독 사건 → 산출물 잠금·복구", () => {
         data: { object: { customer: "cus_123", status: "canceled" } },
       },
       {
-        lock: async (...args: unknown[]) => {
+        lock: async (...args) => {
           locked.push(args);
+          return { lockedCount: 1, purgeAfter: "2026-10-12T00:00:00.000Z" };
         },
-        restore: async () => {},
+        restore: async () => ({ restoredCount: 0 }),
       },
     );
 
@@ -209,9 +210,10 @@ describe("[P6-7] 구독 사건 → 산출물 잠금·복구", () => {
         },
       },
       {
-        lock: async () => {},
-        restore: async (...args: unknown[]) => {
+        lock: async () => ({ lockedCount: 0, purgeAfter: "" }),
+        restore: async (...args) => {
           restored.push(args);
+          return { restoredCount: 1 };
         },
       },
     );
@@ -228,7 +230,13 @@ describe("[P6-7] 구독 사건 → 산출물 잠금·복구", () => {
       admin,
       PRICES,
       { type: "invoice.payment_failed", data: { object: { customer: "cus_123" } } },
-      { lock: async () => { locked.push(1); }, restore: async () => {} },
+      {
+        lock: async () => {
+          locked.push(1);
+          return { lockedCount: 0, purgeAfter: "" };
+        },
+        restore: async () => ({ restoredCount: 0 }),
+      },
     );
 
     expect(locked).toHaveLength(0);
