@@ -5,6 +5,7 @@ import {
   getConversation,
   listMessages,
   setCurrentBlock,
+  findConversationsByProjects,
 } from "@/lib/conversations/store";
 
 /**
@@ -197,5 +198,29 @@ describe("[P3-4] 대화 상태 저장소", () => {
     await expect(createConversation(client, { ownerId: "user-1" })).rejects.toThrow(
       /permission denied/,
     );
+  });
+});
+
+describe("[P5-4b] 프로젝트로 대화 찾기 (FR-025)", () => {
+  it("프로젝트 id들로 그 프로젝트를 만든 대화를 찾아준다", async () => {
+    const { client, calls } = fakeSupabase({
+      data: [
+        { id: "conv-1", project_id: "proj-1" },
+        { id: "conv-2", project_id: "proj-2" },
+      ],
+      error: null,
+    });
+
+    const map = await findConversationsByProjects(client, ["proj-1", "proj-2"], "user-1");
+
+    expect(calls.eq).toContainEqual(["owner_id", "user-1"]);
+    expect(map).toEqual({ "proj-1": "conv-1", "proj-2": "conv-2" });
+  });
+
+  it("빈 목록이면 DB를 부르지 않는다", async () => {
+    const { client, calls } = fakeSupabase({ data: [], error: null });
+
+    expect(await findConversationsByProjects(client, [], "user-1")).toEqual({});
+    expect(calls.from).toBeUndefined();
   });
 });

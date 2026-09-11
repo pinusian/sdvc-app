@@ -164,3 +164,23 @@ describe("[P5-3] ProjectList — 공개범위 바꾸기", () => {
     expect(screen.getAllByLabelText("공개범위")[0]).toHaveValue("private");
   });
 });
+
+describe("[P5-4b] ProjectList — 이어서 수정 진입점 (FR-025)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("그 프로젝트를 만든 대화가 있으면 이어서 수정하러 갈 수 있다", () => {
+    render(
+      <ProjectList
+        projects={[{ ...PROJECTS[0], conversationId: "conv-1" }]}
+      />,
+    );
+
+    const link = screen.getByRole("link", { name: /이어서 수정/ });
+    expect(link).toHaveAttribute("href", "/conversations/conv-1");
+  });
+
+  it("연결된 대화가 없으면 그 버튼을 보여주지 않는다", () => {
+    render(<ProjectList projects={PROJECTS} />);
+    expect(screen.queryByRole("link", { name: /이어서 수정/ })).not.toBeInTheDocument();
+  });
+});
