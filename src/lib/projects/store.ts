@@ -140,6 +140,24 @@ export async function setProjectStatus(
   assertNoError(error, "프로젝트 상태 변경");
 }
 
+/** [P5-3] 공개범위를 바꾼다 (FR-007). */
+export async function setProjectVisibility(
+  client: SupabaseClient,
+  projectId: string,
+  ownerId: string,
+  visibility: Visibility,
+): Promise<void> {
+  const { error } = await client
+    .from("projects")
+    .update({ visibility })
+    .eq("id", projectId)
+    .eq("owner_id", ownerId)
+    .select("id")
+    .single();
+
+  assertNoError(error, "공개범위 변경");
+}
+
 /** 행을 지운다. 내 것이 아니어서 지운 게 없으면 false. */
 export async function deleteProjectRow(
   client: SupabaseClient,

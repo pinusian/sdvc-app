@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import type { Project } from "@/lib/projects/store";
+import type { Project, Visibility } from "@/lib/projects/store";
 
 /**
  * [P4-4] 대시보드의 내 프로젝트 목록.
@@ -21,17 +21,60 @@ const STATUS_LABEL: Record<string, string> = {
   failed: "실패",
 };
 
-const VISIBILITY_LABEL: Record<string, string> = {
-  private: "비공개",
-  link: "링크 공개",
-  public: "전체 공개",
-};
+/** 초보자가 고를 수 있게 "무슨 뜻인지"로 적는다. */
+const VISIBILITY_OPTIONS: { value: Visibility; label: string }[] = [
+  { value: "private", label: "비공개 — 나만 봅니다" },
+  { value: "link", label: "링크를 아는 사람만 봅니다" },
+  { value: "public", label: "누구나 봅니다 (검색에도 노출)" },
+];
 
 export function ProjectList({ projects }: { projects: ListItem[] }) {
   const [items, setItems] = useState(projects);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  /**
+   * [P5-3] 공개범위 변경 (FR-007).
+   * 화면을 먼저 바꿔 보여주고(반응이 빨라야 하므로), 실패하면 되돌린다 —
+   * 실제로는 비공개인데 공개된 것처럼 보이면 안 되기 때문이다.
+   */
+  async function changeVisibility(id: string, next: Visibility) {
+    const previous = items.find((item) => item.id === id)?.visibility;
+    setError(null);
+    setItems((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, visibility: next } : item)),
+    );
+
+    try {
+      const res = await fetch(`/api/projects/${id}/visibility`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ visibility: next }),
+      });
+      const data = (await res.json()) as { visibility?: string; error?: string };
+      if (!res.ok || !data.visibility) throw new Error(data.error ?? "바꾸지 못했습니다.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "바꾸지 못했습니다.");
+      if (previous) {
+        setItems((prev) =>
+          prev.map((item) => (item.id === id ? { ...item, visibility: previous } : item)),
+        );
+      }
+    }
+  }
+
+  async function copyAddress(slug: string) {
+    const address = `${window.location.origin}/site/${slug}`;
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopied(slug);
+      setTimeout(() => setCopied(null), 2000);
+    } catch {
+      setError(`주소를 복사하지 못했습니다. 직접 복사해주세요: ${address}`);
+    }
+  }
 
   async function remove(id: string) {
     setBusy(id);
@@ -76,11 +119,38 @@ export function ProjectList({ projects }: { projects: ListItem[] }) {
               <span className="rounded-pill bg-surface-muted px-2 py-0.5 text-xs text-ink-muted">
                 {STATUS_LABEL[project.status] ?? project.status}
               </span>
-              <span className="rounded-pill bg-surface-muted px-2 py-0.5 text-xs text-ink-muted">
-                {VISIBILITY_LABEL[project.visibility] ?? project.visibility}
-              </span>
             </div>
-            <p className="font-mono text-xs text-ink-faint">/site/{project.slug}</p>
+            <p className="mb-2 font-mono text-xs text-ink-faint">/site/{project.slug}</p>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-xs text-ink-muted">
+                <span className="sr-only">공개범위</span>
+                <select
+                  aria-label="공개범위"
+                  value={project.visibility}
+                  onChange={(event) =>
+                    void changeVisibility(project.id, event.target.value as Visibility)
+                  }
+                  className="rounded-sm border border-border bg-surface px-2 py-1 text-xs text-ink focus:border-accent focus:outline-none"
+                >
+                  {VISIBILITY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {project.visibility !== "private" && (
+                <button
+                  type="button"
+                  onClick={() => void copyAddress(project.slug)}
+                  className="rounded-sm border border-border px-2 py-1 text-xs text-ink-muted hover:border-accent hover:text-accent-ink"
+                >
+                  {copied === project.slug ? "복사됐어요" : "주소 복사"}
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
