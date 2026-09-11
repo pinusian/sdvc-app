@@ -15,6 +15,7 @@ const listMessages = vi.fn();
 const appendMessage = vi.fn();
 const setCurrentBlock = vi.fn();
 const publishArtifact = vi.fn();
+const recordUsage = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({ auth: { getUser } }),
@@ -35,6 +36,10 @@ vi.mock("@/lib/conversations/store", () => ({
 
 vi.mock("@/lib/artifacts/publish", () => ({
   publishArtifact: (...args: unknown[]) => publishArtifact(...args),
+}));
+
+vi.mock("@/lib/usage/store", () => ({
+  recordUsage: (...args: unknown[]) => recordUsage(...args),
 }));
 
 function request(body: unknown) {
@@ -75,6 +80,7 @@ function happyPath() {
   appendMessage.mockResolvedValue(undefined);
   setCurrentBlock.mockResolvedValue(undefined);
   publishArtifact.mockResolvedValue(null);
+  recordUsage.mockResolvedValue(undefined);
   createChatStream.mockResolvedValue(streamOf({ type: "text", text: "네" }, { type: "done" }));
 }
 
@@ -450,5 +456,60 @@ describe("[P5-4b] POST /api/chat — 이미 만든 프로젝트 이어서 고치
 
     const { system } = createChatStream.mock.calls[0][0] as { system: string };
     expect(system).not.toContain("이미 만들어져");
+  });
+});
+
+describe("[P6-2] POST /api/chat — 사용량 기록", () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.ANTHROPIC_API_KEY = "test-key";
+    happyPath();
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  it("Claude가 알려준 사용량을 기록하되 화면에는 보내지 않는다", async () => {
+    createChatStream.mockResolvedValue(
+      streamOf(
+        { type: "text", text: "네" },
+        { type: "usage", model: "claude-sonnet-5", inputTokens: 1234, outputTokens: 567 },
+        { type: "done" },
+      ),
+    );
+
+    const { POST } = await import("@/app/api/chat/route");
+    const res = await POST(request(VALID));
+    const events = await eventsOf(res);
+
+    expect(events.some((e) => e.type === "usage")).toBe(false); // 사용자에게 흘리지 않는다
+    expect(recordUsage).toHaveBeenCalledWith(expect.anything(), {
+      userId: "user-1",
+      conversationId: "conv-1",
+      projectId: null,
+      model: "claude-sonnet-5",
+      inputTokens: 1234,
+      outputTokens: 567,
+    });
+  });
+
+  it("사용량 기록이 실패해도 대화는 망가뜨리지 않는다", async () => {
+    recordUsage.mockRejectedValue(new Error("db down"));
+    createChatStream.mockResolvedValue(
+      streamOf(
+        { type: "text", text: "네" },
+        { type: "usage", model: "claude-sonnet-5", inputTokens: 10, outputTokens: 20 },
+        { type: "done" },
+      ),
+    );
+
+    const { POST } = await import("@/app/api/chat/route");
+    const res = await POST(request(VALID));
+
+    expect(res.status).toBe(200);
+    expect((await eventsOf(res)).some((e) => e.type === "text")).toBe(true);
   });
 });

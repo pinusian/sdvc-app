@@ -192,3 +192,47 @@ describe("[P3-2] createChatStream", () => {
     expect(JSON.stringify(events)).not.toContain("super-secret-key");
   });
 });
+
+describe("[P6-2] 토큰 사용량 전달", () => {
+  it("Anthropic이 알려준 실제 사용량을 usage 이벤트로 내보낸다", async () => {
+    // 입력 토큰은 message_start에, 출력 토큰은 message_delta에 들어온다.
+    // 우리가 추정하지 않고 **실제 청구 근거 값**을 그대로 쓴다.
+    const fetchImpl = vi.fn().mockResolvedValue(
+      sseResponse([
+        'data: {"type":"message_start","message":{"model":"claude-sonnet-5","usage":{"input_tokens":1234,"output_tokens":1}}}\n\n',
+        'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"안녕"}}\n\n',
+        'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":567}}\n\n',
+      ]),
+    );
+
+    const stream = await createChatStream({
+      apiKey: "test-key",
+      messages: [{ role: "user", content: "안녕" }],
+      fetchImpl,
+    });
+
+    const events = await readEvents(stream);
+    expect(events).toContainEqual({
+      type: "usage",
+      model: "claude-sonnet-5",
+      inputTokens: 1234,
+      outputTokens: 567,
+    });
+    // 사용량은 화면에 보여줄 것이 아니므로 done보다 앞에 온다(서버가 걷어간다)
+    expect(events[events.length - 1]).toEqual({ type: "done" });
+  });
+
+  it("사용량 정보가 없으면 usage 이벤트를 만들지 않는다", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      sseResponse(['data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"x"}}\n\n']),
+    );
+
+    const stream = await createChatStream({
+      apiKey: "test-key",
+      messages: [{ role: "user", content: "안녕" }],
+      fetchImpl,
+    });
+
+    expect((await readEvents(stream)).some((e) => e.type === "usage")).toBe(false);
+  });
+});
