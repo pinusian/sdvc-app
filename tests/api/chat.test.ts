@@ -16,6 +16,7 @@ const appendMessage = vi.fn();
 const setCurrentBlock = vi.fn();
 const publishArtifact = vi.fn();
 const recordUsage = vi.fn();
+const loadAccountState = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({ auth: { getUser } }),
@@ -40,6 +41,10 @@ vi.mock("@/lib/artifacts/publish", () => ({
 
 vi.mock("@/lib/usage/store", () => ({
   recordUsage: (...args: unknown[]) => recordUsage(...args),
+}));
+
+vi.mock("@/lib/billing/account", () => ({
+  loadAccountState: (...args: unknown[]) => loadAccountState(...args),
 }));
 
 function request(body: unknown) {
@@ -81,6 +86,14 @@ function happyPath() {
   setCurrentBlock.mockResolvedValue(undefined);
   publishArtifact.mockResolvedValue(null);
   recordUsage.mockResolvedValue(undefined);
+  // 기본은 체험 기간 안 (앞으로 7일)
+  loadAccountState.mockResolvedValue({
+    grade: "trial",
+    subscriptionStatus: "none",
+    trialEndsAt: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
+    monthlyTokensUsed: 0,
+    projectCount: 0,
+  });
   createChatStream.mockResolvedValue(streamOf({ type: "text", text: "네" }, { type: "done" }));
 }
 
@@ -511,5 +524,75 @@ describe("[P6-2] POST /api/chat — 사용량 기록", () => {
 
     expect(res.status).toBe(200);
     expect((await eventsOf(res)).some((e) => e.type === "text")).toBe(true);
+  });
+});
+
+describe("[P6-4] POST /api/chat — 체험·한도 차단", () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.ANTHROPIC_API_KEY = "test-key";
+    happyPath();
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  it("체험이 끝났으면 402로 막고 Claude를 부르지 않는다", async () => {
+    loadAccountState.mockResolvedValue({
+      grade: "trial",
+      subscriptionStatus: "none",
+      trialEndsAt: "2020-01-01T00:00:00Z",
+      monthlyTokensUsed: 0,
+      projectCount: 0,
+    });
+
+    const { POST } = await import("@/app/api/chat/route");
+    const res = await POST(request(VALID));
+
+    expect(res.status).toBe(402);
+    const body = await res.json();
+    expect(body.reason).toBe("trial_expired");
+    expect(body.error).toMatch(/체험/);
+    expect(createChatStream).not.toHaveBeenCalled();
+    // 막힌 요청은 메시지도 저장하지 않는다 (대화가 지저분해지면 안 된다)
+    expect(appendMessage).not.toHaveBeenCalled();
+  });
+
+  it("이번 달 한도를 다 썼으면 402로 막고 업그레이드 대상을 알려준다", async () => {
+    loadAccountState.mockResolvedValue({
+      grade: "basic",
+      subscriptionStatus: "active",
+      trialEndsAt: null,
+      monthlyTokensUsed: 2_000_000,
+      projectCount: 0,
+    });
+
+    const { POST } = await import("@/app/api/chat/route");
+    const res = await POST(request(VALID));
+
+    expect(res.status).toBe(402);
+    expect(await res.json()).toMatchObject({ reason: "token_limit", upgradeTo: "pro" });
+    expect(createChatStream).not.toHaveBeenCalled();
+  });
+
+  it("계정 정보를 못 읽으면 막는다 (fail-closed)", async () => {
+    loadAccountState.mockResolvedValue(null);
+
+    const { POST } = await import("@/app/api/chat/route");
+    const res = await POST(request(VALID));
+
+    expect(res.status).toBe(402);
+    expect(createChatStream).not.toHaveBeenCalled();
+  });
+
+  it("체험 기간 안이면 그대로 진행한다", async () => {
+    const { POST } = await import("@/app/api/chat/route");
+    const res = await POST(request(VALID));
+
+    expect(res.status).toBe(200);
+    expect(createChatStream).toHaveBeenCalled();
   });
 });
