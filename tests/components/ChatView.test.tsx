@@ -436,3 +436,43 @@ describe("[P6-4] ChatView — 체험·한도로 막혔을 때", () => {
     expect(screen.queryByRole("link", { name: /요금제/ })).not.toBeInTheDocument();
   });
 })
+
+/**
+ * [P7-4b] 완성 후 화면 (FR-029, BL-001).
+ *
+ * "대화가 끝났습니다"가 아니라 "고칠 곳을 말씀해주세요"가 되어야 한다.
+ */
+describe("[P7-4b] 유지보수 화면", () => {
+  it("유지보수 블록이면 끝났다고 하지 않고 6번 블록으로 보여준다", () => {
+    render(
+      <ChatView conversationId="conv-1" currentBlock="maintenance" initialMessages={[]} />,
+    );
+
+    expect(screen.queryByText("대화가 끝났습니다.")).not.toBeInTheDocument();
+    expect(screen.getByText(/블록 6 \/ 6/)).toBeInTheDocument();
+    expect(screen.getByText(/유지보수/)).toBeInTheDocument();
+  });
+
+  it("예전에 done으로 굳은 대화도 유지보수 화면으로 열린다", () => {
+    render(<ChatView conversationId="conv-1" currentBlock="done" initialMessages={[]} />);
+
+    expect(screen.queryByText("대화가 끝났습니다.")).not.toBeInTheDocument();
+    expect(screen.getByText(/유지보수/)).toBeInTheDocument();
+  });
+
+  it("유지보수에서는 입력해서 보낼 수 있다", async () => {
+    render(<ChatView conversationId="conv-1" currentBlock="done" initialMessages={[]} />);
+
+    const box = screen.getByLabelText("메시지");
+    expect(box).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: "보내기" })).not.toBeDisabled();
+  });
+
+  it("유지보수에는 '다음 단계로'가 없다 — 더 갈 단계가 없다", () => {
+    render(
+      <ChatView conversationId="conv-1" currentBlock="maintenance" initialMessages={[]} />,
+    );
+
+    expect(screen.queryByRole("button", { name: /다음 단계로/ })).not.toBeInTheDocument();
+  });
+});

@@ -596,3 +596,83 @@ describe("[P6-4] POST /api/chat — 체험·한도 차단", () => {
     expect(createChatStream).toHaveBeenCalled();
   });
 });
+
+/**
+ * [P7-4b] 완성한 프로젝트도 계속 고칠 수 있어야 한다 (FR-029, BL-001).
+ *
+ * 사용자 신고: "이어서 수정"에 들어가면 "대화가 끝났습니다"만 뜨고
+ * 프롬프트에 무엇을 넣어도 반응이 없었다. 구현을 마친 대화가 `done`이 되고
+ * 이 라우트가 그것을 400으로 막고 있었기 때문이다.
+ */
+describe("[P7-4b] 구현을 마친 대화도 계속 받는다", () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.ANTHROPIC_API_KEY = "sk-ant-test";
+    happyPath();
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  it("예전에 done으로 굳은 대화에 메시지를 보내면 막지 않는다", async () => {
+    getConversation.mockResolvedValue({ ...CONVERSATION, currentBlock: "done" });
+
+    const { POST } = await import("@/app/api/chat/route");
+    const res = await POST(
+      request({ conversationId: "conv-1", message: "제목 글자를 키워줘" }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(createChatStream).toHaveBeenCalled();
+  });
+
+  it("done인 대화는 유지보수 지시로 말을 건다 (헌장부터 다시 묻지 않는다)", async () => {
+    getConversation.mockResolvedValue({ ...CONVERSATION, currentBlock: "done" });
+
+    const { POST } = await import("@/app/api/chat/route");
+    await POST(request({ conversationId: "conv-1", message: "버튼 색을 바꿔줘" }));
+
+    const { system } = createChatStream.mock.calls[0][0] as { system: string };
+    expect(system).toContain("고칠 파일만");
+    expect(system).not.toContain("헌장(Constitution)을 고르게");
+  });
+
+  it("구현 단계에서 승인하면 done이 아니라 유지보수로 저장한다", async () => {
+    getConversation.mockResolvedValue({ ...CONVERSATION, currentBlock: "implement" });
+
+    const { POST } = await import("@/app/api/chat/route");
+    await POST(
+      request({ conversationId: "conv-1", message: "네, 좋아요", approved: true }),
+    );
+
+    expect(setCurrentBlock).toHaveBeenCalledWith(
+      expect.anything(),
+      "conv-1",
+      "user-1",
+      "maintenance",
+    );
+  });
+
+  it("유지보수 중에는 몇 번을 더 보내도 계속 받는다", async () => {
+    getConversation.mockResolvedValue({ ...CONVERSATION, currentBlock: "maintenance" });
+
+    const { POST } = await import("@/app/api/chat/route");
+    for (const message of ["글자 키워줘", "색도 바꿔줘", "사진 자리 만들어줘"]) {
+      const res = await POST(request({ conversationId: "conv-1", message }));
+      expect(res.status, message).toBe(200);
+    }
+  });
+
+  it("유지보수 중에는 구현 단계와 같은 긴 답변 길이를 쓴다 (파일을 다시 내야 하므로)", async () => {
+    getConversation.mockResolvedValue({ ...CONVERSATION, currentBlock: "maintenance" });
+
+    const { POST } = await import("@/app/api/chat/route");
+    await POST(request({ conversationId: "conv-1", message: "index.html 고쳐줘" }));
+
+    const { maxTokens } = createChatStream.mock.calls[0][0] as { maxTokens: number };
+    expect(maxTokens).toBe(32_000);
+  });
+});

@@ -6,6 +6,7 @@ import {
   getBlock,
   isBlockId,
   nextBlockId,
+  resolveBlock,
   type BlockId,
 } from "@/lib/sdvc/blocks";
 
@@ -15,13 +16,14 @@ import {
  */
 
 describe("[P3-3] SDVC 블록 정의", () => {
-  it("대화 블록 5개가 대본 순서대로 정의돼 있다", () => {
+  it("대화 블록이 대본 순서대로 정의돼 있다 (+[P7-4b] 유지보수)", () => {
     expect(SDVC_BLOCKS.map((b) => b.id)).toEqual([
       "constitution_specify",
       "clarify",
       "plan",
       "tasks",
       "implement",
+      "maintenance",
     ]);
     expect(FIRST_BLOCK).toBe("constitution_specify");
   });
@@ -77,9 +79,48 @@ describe("[P3-3] 블록 진행 규칙", () => {
     expect(advanceBlock("tasks", { approved: true })).toBe("implement");
   });
 
-  it("마지막 블록 다음은 done이고, done에서는 더 나아가지 않는다", () => {
-    expect(nextBlockId("implement")).toBe<BlockId>("done");
-    expect(advanceBlock("done", { approved: true })).toBe("done");
-    expect(nextBlockId("done")).toBeNull();
+  it("구현 다음은 유지보수이고, 유지보수에서는 더 나아가지 않는다", () => {
+    expect(nextBlockId("implement")).toBe<BlockId>("maintenance");
+    expect(nextBlockId("maintenance")).toBeNull();
+    expect(advanceBlock("maintenance", { approved: true })).toBe("maintenance");
+  });
+});
+
+/**
+ * [P7-4b] 유지보수 블록 (FR-029, BL-001).
+ *
+ * 구현을 마친 대화가 `done`이 되어 **모든 입력이 막혔다** — 사용자가 "이어서 수정"에
+ * 들어가면 "대화가 끝났습니다"만 뜨고 아무것도 요청할 수 없었다.
+ * 진입점(FR-025)은 있는데 정작 쓸 수가 없었던 것이다.
+ */
+describe("[P7-4b] 유지보수 블록", () => {
+  it("구현을 마치면 끝나지 않고 유지보수로 넘어간다", () => {
+    expect(advanceBlock("implement", { approved: true })).toBe<BlockId>("maintenance");
+  });
+
+  it("유지보수 블록은 승인 게이트가 없고 6번이다", () => {
+    const block = getBlock("maintenance");
+    expect(block.number).toBe(6);
+    expect(block.requiresApproval).toBe(false);
+  });
+
+  it("유지보수는 7단계 중 하나가 아니다 — 대본의 7단계를 늘리지 않는다", () => {
+    expect(getBlock("maintenance").steps).toEqual([]);
+  });
+
+  it("유지보수 지시는 '고칠 파일만'과 '재현 먼저'를 담는다", () => {
+    const instruction = getBlock("maintenance").instruction;
+    expect(instruction).toContain("고칠 파일만");
+    expect(instruction).toContain("재현");
+    // 헌장부터 다시 묻게 하면 유지보수가 아니라 새 프로젝트가 된다
+    expect(instruction).toContain("헌장부터 다시 묻지 않는다");
+  });
+
+  it("예전에 done으로 굳어버린 대화도 유지보수로 읽는다 (DB는 건드리지 않는다)", () => {
+    // 이미 done이 된 대화가 DB에 남아 있다. 값을 고치는 마이그레이션 대신
+    // 읽는 쪽에서 유지보수로 취급해 다시 열어준다.
+    expect(resolveBlock("done")).toBe<BlockId>("maintenance");
+    expect(resolveBlock("implement")).toBe<BlockId>("implement");
+    expect(advanceBlock("done", { approved: true })).toBe<BlockId>("maintenance");
   });
 });
