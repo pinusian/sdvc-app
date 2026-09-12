@@ -20,6 +20,8 @@ export interface Project {
   slug: string;
   visibility: Visibility;
   status: ProjectStatus;
+  /** [P8-6] 비상 차단 시각. null이면 정상 (FR-016) */
+  blockedAt?: string | null;
 }
 
 interface ProjectRow {
@@ -29,9 +31,10 @@ interface ProjectRow {
   slug: string;
   visibility: Visibility;
   status: ProjectStatus;
+  blocked_at?: string | null;
 }
 
-const COLUMNS = "id, owner_id, name, slug, visibility, status";
+const COLUMNS = "id, owner_id, name, slug, visibility, status, blocked_at";
 
 function toProject(row: ProjectRow): Project {
   return {
@@ -41,6 +44,7 @@ function toProject(row: ProjectRow): Project {
     slug: row.slug,
     visibility: row.visibility,
     status: row.status,
+    blockedAt: row.blocked_at ?? null,
   };
 }
 
@@ -174,6 +178,32 @@ export async function renameProject(
     .single();
 
   assertNoError(error, "프로젝트 이름 변경");
+}
+
+/**
+ * [P8-6] 비상 차단/해제 (FR-016).
+ *
+ * **지우지 않고 가린다** — 오판했을 때 되돌려야 하고, 분쟁 시 증거도 남아야 한다.
+ * 관리자가 부르므로 소유자 조건을 걸지 않는다(권한은 `adminCan`이 판정한다).
+ */
+export async function setProjectBlocked(
+  client: SupabaseClient,
+  projectId: string,
+  blocked: boolean,
+  reason: string | null = null,
+  now: Date = new Date(),
+): Promise<void> {
+  const { error } = await client
+    .from("projects")
+    .update({
+      blocked_at: blocked ? now.toISOString() : null,
+      blocked_reason: blocked ? reason : null,
+    })
+    .eq("id", projectId)
+    .select("id")
+    .single();
+
+  assertNoError(error, blocked ? "산출물 차단" : "차단 해제");
 }
 
 /** 행을 지운다. 내 것이 아니어서 지운 게 없으면 false. */

@@ -75,6 +75,8 @@ describe("[P4-3] projects 저장소", () => {
       slug: "my-homepage",
       visibility: "private",
       status: "draft",
+      // [P8-6]에서 늘어난 값 — 차단된 적이 없으면 null
+      blockedAt: null,
     });
   });
 

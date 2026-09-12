@@ -9,6 +9,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 const getUser = vi.fn();
 const getProjectBySlug = vi.fn();
 const download = vi.fn();
+const isOwnerSuspended = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({ auth: { getUser } }),
@@ -17,6 +18,10 @@ vi.mock("@/lib/supabase/server", () => ({
 
 vi.mock("@/lib/projects/store", () => ({
   getProjectBySlug: (...args: unknown[]) => getProjectBySlug(...args),
+}));
+
+vi.mock("@/lib/admin/suspension", () => ({
+  isOwnerSuspended: (...args: unknown[]) => isOwnerSuspended(...args),
 }));
 
 const PROJECT = {
@@ -46,6 +51,7 @@ describe("[P5-1] GET /site/[slug]", () => {
     getUser.mockResolvedValue({ data: { user: null }, error: null });
     getProjectBySlug.mockResolvedValue(PROJECT);
     download.mockResolvedValue({ data: fileBlob("<h1>안녕</h1>"), error: null });
+    isOwnerSuspended.mockResolvedValue(false);
   });
 
   it("주소만 주면 index.html을 보여준다", async () => {
@@ -245,5 +251,52 @@ describe("[P5-1] GET /site/[slug]", () => {
     const res = await GET(request(), context());
 
     expect(res.headers.get("cache-control")).toContain("no-store");
+  });
+});
+
+/**
+ * [P8-6] 비상 차단·계정 정지 (FR-016·014).
+ *
+ * **403이 아니라 404** — 존재 자체를 숨긴다([P5-1]과 같은 원칙).
+ */
+describe("[P8-6] 차단된 산출물", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getUser.mockResolvedValue({ data: { user: null }, error: null });
+    download.mockResolvedValue({ data: fileBlob("<h1>안녕</h1>"), error: null });
+    isOwnerSuspended.mockResolvedValue(false);
+  });
+
+  it("차단된 프로젝트는 404", async () => {
+    getProjectBySlug.mockResolvedValue({
+      ...PROJECT,
+      visibility: "public",
+      blockedAt: "2026-09-12T00:00:00.000Z",
+    });
+
+    const { GET } = await import("@/app/site/[slug]/[[...path]]/route");
+    const res = await GET(request(), context());
+
+    expect(res.status).toBe(404);
+  });
+
+  it("주인이 정지되면 그 사람의 산출물도 404", async () => {
+    getProjectBySlug.mockResolvedValue({ ...PROJECT, visibility: "public" });
+    isOwnerSuspended.mockResolvedValue(true);
+
+    const { GET } = await import("@/app/site/[slug]/[[...path]]/route");
+    const res = await GET(request(), context());
+
+    expect(res.status).toBe(404);
+  });
+
+  it("정지가 아니면 평소대로 열린다", async () => {
+    getProjectBySlug.mockResolvedValue({ ...PROJECT, visibility: "public" });
+    isOwnerSuspended.mockResolvedValue(false);
+
+    const { GET } = await import("@/app/site/[slug]/[[...path]]/route");
+    const res = await GET(request(), context());
+
+    expect(res.status).toBe(200);
   });
 });

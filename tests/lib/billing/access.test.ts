@@ -146,3 +146,43 @@ describe("[P6-3] canCreateProject", () => {
     expect(canCreateProject(expired, NOW).allowed).toBe(false);
   });
 });
+
+/**
+ * [P8-6] 정지된 계정 (FR-014).
+ *
+ * **로그인은 되되 모두 차단**한다(Clarify 19) — 들어와서 왜 정지됐는지 보고
+ * 문의할 수 있어야 한다. 돈 낸 사람을 설명 없이 문 밖으로 밀어내지 않는다.
+ */
+describe("[P8-6] 정지된 계정", () => {
+  const paying: AccountState = {
+    grade: "pro",
+    subscriptionStatus: "active",
+    trialEndsAt: null,
+    monthlyTokensUsed: 0,
+    projectCount: 0,
+  };
+
+  it("돈을 내고 있어도 정지되면 막힌다", () => {
+    const decision = canStartChat({ ...paying, suspendedAt: "2026-09-12T00:00:00.000Z" });
+
+    expect(decision.allowed).toBe(false);
+    if (!decision.allowed) expect(decision.reason).toBe("suspended");
+  });
+
+  it("정지 안내에는 왜 막혔는지가 들어간다", () => {
+    const decision = canStartChat({ ...paying, suspendedAt: "2026-09-12T00:00:00.000Z" });
+
+    expect(decision.allowed).toBe(false);
+    if (!decision.allowed) expect(decision.message).toMatch(/정지|문의/);
+  });
+
+  it("정지된 사람은 프로젝트도 못 만든다", () => {
+    const decision = canCreateProject({ ...paying, suspendedAt: "2026-09-12T00:00:00.000Z" });
+
+    expect(decision.allowed).toBe(false);
+  });
+
+  it("정지가 풀리면 원래대로다", () => {
+    expect(canStartChat({ ...paying, suspendedAt: null }).allowed).toBe(true);
+  });
+});

@@ -1,6 +1,7 @@
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { getProjectBySlug } from "@/lib/projects/store";
 import { canViewArtifact } from "@/lib/projects/access";
+import { isOwnerSuspended } from "@/lib/admin/suspension";
 import { ARTIFACT_BUCKET, contentTypeOf } from "@/lib/artifacts/storage";
 
 /** 확장자로 종류를 알 수 있으면 그 값을, 모르면 null. */
@@ -43,7 +44,10 @@ export async function GET(
 
   // 볼 수 없는 사람에게는 "없다"고 답한다. 403으로 답하면 비공개 홈페이지가
   // 존재한다는 사실 자체가 새어나간다.
-  if (!canViewArtifact(project, user?.id ?? null)) return notFound();
+  // [P8-6] 주인이 정지됐으면 그 사람의 산출물도 함께 가린다 (FR-014·016).
+  const ownerSuspended = await isOwnerSuspended(admin, project.ownerId);
+
+  if (!canViewArtifact(project, user?.id ?? null, { ownerSuspended })) return notFound();
 
   const bucket = admin.storage.from(ARTIFACT_BUCKET);
   const candidates = fileCandidates(relativePath);

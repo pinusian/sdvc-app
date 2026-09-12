@@ -55,3 +55,44 @@ describe("[P5-1] canViewArtifact", () => {
     expect(canViewArtifact(p, "owner-1")).toBe(true);
   });
 });
+
+/**
+ * [P8-6] 비상 차단 (FR-016).
+ *
+ * 산출물이 우리 도메인에서 서빙되므로, 불법·유해물이 올라오면 즉시 내릴
+ * 수단이 법적으로 필요하다. **지우지 않고 가린다** — 오판했을 때 되돌려야 하고
+ * 분쟁 시 증거도 남아야 한다(Clarify 18).
+ */
+describe("[P8-6] 비상 차단된 산출물", () => {
+  const blocked = project({
+    visibility: "public",
+    blockedAt: "2026-09-12T00:00:00.000Z",
+  });
+
+  it("차단되면 누구에게도 보이지 않는다", () => {
+    expect(canViewArtifact(blocked, null)).toBe(false);
+    expect(canViewArtifact(blocked, "다른사람")).toBe(false);
+  });
+
+  it("주인에게도 보이지 않는다 — 주인이 올린 것이 문제였다", () => {
+    expect(canViewArtifact(blocked, blocked.ownerId)).toBe(false);
+  });
+
+  it("차단을 풀면 원래 공개범위로 돌아온다", () => {
+    const released = { ...blocked, blockedAt: null };
+
+    expect(canViewArtifact(released, null)).toBe(true);
+  });
+
+  it("계정이 정지되면 그 사람의 산출물도 전부 가려진다", () => {
+    expect(
+      canViewArtifact(project({ visibility: "public" }), null, { ownerSuspended: true }),
+    ).toBe(false);
+  });
+
+  it("정지가 풀리면 다시 보인다", () => {
+    expect(
+      canViewArtifact(project({ visibility: "public" }), null, { ownerSuspended: false }),
+    ).toBe(true);
+  });
+});

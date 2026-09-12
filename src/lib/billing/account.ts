@@ -16,6 +16,8 @@ interface ProfileRow {
   grade: Grade;
   subscription_status: SubscriptionStatus;
   trial_ends_at: string | null;
+  /** [P8-6] 계정 정지 (FR-014) */
+  suspended_at: string | null;
 }
 
 export async function loadAccountState(
@@ -25,7 +27,7 @@ export async function loadAccountState(
 ): Promise<AccountState | null> {
   const { data: profile } = await admin
     .from("profiles")
-    .select("grade, subscription_status, trial_ends_at")
+    .select("grade, subscription_status, trial_ends_at, suspended_at")
     .eq("id", userId)
     .maybeSingle();
 
@@ -41,6 +43,7 @@ export async function loadAccountState(
     grade: row.grade,
     subscriptionStatus: row.subscription_status,
     trialEndsAt: row.trial_ends_at,
+    suspendedAt: row.suspended_at,
     monthlyTokensUsed,
     projectCount,
   };

@@ -41,9 +41,12 @@ export interface AccountState {
   trialEndsAt: string | null;
   monthlyTokensUsed: number;
   projectCount: number;
+  /** [P8-6] 계정 정지 시각. null이면 정상 (FR-014) */
+  suspendedAt?: string | null;
 }
 
 export type DenyReason =
+  | "suspended"
   | "trial_expired"
   | "subscription_inactive"
   | "token_limit"
@@ -67,6 +70,15 @@ function nextGrade(grade: Grade): Grade | undefined {
 
 /** 대화를 시작(또는 계속)해도 되는가. */
 export function canStartChat(state: AccountState, now: Date = new Date()): Decision {
+  // [P8-6] 정지가 가장 먼저다 — 돈을 내고 있어도, 한도가 남아 있어도 막는다.
+  // 다만 로그인 자체는 되므로, 여기서 **왜 막혔는지**를 알려준다(Clarify 19).
+  if (state.suspendedAt) {
+    return deny(
+      "suspended",
+      "계정이 정지되었습니다. 자세한 사유와 해제 문의는 고객지원으로 연락해주세요.",
+    );
+  }
+
   const limits = GRADE_LIMITS[state.grade];
   if (!limits) {
     return deny("unknown_grade", "등급 정보를 확인할 수 없습니다. 관리자에게 문의해주세요.");

@@ -7,7 +7,21 @@ import type { Project } from "@/lib/projects/store";
  * 여기서 틀리면 비공개 홈페이지가 그대로 새어나간다 — [P2-6] `can()`과 같은
  * 원칙으로, 모르는 값이면 막는다(fail-closed).
  */
-export function canViewArtifact(project: Project, viewerId: string | null): boolean {
+export interface ViewContext {
+  /** [P8-6] 주인의 계정이 정지됐는가 (FR-014·016) */
+  ownerSuspended?: boolean;
+}
+
+export function canViewArtifact(
+  project: Project,
+  viewerId: string | null,
+  context: ViewContext = {},
+): boolean {
+  // [P8-6] 비상 차단은 **주인에게도** 막는다 — 주인이 올린 것이 문제였다.
+  // 지우지 않고 가리므로, 풀면 원래 공개범위로 그대로 돌아온다(Clarify 18).
+  if (project.blockedAt) return false;
+  if (context.ownerSuspended) return false;
+
   // 주인은 언제나 본다 (아직 만드는 중이어도 확인할 수 있어야 한다).
   if (viewerId && viewerId === project.ownerId) return true;
 
