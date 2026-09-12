@@ -6,6 +6,7 @@ import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { signUpDeveloper } from "@/lib/auth/signup";
 import { loginDeveloper } from "@/lib/auth/login";
 import { ensureAdminRole } from "@/lib/auth/admin";
+import { landingAfterAdminLogin, loadAdminActor } from "@/lib/admin/entry";
 
 export type AuthActionState = { error: string | null };
 
@@ -50,6 +51,47 @@ export async function loginAction(
   await promoteIfAdmin(supabase);
 
   redirect("/dashboard");
+}
+
+/**
+ * [P8-11c] 관리자 화면(`/admin`) 자리에서 받는 로그인 (FR-038).
+ *
+ * 평범한 로그인과 다른 것은 **착지점 하나**다. 관리자면 콘솔로, 아니면
+ * 말없이 자기 화면으로 보낸다 — 여기서 "관리자가 아닙니다"라고 말하면
+ * 관리자 화면의 존재를 알려주는 셈이다(Clarify 27).
+ */
+export async function adminLoginAction(
+  _prevState: AuthActionState,
+  formData: FormData,
+): Promise<AuthActionState> {
+  const email = String(formData.get("email") ?? "").trim();
+  const password = String(formData.get("password") ?? "");
+
+  const supabase = await createClient();
+  const result = await loginDeveloper(supabase, email, password);
+  if (!result.success) {
+    return { error: result.error };
+  }
+
+  await promoteIfAdmin(supabase);
+
+  redirect(await landingForCurrentUser(supabase));
+}
+
+/** 방금 로그인한 사람의 착지점. 못 읽으면 개발자 화면 — 막다른 404로 보내지 않는다. */
+async function landingForCurrentUser(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): Promise<string> {
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return "/dashboard";
+
+    return landingAfterAdminLogin(await loadAdminActor(createAdminClient(), user.id));
+  } catch {
+    return "/dashboard";
+  }
 }
 
 /**

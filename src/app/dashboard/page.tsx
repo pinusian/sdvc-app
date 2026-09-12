@@ -8,6 +8,9 @@ import { listProjects } from "@/lib/projects/store";
 import { findConversationsByProjects } from "@/lib/conversations/store";
 import { AccountStatus } from "@/components/billing/AccountStatus";
 import { loadAccountState } from "@/lib/billing/account";
+import { AppHeader } from "@/components/layout/AppHeader";
+import { adminEntry } from "@/lib/admin/entry";
+import type { AdminTier } from "@/lib/admin/access";
 
 const GRADE_LABEL: Record<string, string> = {
   trial: "체험",
@@ -33,11 +36,20 @@ export default async function DashboardPage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("email, role, grade, trial_ends_at, stripe_customer_id")
+    .select("email, role, grade, trial_ends_at, stripe_customer_id, admin_tier, suspended_at")
     .eq("id", user.id)
     .single();
 
   const grade = profile?.grade ?? "trial";
+
+  // [P8-11] 입구를 보일지도 콘솔이 열릴지와 **같은 판정**으로 정한다 —
+  // 눌러도 404가 뜨는 링크는 없느니만 못하다 (FR-040).
+  const showAdminEntry =
+    adminEntry({
+      role: profile?.role ?? "",
+      adminTier: (profile?.admin_tier ?? null) as AdminTier | null,
+      suspendedAt: profile?.suspended_at ?? null,
+    }) === "console";
 
   // projects는 RLS 정책이 없어 브라우저 키로는 못 읽는다([P4-2]) — 서버가
   // secret key로 읽되 소유자 조건은 store가 직접 건다.
@@ -62,17 +74,14 @@ export default async function DashboardPage({
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
-      <header className="flex items-center justify-between border-b border-border bg-surface px-7 py-4">
-        <div className="flex items-center gap-2 font-serif text-lg font-semibold text-ink">
-          <span className="h-2.5 w-2.5 rounded-full bg-accent" />
-          SDVC
-        </div>
+      {/* [P8-11] 관리자에게만 운영 콘솔 입구가 보인다 (FR-040, BL-009) */}
+      <AppHeader isAdmin={showAdminEntry}>
         <form action={logoutAction}>
           <Button type="submit" variant="secondary" className="!px-3 !py-1.5 text-xs">
             로그아웃
           </Button>
         </form>
-      </header>
+      </AppHeader>
 
       <main className="mx-auto w-full max-w-[880px] flex-1 px-7 py-10">
         <div className="mb-8 flex items-center justify-between">

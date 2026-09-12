@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { adminCan, type AdminAction, type AdminActor } from "@/lib/admin/access";
 import { recordAdminAction } from "@/lib/admin/audit";
+import { loadAdminActor } from "@/lib/admin/entry";
 
 /**
  * [P8-2] 관리자 라우트의 공통 관문.
@@ -38,21 +39,9 @@ export async function requireAdmin(action: AdminAction): Promise<GuardResult> {
   }
 
   const admin = createAdminClient();
-  const { data } = await admin
-    .from("profiles")
-    .select("role, admin_tier, suspended_at")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  const row = data as
-    | { role: string; admin_tier: string | null; suspended_at: string | null }
-    | null;
-
-  const actor: AdminActor = {
-    role: row?.role ?? "",
-    adminTier: (row?.admin_tier ?? null) as AdminActor["adminTier"],
-    suspendedAt: row?.suspended_at ?? null,
-  };
+  // [P8-11d] 판정에 쓰는 세 값을 읽는 자리는 한 곳뿐이다 — 화면과 API가
+  // 서로 다른 방식으로 읽으면 한쪽만 고쳐지는 날이 온다.
+  const actor: AdminActor = await loadAdminActor(admin, user.id);
 
   // 관리자가 아예 아니면 이런 화면이 있다는 것조차 알리지 않는다.
   if (actor.role !== "admin") {
