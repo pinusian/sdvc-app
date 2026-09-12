@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { recordAdminAction, listAuditLogs } from "@/lib/admin/audit";
 
 /**
@@ -97,7 +97,7 @@ describe("[P8-7a] recordAdminAction", () => {
 
     // 본 행위를 막지 않는다 — 던지지 않는다
     expect(result.recorded).toBe(false);
-    expect(result.message).toContain("권한 없음");
+    if (!result.recorded) expect(result.message).toContain("권한 없음");
   });
 
   it("성공하면 그렇게 알려준다", async () => {
