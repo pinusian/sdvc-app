@@ -9,6 +9,7 @@ const getUser = vi.fn();
 const getProjectById = vi.fn();
 const deleteProjectRow = vi.fn();
 const deleteArtifactFiles = vi.fn();
+const renameProject = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({ auth: { getUser } }),
@@ -18,6 +19,7 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("@/lib/projects/store", () => ({
   getProjectById: (...args: unknown[]) => getProjectById(...args),
   deleteProjectRow: (...args: unknown[]) => deleteProjectRow(...args),
+  renameProject: (...args: unknown[]) => renameProject(...args),
 }));
 
 vi.mock("@/lib/artifacts/storage", () => ({
@@ -96,5 +98,71 @@ describe("[P4-3] DELETE /api/projects/[id]", () => {
 
     expect(res.status).toBe(500);
     expect(deleteProjectRow).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * [P7-1b] PATCH /api/projects/[id] — 이름 바꾸기 (FR-030, BL-002).
+ *
+ * 공개범위와 같은 소유권 검사를 그대로 쓴다 — 남의 프로젝트 이름을
+ * 바꿀 수 있으면 목록이 남의 손에 흔들린다.
+ */
+describe("[P7-1b] PATCH /api/projects/[id] — 이름 변경", () => {
+  const patch = (body: unknown) =>
+    new Request("http://localhost:3000/api/projects/proj-1", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getUser.mockResolvedValue({ data: { user: { id: "user-1" } }, error: null });
+    getProjectById.mockResolvedValue(PROJECT);
+    renameProject.mockResolvedValue(undefined);
+  });
+
+  it("로그인하지 않으면 401", async () => {
+    getUser.mockResolvedValue({ data: { user: null }, error: null });
+
+    const { PATCH } = await import("@/app/api/projects/[id]/route");
+    const res = await PATCH(patch({ name: "새 이름" }), context);
+
+    expect(res.status).toBe(401);
+    expect(renameProject).not.toHaveBeenCalled();
+  });
+
+  it("내 프로젝트가 아니면 404", async () => {
+    getProjectById.mockResolvedValue(null);
+
+    const { PATCH } = await import("@/app/api/projects/[id]/route");
+    const res = await PATCH(patch({ name: "남의 것" }), context);
+
+    expect(res.status).toBe(404);
+    expect(renameProject).not.toHaveBeenCalled();
+  });
+
+  it("이름을 바꾼다", async () => {
+    const { PATCH } = await import("@/app/api/projects/[id]/route");
+    const res = await PATCH(patch({ name: "  소금빵 가게  " }), context);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ name: "소금빵 가게" });
+    expect(renameProject).toHaveBeenCalledWith(
+      expect.anything(),
+      "proj-1",
+      "user-1",
+      "소금빵 가게",
+    );
+  });
+
+  it("빈 이름이나 너무 긴 이름은 400", async () => {
+    const { PATCH } = await import("@/app/api/projects/[id]/route");
+
+    for (const name of ["", "   ", "가".repeat(61), 123, null]) {
+      const res = await PATCH(patch({ name }), context);
+      expect(res.status, String(name)).toBe(400);
+    }
+    expect(renameProject).not.toHaveBeenCalled();
   });
 });

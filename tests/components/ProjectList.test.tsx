@@ -184,3 +184,82 @@ describe("[P5-4b] ProjectList — 이어서 수정 진입점 (FR-025)", () => {
     expect(screen.queryByRole("link", { name: /이어서 수정/ })).not.toBeInTheDocument();
   });
 });
+
+/**
+ * [P7-1b] 만든 뒤에도 이름을 바꿀 수 있다 (FR-030, BL-002).
+ */
+describe("[P7-1b] 프로젝트 이름 바꾸기", () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("이름 바꾸기를 누르면 입력칸이 나오고 저장하면 반영된다", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ name: "소금빵 가게" })));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProjectList projects={PROJECTS} />);
+
+    await userEvent.click(screen.getAllByRole("button", { name: "이름 바꾸기" })[0]);
+    const input = screen.getByLabelText("프로젝트 이름");
+    await userEvent.clear(input);
+    await userEvent.type(input, "소금빵 가게");
+    await userEvent.click(screen.getByRole("button", { name: "저장" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith("/api/projects/proj-1", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "소금빵 가게" }),
+      }),
+    );
+    await waitFor(() => expect(screen.getByText("소금빵 가게")).toBeInTheDocument());
+  });
+
+  it("취소하면 원래 이름 그대로다", async () => {
+    render(<ProjectList projects={PROJECTS} />);
+
+    await userEvent.click(screen.getAllByRole("button", { name: "이름 바꾸기" })[0]);
+    await userEvent.click(screen.getByRole("button", { name: "취소" }));
+
+    expect(screen.getByText("내 개인 홈페이지")).toBeInTheDocument();
+    expect(screen.queryByLabelText("프로젝트 이름")).not.toBeInTheDocument();
+  });
+
+  it("저장이 실패하면 원래 이름으로 되돌리고 알린다", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(JSON.stringify({ error: "이름을 바꾸지 못했습니다." }), { status: 500 }),
+        ),
+    );
+
+    render(<ProjectList projects={PROJECTS} />);
+
+    await userEvent.click(screen.getAllByRole("button", { name: "이름 바꾸기" })[0]);
+    const input = screen.getByLabelText("프로젝트 이름");
+    await userEvent.clear(input);
+    await userEvent.type(input, "바뀔 뻔한 이름");
+    await userEvent.click(screen.getByRole("button", { name: "저장" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent("이름을 바꾸지 못했습니다"),
+    );
+    expect(screen.getByText("내 개인 홈페이지")).toBeInTheDocument();
+  });
+
+  it("빈 이름으로는 저장 버튼이 눌리지 않는다", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProjectList projects={PROJECTS} />);
+
+    await userEvent.click(screen.getAllByRole("button", { name: "이름 바꾸기" })[0]);
+    await userEvent.clear(screen.getByLabelText("프로젝트 이름"));
+
+    expect(screen.getByRole("button", { name: "저장" })).toBeDisabled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

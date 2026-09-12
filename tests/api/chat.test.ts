@@ -680,3 +680,56 @@ describe("[P7-4b] 구현을 마친 대화도 계속 받는다", () => {
     expect(maxTokens).toBe(32_000);
   });
 });
+
+/**
+ * [P7-1b] 이름을 안 적은 사람에게는 첫 요청에서 지어준다 (FR-030, BL-002).
+ * 모델을 한 번 더 부르지 않는다 — 이름 짓자고 돈을 쓸 이유가 없다.
+ */
+describe("[P7-1b] 프로젝트 자동 이름", () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.ANTHROPIC_API_KEY = "sk-ant-test";
+    happyPath();
+    createChatStream.mockResolvedValue(
+      streamOf({ type: "text", text: "```file:index.html\n<h1>x</h1>\n```" }, { type: "done" }),
+    );
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  it("제목이 없으면 첫 요청 내용으로 프로젝트 이름을 짓는다", async () => {
+    getConversation.mockResolvedValue({ ...CONVERSATION, title: null, currentBlock: "implement" });
+    listMessages.mockResolvedValue([{ role: "user", content: "빵집 홈페이지 만들고 싶어" }]);
+
+    const { POST } = await import("@/app/api/chat/route");
+    const res = await POST(request({ conversationId: "conv-1", message: "네 좋아요" }));
+    await res.text();
+
+    expect(publishArtifact).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ projectName: "빵집 홈페이지" }),
+    );
+  });
+
+  it("제목을 정해둔 사람의 이름은 건드리지 않는다", async () => {
+    getConversation.mockResolvedValue({
+      ...CONVERSATION,
+      title: "소금빵 가게",
+      currentBlock: "implement",
+    });
+    listMessages.mockResolvedValue([{ role: "user", content: "빵집 홈페이지 만들고 싶어" }]);
+
+    const { POST } = await import("@/app/api/chat/route");
+    const res = await POST(request({ conversationId: "conv-1", message: "네 좋아요" }));
+    await res.text();
+
+    expect(publishArtifact).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ projectName: "소금빵 가게" }),
+    );
+  });
+});
