@@ -61,6 +61,7 @@ export default async function AdminPage() {
       email={user!.email ?? ""}
       tier={actor!.adminTier}
       canReadAudit={adminCan(actor!, "audit:read")}
+      canReadReports={adminCan(actor!, "report:read")}
       logout={
         <form action={logoutAction}>
           <Button

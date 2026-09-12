@@ -83,7 +83,42 @@ describe("[P8-1a] adminCan", () => {
       "developer:read",
       "developer:suspend",
       "policy:change",
+      "report:handle",
+      "report:read",
       "usage:read",
     ]);
+  });
+});
+
+/**
+ * [P8-5c] 신고 처리 권한 (FR-043).
+ *
+ * 신고 내용은 남의 산출물에 대한 고발이다 — 읽는 것도 권한이다.
+ * 처리(상태 변경·답변·가리기)는 사용자 관리와 같은 무게라 운영자까지 준다.
+ */
+describe("[P8-5c] 신고 처리 권한", () => {
+  const superAdmin: AdminActor = { role: "admin", adminTier: "super", suspendedAt: null };
+  const operator: AdminActor = { role: "admin", adminTier: "operator", suspendedAt: null };
+  const support: AdminActor = { role: "admin", adminTier: "support", suspendedAt: null };
+  const developer: AdminActor = { role: "developer", adminTier: "super", suspendedAt: null };
+
+  it("최고관리자는 읽고 처리한다", () => {
+    expect(adminCan(superAdmin, "report:read")).toBe(true);
+    expect(adminCan(superAdmin, "report:handle")).toBe(true);
+  });
+
+  it("운영자도 읽고 처리한다 — 사용자 관리와 같은 무게다", () => {
+    expect(adminCan(operator, "report:read")).toBe(true);
+    expect(adminCan(operator, "report:handle")).toBe(true);
+  });
+
+  it("지원 등급은 읽기만 — 남의 신고를 마음대로 닫지 못한다", () => {
+    expect(adminCan(support, "report:read")).toBe(true);
+    expect(adminCan(support, "report:handle")).toBe(false);
+  });
+
+  it("관리자가 아니면 둘 다 안 된다", () => {
+    expect(adminCan(developer, "report:read")).toBe(false);
+    expect(adminCan(developer, "report:handle")).toBe(false);
   });
 });

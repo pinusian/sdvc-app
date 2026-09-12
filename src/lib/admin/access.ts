@@ -23,6 +23,8 @@ export const ADMIN_ACTIONS = [
   "usage:read",
   "audit:read",
   "policy:change",
+  "report:read",
+  "report:handle",
 ] as const;
 
 export type AdminAction = (typeof ADMIN_ACTIONS)[number];
@@ -52,8 +54,11 @@ const ALLOWED: Record<AdminTier, readonly AdminAction[]> = {
     "developer:extend_trial",
     "artifact:block",
     "usage:read",
+    "report:read",
+    "report:handle",
   ],
-  support: ["developer:read", "usage:read"],
+  // 읽기 전용 — 남의 신고를 마음대로 닫지 못한다.
+  support: ["developer:read", "usage:read", "report:read"],
 };
 
 export function adminCan(actor: AdminActor, action: AdminAction): boolean {

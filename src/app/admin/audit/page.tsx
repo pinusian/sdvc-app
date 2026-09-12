@@ -64,7 +64,7 @@ export default async function AuditPage({
     });
 
     return (
-      <AdminShell email={user!.email ?? ""} tier={actor!.adminTier} logout={logout} canReadAudit={false}>
+      <AdminShell email={user!.email ?? ""} tier={actor!.adminTier} logout={logout} canReadAudit={false} canReadReports={adminCan(actor!, "report:read")}>
         <h1 className="mb-2">감사 기록</h1>
         <p className="rounded-lg border border-border bg-surface p-6 text-sm text-ink-muted">
           이 등급으로는 감사 기록을 볼 수 없습니다. 누가 무엇을 보았는지의 기록 자체가
@@ -92,7 +92,7 @@ export default async function AuditPage({
   });
 
   return (
-    <AdminShell email={user!.email ?? ""} tier={actor!.adminTier} logout={logout} canReadAudit>
+    <AdminShell email={user!.email ?? ""} tier={actor!.adminTier} logout={logout} canReadAudit canReadReports={adminCan(actor!, "report:read")}>
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="mb-1">감사 기록</h1>

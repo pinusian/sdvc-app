@@ -169,8 +169,10 @@ test.describe("[P8-7f] 감사 기록", () => {
       // 실제 만료가 한국 2027-01-01 08:59였다.
       expect(new Date(data!.granted_until).toISOString()).toBe("2026-12-31T14:59:59.000Z");
 
-      // 화면에도 고른 날 그대로 뜬다
-      await expect(page.getByText(/~2026-12-31/)).toBeVisible();
+      // 화면에도 고른 날 그대로 뜬다. **그 학생 줄로 좁혀서** 본다 —
+      // 다른 계정에도 같은 날짜의 부여가 있을 수 있다.
+      const studentRow = page.locator("li").filter({ hasText: student.email });
+      await expect(studentRow.getByText(/부여: 기본 \(~2026-12-31\)/)).toBeVisible();
     } finally {
       await boss.admin.auth.admin.deleteUser(boss.userId);
       await student.admin.auth.admin.deleteUser(student.userId);

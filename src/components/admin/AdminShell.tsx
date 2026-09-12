@@ -31,10 +31,19 @@ interface Props {
    * 없느니만 못하다(FR-040과 같은 원칙).
    */
   canReadAudit?: boolean;
+  /** [P8-5] 신고 접수함을 볼 수 있는 등급인가 (FR-043) */
+  canReadReports?: boolean;
   children: ReactNode;
 }
 
-export function AdminShell({ email, tier, logout, canReadAudit = false, children }: Props) {
+export function AdminShell({
+  email,
+  tier,
+  logout,
+  canReadAudit = false,
+  canReadReports = false,
+  children,
+}: Props) {
   return (
     <div className="flex min-h-full flex-1 flex-col">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-ink px-7 py-4 text-surface">
@@ -50,15 +59,20 @@ export function AdminShell({ email, tier, logout, canReadAudit = false, children
         </div>
 
         <div className="flex flex-wrap items-center gap-4">
+          {(canReadAudit || canReadReports) && (
+            <Link href="/admin" className="text-xs underline-offset-4 hover:underline">
+              개발자 관리
+            </Link>
+          )}
+          {canReadReports && (
+            <Link href="/admin/reports" className="text-xs underline-offset-4 hover:underline">
+              신고
+            </Link>
+          )}
           {canReadAudit && (
-            <>
-              <Link href="/admin" className="text-xs underline-offset-4 hover:underline">
-                개발자 관리
-              </Link>
-              <Link href="/admin/audit" className="text-xs underline-offset-4 hover:underline">
-                감사 기록
-              </Link>
-            </>
+            <Link href="/admin/audit" className="text-xs underline-offset-4 hover:underline">
+              감사 기록
+            </Link>
           )}
           <span className="text-xs opacity-70">{email}</span>
           <Link href="/dashboard" className="text-xs underline-offset-4 hover:underline">

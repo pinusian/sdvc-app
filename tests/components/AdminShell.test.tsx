@@ -70,6 +70,20 @@ describe("[P8-11a] AdminShell", () => {
     expect(screen.getByRole("link", { name: "개발자 관리" })).toHaveAttribute("href", "/admin");
   });
 
+  it("[P8-5] 신고 접수함 입구는 볼 수 있는 사람에게만 보인다", () => {
+    render(
+      <AdminShell email="ops@example.com" tier="support" canReadReports>
+        <p>x</p>
+      </AdminShell>,
+    );
+    expect(screen.getByRole("link", { name: "신고" })).toHaveAttribute("href", "/admin/reports");
+  });
+
+  it("[P8-5] 볼 수 없으면 그리지 않는다", () => {
+    renderShell("support");
+    expect(screen.queryByRole("link", { name: "신고" })).toBeNull();
+  });
+
   it("로그아웃 자리와 본문을 그대로 싣는다", () => {
     renderShell();
     expect(screen.getByRole("button", { name: "로그아웃" })).toBeInTheDocument();

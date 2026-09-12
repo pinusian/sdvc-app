@@ -26,6 +26,13 @@ export function AppHeader({ isAdmin = false, children }: Props) {
       </div>
 
       <div className="flex items-center gap-4">
+        {/* [P8-5] 문제를 알릴 통로는 누구에게나 보인다 (FR-013) */}
+        <Link
+          href="/report"
+          className="text-xs text-ink-muted underline-offset-4 hover:text-accent-ink hover:underline"
+        >
+          신고하기
+        </Link>
         {isAdmin && (
           <Link
             href="/admin"
