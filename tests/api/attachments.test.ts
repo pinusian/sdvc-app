@@ -1,3 +1,9 @@
+/**
+ * @vitest-environment node
+ *
+ * 파일 업로드는 FormData·File을 그대로 다뤄야 해서 jsdom이 아닌 node에서 돈다
+ * (jsdom의 Request는 FormData 본문을 되읽지 못한다).
+ */
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 /**

@@ -1,5 +1,5 @@
 /**
- * [P4-1] 산출물 저장소(Storage) 버킷 만들기.
+ * [P4-1] 산출물 저장소(Storage) 버킷 만들기. ([P7-8] 첨부 버킷 추가)
  *
  * 대시보드에서 손으로 만들면 나중에 무엇을 어떻게 설정했는지 알 수 없으므로
  * 스크립트로 남긴다. 여러 번 실행해도 안전하다(이미 있으면 건너뜀).
@@ -18,8 +18,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
 
-const BUCKET = "artifacts";
-const FILE_SIZE_LIMIT = "5MB";
+/**
+ * [P7-8] 첨부(`attachments`)는 산출물(`artifacts`)과 **버킷을 나눈다.**
+ * 섞어두면 공개범위 규칙이 한 번 어긋날 때 사용자가 올린 원본 사진까지
+ * 함께 새어나간다. 둘 다 비공개이고 서버만 읽는다.
+ */
+const BUCKETS = [
+  { name: "artifacts", fileSizeLimit: "5MB" },
+  { name: "attachments", fileSizeLimit: "10MB" },
+];
 
 loadEnvLocal();
 
@@ -38,18 +45,20 @@ if (listError) {
   process.exit(1);
 }
 
-if (buckets.some((bucket) => bucket.name === BUCKET)) {
-  console.log(`'${BUCKET}' 버킷이 이미 있습니다.`);
-} else {
-  const { error } = await admin.storage.createBucket(BUCKET, {
+for (const { name, fileSizeLimit } of BUCKETS) {
+  if (buckets.some((bucket) => bucket.name === name)) {
+    console.log(`'${name}' 버킷이 이미 있습니다.`);
+    continue;
+  }
+  const { error } = await admin.storage.createBucket(name, {
     public: false,
-    fileSizeLimit: FILE_SIZE_LIMIT,
+    fileSizeLimit,
   });
   if (error) {
-    console.error("버킷 생성 실패:", error.message);
+    console.error(`'${name}' 버킷 생성 실패:`, error.message);
     process.exit(1);
   }
-  console.log(`'${BUCKET}' 버킷을 만들었습니다 (비공개, 파일당 ${FILE_SIZE_LIMIT}).`);
+  console.log(`'${name}' 버킷을 만들었습니다 (비공개, 파일당 ${fileSizeLimit}).`);
 }
 
 const { data: after } = await admin.storage.listBuckets();
