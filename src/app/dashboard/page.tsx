@@ -95,6 +95,13 @@ export default async function DashboardPage({
           </p>
         )}
 
+        <ProjectList projects={projectsWithConversation} />
+
+        {/*
+          [P7-1c] 이용 상태는 **목록 아래**에 둔다 (FR-033).
+          이 화면의 주인공은 프로젝트 목록이고, 등급·잔여일·사용량은
+          알아두면 좋은 부차 정보다.
+        */}
         {account && (
           <AccountStatus
             grade={account.grade}
@@ -105,8 +112,6 @@ export default async function DashboardPage({
             canManage={Boolean(profile?.stripe_customer_id)}
           />
         )}
-
-        <ProjectList projects={projectsWithConversation} />
       </main>
     </div>
   );

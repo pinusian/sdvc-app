@@ -69,13 +69,15 @@ export function AccountStatus({
   }
 
   return (
-    <section className="mb-8 rounded-lg border border-border bg-surface p-5">
+    /* [P7-1c] 부차 정보이므로 글자·세로를 기존의 70%로 줄인다 (FR-033).
+       가로 폭은 목록과 같게 둔다 — 줄이면 화면이 들쭉날쭉해진다. */
+    <section className="mt-6 rounded-lg border border-border bg-surface px-5 py-2.5 text-[10px]">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="mb-1 text-sm font-medium text-ink">
+          <p className="mb-0.5 text-[10px] font-medium text-ink">
             {statusLine(grade, subscriptionStatus, trialEndsAt, now)}
           </p>
-          <p className="text-sm text-ink-muted">
+          <p className="text-[10px] text-ink-muted">
             {`이번 달 ${formatTokens(monthlyTokensUsed)} / ${formatTokens(limits.monthlyTokens)} 토큰`}
             {" · "}
             {`프로젝트 ${projectCount} / ${limits.projects}개`}
@@ -86,7 +88,7 @@ export function AccountStatus({
           {subscriptionStatus !== "active" && (
             <a
               href="/pricing"
-              className="inline-flex items-center rounded-sm bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-hover"
+              className="inline-flex items-center rounded-sm bg-accent px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-accent-hover"
             >
               요금제 보기
             </a>
@@ -94,7 +96,7 @@ export function AccountStatus({
           {canManage && (
             <Button
               variant="secondary"
-              className="!px-3 !py-1.5 text-xs"
+              className="!px-2.5 !py-1 text-[10px]"
               disabled={pending}
               onClick={() => void openPortal()}
             >
@@ -110,7 +112,7 @@ export function AccountStatus({
         aria-valuenow={percent}
         aria-valuemin={0}
         aria-valuemax={100}
-        className="mt-4 h-1.5 w-full overflow-hidden rounded-pill bg-surface-muted"
+        className="mt-2 h-1 w-full overflow-hidden rounded-pill bg-surface-muted"
       >
         <div
           className={`h-full rounded-pill ${nearLimit ? "bg-red-600" : "bg-accent"}`}
@@ -119,7 +121,7 @@ export function AccountStatus({
       </div>
 
       {error && (
-        <p role="alert" className="mt-3 text-sm text-red-700">
+        <p role="alert" className="mt-2 text-[10px] text-red-700">
           {error}
         </p>
       )}
