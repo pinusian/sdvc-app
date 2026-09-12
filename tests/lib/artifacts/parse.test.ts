@@ -128,3 +128,76 @@ describe("[P7-4b] 코드블록에 언어가 먼저 붙어도 알아본다", () =
     expect(files).toEqual([]);
   });
 });
+
+/**
+ * [P7-10] 첨부한 이미지를 홈페이지에 넣으라는 지시 (FR-032, BL-005).
+ *
+ * 이미지는 모델이 글로 만들 수 없다. 그래서 파일 블록 대신
+ * "이 첨부를 이 경로에 넣어라"는 한 줄짜리 지시를 쓴다.
+ *
+ *     ```use-image:images/hero.png@<첨부id>```
+ *
+ * **알아보지 못한 지시는 조용히 버리지 않는다** — 모델이 "넣었습니다"라고
+ * 답했는데 사진이 없으면 사용자는 무엇이 잘못됐는지 알 수 없다.
+ */
+describe("[P7-10] parseImageUses", () => {
+  it("지시 한 줄에서 경로와 첨부 id를 뽑아낸다", async () => {
+    const { parseImageUses } = await import("@/lib/artifacts/parse");
+    const result = parseImageUses(
+      "사진을 넣었습니다.\n\n```use-image:images/hero.png@abc-123```\n",
+    );
+
+    expect(result.uses).toEqual([{ path: "images/hero.png", attachmentId: "abc-123" }]);
+    expect(result.invalid).toEqual([]);
+  });
+
+  it("여러 장도 받는다", async () => {
+    const { parseImageUses } = await import("@/lib/artifacts/parse");
+    const result = parseImageUses(
+      "```use-image:images/a.jpg@id-1```\n```use-image:img/b.webp@id-2```",
+    );
+
+    expect(result.uses.map((u) => u.path)).toEqual(["images/a.jpg", "img/b.webp"]);
+  });
+
+  it("이미지가 아닌 경로는 거부하고 이유를 남긴다", async () => {
+    const { parseImageUses } = await import("@/lib/artifacts/parse");
+    const result = parseImageUses("```use-image:index.html@id-1```");
+
+    expect(result.uses).toEqual([]);
+    expect(result.invalid).toHaveLength(1);
+  });
+
+  it("경로를 벗어나려는 시도는 거부한다", async () => {
+    const { parseImageUses } = await import("@/lib/artifacts/parse");
+    const result = parseImageUses("```use-image:../남의것/a.png@id-1```");
+
+    expect(result.uses).toEqual([]);
+    expect(result.invalid).toHaveLength(1);
+  });
+
+  it("첨부 id가 빠졌으면 거부하고 이유를 남긴다", async () => {
+    const { parseImageUses } = await import("@/lib/artifacts/parse");
+    const result = parseImageUses("```use-image:images/a.png```");
+
+    expect(result.uses).toEqual([]);
+    expect(result.invalid).toHaveLength(1);
+    expect(result.invalid[0]).toContain("images/a.png");
+  });
+
+  it("지시가 없으면 아무것도 없다", async () => {
+    const { parseImageUses } = await import("@/lib/artifacts/parse");
+    expect(parseImageUses("그냥 설명입니다.")).toEqual({ uses: [], invalid: [] });
+  });
+
+  it("파일 블록과 섞여 있어도 각자 알아본다", async () => {
+    const { parseImageUses, parseArtifactFiles } = await import("@/lib/artifacts/parse");
+    const answer =
+      "```file:index.html\n<img src=\"images/hero.png\">\n```\n\n```use-image:images/hero.png@id-1```";
+
+    expect(parseArtifactFiles(answer).map((f) => f.path)).toEqual(["index.html"]);
+    expect(parseImageUses(answer).uses).toEqual([
+      { path: "images/hero.png", attachmentId: "id-1" },
+    ]);
+  });
+});

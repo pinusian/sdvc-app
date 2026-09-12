@@ -11,9 +11,11 @@ const getProjectById = vi.fn();
 const isSlugTaken = vi.fn();
 const setProjectStatus = vi.fn();
 const setConversationProject = vi.fn();
+const copyAttachmentToArtifact = vi.fn();
 
 vi.mock("@/lib/artifacts/storage", () => ({
   uploadArtifactFiles: (...args: unknown[]) => uploadArtifactFiles(...args),
+  copyAttachmentToArtifact: (...args: unknown[]) => copyAttachmentToArtifact(...args),
 }));
 
 vi.mock("@/lib/projects/store", () => ({
@@ -135,5 +137,88 @@ describe("[P4-3] publishArtifact", () => {
     ).rejects.toThrow(/quota exceeded/);
 
     expect(setProjectStatus).toHaveBeenCalledWith(admin, "proj-1", "user-1", "failed");
+  });
+});
+
+/**
+ * [P7-10] 첨부한 이미지를 산출물 폴더로 복사한다 (FR-032, BL-005).
+ */
+describe("[P7-10] 산출물에 이미지 넣기", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getProjectById.mockResolvedValue(PROJECT);
+    uploadArtifactFiles.mockImplementation(async (_a, _id, files) => files.length);
+    setProjectStatus.mockResolvedValue(undefined);
+    setConversationProject.mockResolvedValue(undefined);
+  });
+
+  it("use-image 지시가 있으면 첨부를 프로젝트 폴더로 복사한다", async () => {
+    copyAttachmentToArtifact.mockResolvedValue(undefined);
+
+    const result = await publishArtifact(admin, {
+      ownerId: "user-1",
+      conversationId: "conv-1",
+      answer:
+        '```file:index.html\n<img src="images/hero.png">\n```\n\n```use-image:images/hero.png@att-1```',
+      projectName: "내 홈페이지",
+      projectId: "proj-1",
+    });
+
+    expect(copyAttachmentToArtifact).toHaveBeenCalledWith(
+      admin,
+      expect.objectContaining({
+        ownerId: "user-1",
+        conversationId: "conv-1",
+        attachmentId: "att-1",
+        projectId: "proj-1",
+        path: "images/hero.png",
+      }),
+    );
+    expect(result?.imageCount).toBe(1);
+  });
+
+  it("파일 없이 이미지만 넣어달라고 해도 된다 (이미 있는 프로젝트라면)", async () => {
+    copyAttachmentToArtifact.mockResolvedValue(undefined);
+
+    const result = await publishArtifact(admin, {
+      ownerId: "user-1",
+      conversationId: "conv-1",
+      answer: "```use-image:images/hero.png@att-1```",
+      projectName: "내 홈페이지",
+      projectId: "proj-1",
+    });
+
+    expect(result?.imageCount).toBe(1);
+    expect(result?.fileCount).toBe(0);
+  });
+
+  it("알아보지 못한 지시는 조용히 버리지 않고 알린다", async () => {
+
+    const result = await publishArtifact(admin, {
+      ownerId: "user-1",
+      conversationId: "conv-1",
+      answer: '```file:index.html\n<h1>x</h1>\n```\n\n```use-image:index.html@att-1```',
+      projectName: "내 홈페이지",
+      projectId: "proj-1",
+    });
+
+    expect(result?.warnings?.length).toBe(1);
+    expect(copyAttachmentToArtifact).not.toHaveBeenCalled();
+  });
+
+  it("첨부를 찾지 못하면 알리되 나머지는 살린다", async () => {
+    copyAttachmentToArtifact.mockRejectedValue(new Error("첨부를 찾을 수 없습니다"));
+
+    const result = await publishArtifact(admin, {
+      ownerId: "user-1",
+      conversationId: "conv-1",
+      answer: '```file:index.html\n<h1>x</h1>\n```\n\n```use-image:images/a.png@없는것```',
+      projectName: "내 홈페이지",
+      projectId: "proj-1",
+    });
+
+    expect(result?.fileCount).toBe(1);
+    expect(result?.imageCount).toBe(0);
+    expect(result?.warnings?.[0]).toContain("images/a.png");
   });
 });
