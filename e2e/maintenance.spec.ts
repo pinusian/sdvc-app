@@ -73,8 +73,59 @@ test.describe("[P5-4b] 이어서 수정", () => {
 
       await link.click();
       await expect(page).toHaveURL(new RegExp(`/conversations/${conversation!.id}`));
-      await expect(page.getByText(/블록 5 \/ 5/)).toBeVisible();
+      await expect(page.getByText(/블록 5 \/ 6/)).toBeVisible();
       await expect(page.getByLabel("메시지")).toBeVisible();
+    } finally {
+      await admin.auth.admin.deleteUser(userId);
+    }
+  });
+
+  /**
+   * [P7-4b] 사용자 신고(BL-001): "이어서 수정"에 들어가니 "대화가 끝났습니다"만 뜨고
+   * 프롬프트에 무엇을 넣어도 반응이 없었다. 구현을 마친 대화가 `done`으로 굳었기 때문.
+   */
+  test("[P7-4b] 예전에 done으로 굳은 대화도 유지보수 화면으로 열린다", async ({ page }) => {
+    const { admin, email, password, userId } = await createTestUser();
+
+    try {
+      const { data: project } = await admin
+        .from("projects")
+        .insert({
+          owner_id: userId,
+          name: "이미 완성한 홈페이지",
+          slug: `p74b-e2e-${Date.now().toString(36)}`,
+          status: "deployed",
+        })
+        .select("id")
+        .single();
+
+      const { data: conversation } = await admin
+        .from("conversations")
+        .insert({
+          owner_id: userId,
+          title: "이미 완성한 홈페이지",
+          current_block: "done", // 예전 값 그대로 — 마이그레이션하지 않는다
+          project_id: project!.id,
+        })
+        .select("id")
+        .single();
+
+      await login(page, email, password);
+      await page.getByRole("link", { name: "이어서 수정" }).click();
+      await expect(page).toHaveURL(new RegExp(`/conversations/${conversation!.id}`));
+
+      await expect(page.getByText("대화가 끝났습니다.")).toHaveCount(0);
+      await expect(page.getByText(/블록 6 \/ 6/)).toBeVisible();
+      await expect(page.getByText(/유지보수/)).toBeVisible();
+
+      // 요청을 실제로 입력할 수 있어야 한다
+      const box = page.getByLabel("메시지");
+      await expect(box).toBeEnabled();
+      await box.fill("제목 글자를 더 크게 해줘");
+      await expect(page.getByRole("button", { name: "보내기" })).toBeEnabled();
+
+      // 더 갈 단계가 없으므로 단계 이동 버튼은 없다
+      await expect(page.getByRole("button", { name: /다음 단계로/ })).toHaveCount(0);
     } finally {
       await admin.auth.admin.deleteUser(userId);
     }

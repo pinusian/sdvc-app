@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { SDVC_BLOCKS, type BlockId } from "@/lib/sdvc/blocks";
+import { SDVC_BLOCKS, resolveBlock, type BlockId } from "@/lib/sdvc/blocks";
 import type { ChatMessage } from "@/lib/claude/chat";
 import { Button } from "@/components/ui/Button";
 
@@ -27,7 +27,8 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
   const [streaming, setStreaming] = useState(false);
   const [thinking, setThinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [block, setBlock] = useState<BlockId>(currentBlock);
+  // [P7-4b] 예전에 done으로 굳은 대화도 유지보수로 읽어 다시 연다 (BL-001).
+  const [block, setBlock] = useState<BlockId>(resolveBlock(currentBlock));
   /** [P3-6] 승인 대기 중인 게이트. null이면 대기 중이 아니다. */
   const [gate, setGate] = useState<BlockId | null>(null);
   /** [P4-4] 방금 만들어진 산출물 */
@@ -38,7 +39,7 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
   const [blocked, setBlocked] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
-  const blockInfo = SDVC_BLOCKS.find((b) => b.id === block);
+  const blockInfo = SDVC_BLOCKS.find((b) => b.id === resolveBlock(block));
 
   async function send(options?: { message?: string; approved?: boolean }) {
     const message = (options?.message ?? draft).trim();
@@ -101,12 +102,13 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
         {blockInfo ? (
           <span>
             <span className="rounded-pill bg-accent-soft px-2.5 py-0.5 text-xs font-medium text-accent-ink">
-              블록 {blockInfo.number} / 5
+              블록 {blockInfo.number} / {SDVC_BLOCKS.length}
             </span>{" "}
             {blockInfo.title}
           </span>
         ) : (
-          <span>대화가 끝났습니다.</span>
+          // 여기 올 일은 없다(모든 블록이 목록에 있다). 남겨두되 막다른 말은 쓰지 않는다.
+          <span>대화를 불러오는 중…</span>
         )}
 
         {/*
@@ -115,7 +117,7 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
           사용자가 스스로 다음 단계로 갈 수 있어야 하기 때문이다.
           누르는 것 자체가 명시적 승인이므로 승인 게이트 원칙에 어긋나지 않는다.
         */}
-        {blockInfo && blockInfo.id !== "implement" && (
+        {blockInfo && blockInfo.id !== "implement" && blockInfo.id !== "maintenance" && (
           <Button
             variant="secondary"
             className="!px-3 !py-1.5 text-xs"
@@ -130,7 +132,9 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
       <div className="mx-auto w-full max-w-[760px] flex-1 space-y-4 overflow-y-auto px-7 py-8">
         {messages.length === 0 && (
           <p className="text-center text-sm text-ink-faint">
-            무엇을 만들고 싶은지 편하게 말씀해주세요. 예: &ldquo;홈페이지 만들고 싶어&rdquo;
+            {blockInfo?.id === "maintenance"
+              ? "고칠 곳이나 더하고 싶은 기능을 말씀해주세요. 예: “제목 글자를 더 크게”"
+              : "무엇을 만들고 싶은지 편하게 말씀해주세요. 예: “홈페이지 만들고 싶어”"}
           </p>
         )}
 
@@ -156,6 +160,9 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
         )}
         {streaming && !thinking && block === "implement" && (
           <p className="text-sm text-ink-faint">홈페이지 파일을 만드는 중…</p>
+        )}
+        {streaming && !thinking && block === "maintenance" && (
+          <p className="text-sm text-ink-faint">고치는 중…</p>
         )}
 
         {truncated && !streaming && (

@@ -27,8 +27,16 @@ const ALLOWED_EXTENSIONS = new Set([
   "html", "css", "js", "json", "txt", "md", "svg", "webmanifest",
 ]);
 
-/** ```file:경로 ... ``` 블록을 모두 찾는다. */
-const FILE_BLOCK = /^```file:([^\n`]+)\n([\s\S]*?)^```/gm;
+/**
+ * ```file:경로 ... ``` 블록을 모두 찾는다.
+ *
+ * [P7-4b] 모델은 습관적으로 언어를 먼저 적는다(```html file:index.html).
+ * 이걸 못 읽어서 "고쳤습니다"라는 답변과 함께 파일이 통째로 버려졌다 —
+ * 사용자는 고쳐진 줄 알았는데 홈페이지는 그대로였다. 언어 표시와
+ * `file:` 앞뒤 공백을 모두 허용한다.
+ */
+const FILE_BLOCK =
+  /^```[ \t]*[a-zA-Z0-9+#-]*[ \t]*file:[ \t]*([^\n`]+?)[ \t]*\n([\s\S]*?)^```/gm;
 
 export function parseArtifactFiles(answer: string): ArtifactFile[] {
   const byPath = new Map<string, string>();

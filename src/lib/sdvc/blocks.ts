@@ -16,11 +16,17 @@ export type BlockId =
   | "plan"
   | "tasks"
   | "implement"
+  | "maintenance"
+  /**
+   * [P7-4b] 옛 값. 지금은 만들지 않는다 — 구현 다음은 `maintenance`다.
+   * 이미 `done`으로 저장된 대화가 DB에 남아 있어 타입에는 남겨두고,
+   * 읽을 때 `resolveBlock`이 유지보수로 바꿔준다(마이그레이션보다 안전하다).
+   */
   | "done";
 
 export interface SdvcBlock {
   id: Exclude<BlockId, "done">;
-  /** 대본에서의 블록 번호 (블록 1~5) */
+  /** 대본에서의 블록 번호 (블록 1~6) */
   number: number;
   title: string;
   /** 이 블록이 담당하는 7단계 중의 단계들 */
@@ -129,6 +135,37 @@ export const SDVC_BLOCKS: SdvcBlock[] = [
       "html·css·js·json·svg·md·txt만 쓴다.",
     ].join("\n"),
   },
+  {
+    id: "maintenance",
+    number: 6,
+    title: "유지보수 — 고치고 더하기",
+    // 대본의 7단계(Constitution~Implement)에 속하지 않는다. 다 만든 뒤의 상태다.
+    steps: [],
+    produces: ["실제 코드"],
+    requiresApproval: false,
+    instruction: [
+      "이 프로젝트는 **이미 만들어져** 주소로 서비스되고 있다. 지금부터는 유지보수다.",
+      "사용자가 고칠 점이나 추가할 기능을 말하면 처음부터 다시 만들지 말고",
+      "**고칠 파일만** 다시 내보낸다. 다시 내지 않은 파일은 그대로 남는다.",
+      "",
+      "- **버그 수정**: 먼저 그 버그를 **재현**하는 방법을 한 줄로 확인하고(무엇을 하면",
+      "  무엇이 잘못되는지), 고친 뒤 같은 방법으로 확인하도록 안내한다.",
+      "- **기능 추가**: 기존 명세를 이어받아 무엇이 달라지는지 짧게 정리한 뒤 고친다.",
+      "  처음 만들 때처럼 헌장부터 다시 묻지 않는다.",
+      "",
+      "이 단계에는 끝이 없다. 요청이 올 때마다 고치고, 다음 요청을 기다린다.",
+      "승인 게이트도 없다 — 고쳐달라는 말이 곧 승인이다.",
+      "",
+      "**파일을 낼 때의 형식(중요)**: 바뀐 파일은 반드시 다음 형식으로 낸다.",
+      "```file:index.html",
+      "<!doctype html> …",
+      "```",
+      "`file:` 뒤에 경로를 적은 코드블록만 실제 파일로 저장된다. 이 표시가 없으면",
+      "아무리 잘 고쳐도 **저장되지 않는다.** 설명하려고 보여주는 코드는 이 표시 없이 쓴다.",
+      "경로는 소문자 영문·숫자·`-`·`_`·`/`만 쓰고(`../` 금지), 확장자는",
+      "html·css·js·json·svg·md·txt만 쓴다.",
+    ].join("\n"),
+  },
 ];
 
 export const FIRST_BLOCK: BlockId = "constitution_specify";
@@ -145,12 +182,22 @@ export function getBlock(id: Exclude<BlockId, "done">): SdvcBlock {
   return block;
 }
 
-/** 대본 순서상 다음 블록. 마지막 블록 다음은 "done", done 다음은 없다. */
+/**
+ * [P7-4b] 옛 `done` 값을 유지보수로 바꿔 읽는다.
+ *
+ * 예전에는 구현을 마치면 `done`이 되어 대화가 영구히 막혔다(BL-001).
+ * DB 값을 일괄로 고치는 대신 **읽는 쪽에서** 유지보수로 취급한다 —
+ * 마이그레이션은 되돌리기 어렵고, 이 변환은 언제든 걷어낼 수 있다.
+ */
+export function resolveBlock(id: BlockId): Exclude<BlockId, "done"> {
+  return id === "done" ? "maintenance" : id;
+}
+
+/** 대본 순서상 다음 블록. 유지보수 다음은 없다(계속 유지보수다). */
 export function nextBlockId(id: BlockId): BlockId | null {
-  if (id === "done") return null;
-  const index = SDVC_BLOCKS.findIndex((b) => b.id === id);
+  const index = SDVC_BLOCKS.findIndex((b) => b.id === resolveBlock(id));
   if (index === -1) return null;
-  return SDVC_BLOCKS[index + 1]?.id ?? "done";
+  return SDVC_BLOCKS[index + 1]?.id ?? null;
 }
 
 /**
@@ -159,8 +206,9 @@ export function nextBlockId(id: BlockId): BlockId | null {
  * [P2-6] 권한 검사와 같은 fail-closed 원칙.
  */
 export function advanceBlock(current: BlockId, { approved }: { approved: boolean }): BlockId {
-  if (current === "done") return "done";
-  const block = getBlock(current);
-  if (block.requiresApproval && !approved) return current;
-  return nextBlockId(current) ?? "done";
+  const here = resolveBlock(current);
+  const block = getBlock(here);
+  if (block.requiresApproval && !approved) return here;
+  // 마지막(유지보수) 다음은 없다 — 제자리에 머물며 계속 요청을 받는다.
+  return nextBlockId(here) ?? here;
 }

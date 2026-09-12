@@ -1,4 +1,4 @@
-import { SDVC_BLOCKS, getBlock, type BlockId } from "@/lib/sdvc/blocks";
+import { SDVC_BLOCKS, getBlock, resolveBlock, type BlockId } from "@/lib/sdvc/blocks";
 
 /**
  * [P3-3] 진행대본 → 시스템 프롬프트.
@@ -56,10 +56,13 @@ const MAINTENANCE_SECTION = [
 ].join("\n");
 
 export function buildSystemPrompt({ block, projectName, published }: PromptState): string {
-  const current = getBlock(block);
+  // [P7-4b] 예전에 done으로 굳은 대화도 유지보수로 읽는다.
+  const here = resolveBlock(block);
+  const current = getBlock(here);
+  const isMaintenance = here === "maintenance";
 
   const overview = SDVC_BLOCKS.map((b) => {
-    const marker = b.id === block ? "▶" : "  ";
+    const marker = b.id === here ? "▶" : "  ";
     const gate = b.requiresApproval ? " ★승인 게이트★" : "";
     return `${marker} 블록 ${b.number}. ${b.title} — ${b.steps.join(" + ")}${gate}`;
   }).join("\n");
@@ -75,7 +78,8 @@ export function buildSystemPrompt({ block, projectName, published }: PromptState
       "",
       `이 블록의 산출물: ${current.produces.join(", ")}`,
     ].join("\n"),
-    [
+    // 유지보수에는 다음 단계가 없다 — 확인 버튼 안내를 넣으면 모델이 없는 게이트를 만든다.
+    isMaintenance ? null : [
       "## 다음 단계로 넘어가는 방법",
       "",
       "이 블록에서 할 일을 모두 마치고 사용자의 확인만 남았을 때, 메시지 맨 마지막 줄에",
@@ -94,7 +98,8 @@ export function buildSystemPrompt({ block, projectName, published }: PromptState
     ]
       .filter((line): line is string => line !== null)
       .join("\n"),
-    published ? MAINTENANCE_SECTION : null,
+    // 유지보수 블록은 그 지시가 이미 본문이므로 덧붙이지 않는다.
+    published && !isMaintenance ? MAINTENANCE_SECTION : null,
     `## 항상 지킬 규칙\n\n${UNIVERSAL_RULES}`,
   ].filter((section): section is string => section !== null);
 

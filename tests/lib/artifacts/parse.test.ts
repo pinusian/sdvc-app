@@ -89,3 +89,42 @@ describe("[P4-3] parseArtifactFiles", () => {
     expect(parseArtifactFiles(block("empty.html", "   "))).toEqual([]);
   });
 });
+
+/**
+ * [P7-4b] 실제 검증에서 드러난 것: 모델은 코드블록에 **언어를 먼저** 적는다.
+ *
+ *     ```html file:index.html
+ *
+ * 우리 파서는 ```file: 만 알아서 이 파일들을 **조용히 버렸다.**
+ * 모델이 "고쳤습니다"라고 답했는데 홈페이지는 그대로였다 — 가장 나쁜 종류의 실패다.
+ */
+describe("[P7-4b] 코드블록에 언어가 먼저 붙어도 알아본다", () => {
+  it("```html file:index.html 형식을 읽는다", () => {
+    const files = parseArtifactFiles(
+      "고쳤습니다.\n\n```html file:index.html\n<h1>소금빵</h1>\n```\n",
+    );
+
+    expect(files).toEqual([{ path: "index.html", content: "<h1>소금빵</h1>" }]);
+  });
+
+  it("css·js 등 다른 언어도 마찬가지다", () => {
+    const files = parseArtifactFiles(
+      "```css file:style.css\nh1 { color: green; }\n```\n\n```javascript file:app.js\nconsole.log(1);\n```",
+    );
+
+    expect(files.map((f) => f.path)).toEqual(["style.css", "app.js"]);
+    expect(files[0].content).toBe("h1 { color: green; }");
+  });
+
+  it("file: 앞뒤 공백이 있어도 읽는다", () => {
+    const files = parseArtifactFiles("```html  file: index.html \n<h1>안녕</h1>\n```");
+
+    expect(files).toEqual([{ path: "index.html", content: "<h1>안녕</h1>" }]);
+  });
+
+  it("언어만 있고 file: 표시가 없으면 여전히 저장하지 않는다 (설명용 코드)", () => {
+    const files = parseArtifactFiles("이렇게 쓰시면 됩니다.\n\n```html\n<h1>예시</h1>\n```");
+
+    expect(files).toEqual([]);
+  });
+});

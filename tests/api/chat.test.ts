@@ -658,6 +658,10 @@ describe("[P7-4b] 구현을 마친 대화도 계속 받는다", () => {
 
   it("유지보수 중에는 몇 번을 더 보내도 계속 받는다", async () => {
     getConversation.mockResolvedValue({ ...CONVERSATION, currentBlock: "maintenance" });
+    // 스트림은 한 번만 읽을 수 있으므로 호출마다 새로 만든다
+    createChatStream.mockImplementation(async () =>
+      streamOf({ type: "text", text: "고쳤습니다" }, { type: "done" }),
+    );
 
     const { POST } = await import("@/app/api/chat/route");
     for (const message of ["글자 키워줘", "색도 바꿔줘", "사진 자리 만들어줘"]) {

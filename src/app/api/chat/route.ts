@@ -2,9 +2,15 @@ import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { createChatStream, DEFAULT_MAX_TOKENS, type ChatEvent } from "@/lib/claude/chat";
 
-/** 구현 단계는 파일을 통째로 써야 하므로 훨씬 긴 답변을 허용한다([P4-5]). */
+/**
+ * 파일을 통째로 써야 하는 단계는 훨씬 긴 답변을 허용한다([P4-5]).
+ * 유지보수([P7-4b])도 고친 파일을 다시 내므로 같은 길이가 필요하다.
+ */
 const IMPLEMENT_MAX_TOKENS = 32_000;
-import { advanceBlock, type BlockId } from "@/lib/sdvc/blocks";
+/** 옛 `done`을 걷어낸, 실제로 진행 중일 수 있는 블록 */
+type LiveBlockId = Exclude<BlockId, "done">;
+const LONG_ANSWER_BLOCKS: LiveBlockId[] = ["implement", "maintenance"];
+import { advanceBlock, resolveBlock, type BlockId } from "@/lib/sdvc/blocks";
 import { buildSystemPrompt, parseGateMarker, splitPendingMarker } from "@/lib/sdvc/prompt";
 import {
   appendMessage,
@@ -92,16 +98,16 @@ export async function POST(request: Request) {
 
   // 단계 이동은 사용자가 명시적으로 승인했을 때만 일어난다.
   // (게이트가 없는 블록도 마찬가지 — 대본상 "예"라고 답해야 다음으로 간다.)
-  let block: BlockId = conversation.currentBlock;
+  // [P7-4b] 예전에 done으로 굳은 대화도 유지보수로 읽어 다시 열어준다 (FR-029).
+  // 여기서 막으면 "이어서 수정"이 통째로 죽는다 — 실제로 그랬다(BL-001).
+  // `done`은 여기서 걷어내므로 이 아래로는 실재하는 블록만 흐른다.
+  let block: LiveBlockId = resolveBlock(conversation.currentBlock);
   if (body.approved === true) {
-    const advanced = advanceBlock(block, { approved: true });
+    const advanced = resolveBlock(advanceBlock(block, { approved: true }));
     if (advanced !== block) {
       await setCurrentBlock(admin, conversationId, user.id, advanced);
       block = advanced;
     }
-  }
-  if (block === "done") {
-    return NextResponse.json({ error: "이미 끝난 대화입니다." }, { status: 400 });
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -128,12 +134,12 @@ export async function POST(request: Request) {
     messages: [...history, { role: "user", content: message }],
     // 구현 단계는 파일을 통째로 써야 해서 기본 길이로는 중간에 끊긴다([P4-5]
     // 검증에서 실제로 겪음). max_tokens는 상한일 뿐이라 늘려도 안 쓰면 비용은 없다.
-    maxTokens: block === "implement" ? IMPLEMENT_MAX_TOKENS : DEFAULT_MAX_TOKENS,
+    maxTokens: LONG_ANSWER_BLOCKS.includes(block) ? IMPLEMENT_MAX_TOKENS : DEFAULT_MAX_TOKENS,
   });
 
   // 단계가 넘어갔으면 화면이 표시를 갱신할 수 있게 맨 앞에서 알려준다.
   const initialEvents: StreamEvent[] =
-    block === conversation.currentBlock ? [] : [{ type: "block", block }];
+    block === resolveBlock(conversation.currentBlock) ? [] : [{ type: "block", block }];
 
   const publishContext: PublishContext = {
     ownerId: user.id,
