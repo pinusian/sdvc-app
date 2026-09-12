@@ -17,6 +17,8 @@ const setCurrentBlock = vi.fn();
 const publishArtifact = vi.fn();
 const recordUsage = vi.fn();
 const loadAccountState = vi.fn();
+const resolveAttachment = vi.fn();
+const readAttachment = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({ auth: { getUser } }),
@@ -45,6 +47,11 @@ vi.mock("@/lib/usage/store", () => ({
 
 vi.mock("@/lib/billing/account", () => ({
   loadAccountState: (...args: unknown[]) => loadAccountState(...args),
+}));
+
+vi.mock("@/lib/attachments/store", () => ({
+  resolveAttachment: (...args: unknown[]) => resolveAttachment(...args),
+  readAttachment: (...args: unknown[]) => readAttachment(...args),
 }));
 
 function request(body: unknown) {
@@ -730,6 +737,155 @@ describe("[P7-1b] 프로젝트 자동 이름", () => {
     expect(publishArtifact).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ projectName: "소금빵 가게" }),
+    );
+  });
+});
+
+/**
+ * [P7-9] 첨부를 모델에게 실어 보낸다 (FR-031, BL-004).
+ *
+ * 클라이언트는 **id만** 보낸다. 서버가 그 id로 저장소에서 원본을 다시 읽는다 —
+ * 클라이언트가 보낸 파일 내용을 그대로 모델에게 넘기면, 화면에 보여준 것과
+ * 다른 것을 보낼 수 있다.
+ */
+describe("[P7-9] 첨부 전달", () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.ANTHROPIC_API_KEY = "sk-ant-test";
+    happyPath();
+    resolveAttachment.mockImplementation(async (_admin, { id }) =>
+      id === "att-img"
+        ? {
+            ownerId: "user-1",
+            conversationId: "conv-1",
+            id,
+            extension: "png",
+            kind: "image",
+            mediaType: "image/png",
+          }
+        : id === "att-txt"
+          ? {
+              ownerId: "user-1",
+              conversationId: "conv-1",
+              id,
+              extension: "md",
+              kind: "text",
+              mediaType: "text/markdown",
+            }
+          : null,
+    );
+    readAttachment.mockResolvedValue(new Uint8Array([1, 2, 3]));
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  it("이미지 첨부를 image 블록으로 싣는다", async () => {
+    const { POST } = await import("@/app/api/chat/route");
+    await POST(request({ ...VALID, attachmentIds: ["att-img"] }));
+
+    const { messages } = createChatStream.mock.calls[0][0] as {
+      messages: { role: string; content: unknown }[];
+    };
+    const last = messages[messages.length - 1];
+    expect(Array.isArray(last.content)).toBe(true);
+    expect(last.content).toContainEqual(
+      expect.objectContaining({
+        type: "image",
+        source: expect.objectContaining({ type: "base64", media_type: "image/png" }),
+      }),
+    );
+  });
+
+  it("글파일 첨부는 파일 이름과 함께 글로 싣는다", async () => {
+    readAttachment.mockResolvedValue(new TextEncoder().encode("# 기획서\n메뉴 3개"));
+
+    const { POST } = await import("@/app/api/chat/route");
+    await POST(request({ ...VALID, attachmentIds: ["att-txt"] }));
+
+    const { messages } = createChatStream.mock.calls[0][0] as {
+      messages: { role: string; content: { type: string; text?: string }[] }[];
+    };
+    const blocks = messages[messages.length - 1].content;
+    const texts = blocks.filter((b) => b.type === "text").map((b) => b.text ?? "");
+    expect(texts.some((t) => t.includes("# 기획서"))).toBe(true);
+  });
+
+  it("사용자가 쓴 메시지도 함께 실린다", async () => {
+    const { POST } = await import("@/app/api/chat/route");
+    await POST(request({ ...VALID, attachmentIds: ["att-img"] }));
+
+    const { messages } = createChatStream.mock.calls[0][0] as {
+      messages: { content: { type: string; text?: string }[] }[];
+    };
+    const blocks = messages[messages.length - 1].content;
+    expect(blocks.some((b) => b.type === "text" && b.text?.includes(VALID.message))).toBe(true);
+  });
+
+  it("첨부가 없으면 예전처럼 글자만 보낸다", async () => {
+    const { POST } = await import("@/app/api/chat/route");
+    await POST(request(VALID));
+
+    const { messages } = createChatStream.mock.calls[0][0] as {
+      messages: { content: unknown }[];
+    };
+    expect(messages[messages.length - 1].content).toBe(VALID.message);
+    expect(readAttachment).not.toHaveBeenCalled();
+  });
+
+  it("내 것이 아닌 첨부 id는 400 — Claude를 부르지 않는다", async () => {
+    const { POST } = await import("@/app/api/chat/route");
+    const res = await POST(request({ ...VALID, attachmentIds: ["남의것"] }));
+
+    expect(res.status).toBe(400);
+    expect(createChatStream).not.toHaveBeenCalled();
+  });
+
+  it("6개를 붙이면 400", async () => {
+    const { POST } = await import("@/app/api/chat/route");
+    const res = await POST(
+      request({ ...VALID, attachmentIds: ["att-img", "att-img", "att-img", "att-img", "att-img", "att-img"] }),
+    );
+
+    expect(res.status).toBe(400);
+    expect(createChatStream).not.toHaveBeenCalled();
+  });
+
+  it("아주 긴 글파일은 잘라서 싣고, 잘랐다고 알린다", async () => {
+    readAttachment.mockResolvedValue(new TextEncoder().encode("가".repeat(200_000)));
+
+    const { POST } = await import("@/app/api/chat/route");
+    await POST(request({ ...VALID, attachmentIds: ["att-txt"] }));
+
+    const { messages } = createChatStream.mock.calls[0][0] as {
+      messages: { content: { type: string; text?: string }[] }[];
+    };
+    const joined = messages[messages.length - 1].content
+      .filter((b) => b.type === "text")
+      .map((b) => b.text ?? "")
+      .join("");
+    expect(joined.length).toBeLessThan(150_000);
+    expect(joined).toContain("잘렸");
+  });
+
+  it("첨부가 있어도 사용량은 그대로 기록된다 (같은 월 한도)", async () => {
+    createChatStream.mockResolvedValue(
+      streamOf(
+        { type: "usage", model: "claude-sonnet-5", inputTokens: 4000, outputTokens: 100 },
+        { type: "done" },
+      ),
+    );
+
+    const { POST } = await import("@/app/api/chat/route");
+    const res = await POST(request({ ...VALID, attachmentIds: ["att-img"] }));
+    await res.text();
+
+    expect(recordUsage).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ inputTokens: 4000, model: "claude-sonnet-5" }),
     );
   });
 });

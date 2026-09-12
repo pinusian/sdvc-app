@@ -130,3 +130,37 @@ describe("[P7-8] validateAttachment — 크기와 개수", () => {
     }
   });
 });
+
+/**
+ * [P7-9] 이미지는 글파일보다 상한이 낮다.
+ *
+ * Anthropic API가 이미지 한 장을 5MB까지만 받는다. 10MB로 받아두면
+ * 올릴 때는 성공했다가 **모델에게 보낼 때** 실패한다 — 사용자는 왜 안 되는지
+ * 알 수 없다. 받는 순간에 막는 편이 정직하다.
+ */
+describe("[P7-9] 이미지 상한", () => {
+  it("이미지는 5MB까지", async () => {
+    const { MAX_IMAGE_BYTES } = await import("@/lib/attachments/validate");
+    expect(MAX_IMAGE_BYTES).toBe(5 * 1024 * 1024);
+  });
+
+  it("5MB를 넘는 이미지는 거부하고 이유를 알려준다", async () => {
+    const { MAX_IMAGE_BYTES } = await import("@/lib/attachments/validate");
+    const big = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.alloc(MAX_IMAGE_BYTES),
+    ]);
+
+    const result = validateAttachment({ name: "big.png", bytes: big });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe("too_large");
+      expect(result.message).toMatch(/5MB|이미지/);
+    }
+  });
+
+  it("글파일은 여전히 10MB까지 받는다", () => {
+    const text = Buffer.alloc(6 * 1024 * 1024, 0x41); // 6MB짜리 'A'
+    expect(validateAttachment({ name: "big.txt", bytes: text }).ok).toBe(true);
+  });
+});

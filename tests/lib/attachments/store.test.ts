@@ -109,3 +109,74 @@ describe("[P7-8] 첨부 저장소", () => {
     ).rejects.toThrow(/권한 없음/);
   });
 });
+
+/**
+ * [P7-9] 저장된 첨부를 id로 찾아낸다.
+ *
+ * 클라이언트는 id만 보낸다 — 확장자까지 받으면 경로의 일부를 클라이언트가
+ * 정하게 된다. 폴더를 뒤져 우리가 저장한 이름을 직접 찾는다.
+ */
+describe("[P7-9] resolveAttachment", () => {
+  function listing(names: string[]) {
+    return {
+      storage: {
+        from: () => ({
+          async list() {
+            return { data: names.map((name) => ({ name })), error: null };
+          },
+        }),
+      },
+    } as never;
+  }
+
+  it("id로 확장자와 종류를 찾아낸다", async () => {
+    const { resolveAttachment } = await import("@/lib/attachments/store");
+    const found = await resolveAttachment(listing(["att-1.png", "att-2.txt"]), {
+      ownerId: "user-1",
+      conversationId: "conv-1",
+      id: "att-1",
+    });
+
+    expect(found).toEqual({
+      ownerId: "user-1",
+      conversationId: "conv-1",
+      id: "att-1",
+      extension: "png",
+      kind: "image",
+      mediaType: "image/png",
+    });
+  });
+
+  it("글파일도 종류를 맞게 돌려준다", async () => {
+    const { resolveAttachment } = await import("@/lib/attachments/store");
+    const found = await resolveAttachment(listing(["att-2.md"]), {
+      ownerId: "user-1",
+      conversationId: "conv-1",
+      id: "att-2",
+    });
+
+    expect(found).toMatchObject({ kind: "text", mediaType: "text/markdown" });
+  });
+
+  it("없는 id면 null — 남의 첨부를 집어갈 수 없다", async () => {
+    const { resolveAttachment } = await import("@/lib/attachments/store");
+    const found = await resolveAttachment(listing(["att-1.png"]), {
+      ownerId: "user-1",
+      conversationId: "conv-1",
+      id: "att-999",
+    });
+
+    expect(found).toBeNull();
+  });
+
+  it("id가 다른 파일의 앞부분과 겹쳐도 헷갈리지 않는다", async () => {
+    const { resolveAttachment } = await import("@/lib/attachments/store");
+    const found = await resolveAttachment(listing(["att-12.png"]), {
+      ownerId: "user-1",
+      conversationId: "conv-1",
+      id: "att-1",
+    });
+
+    expect(found).toBeNull();
+  });
+});
