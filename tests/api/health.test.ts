@@ -24,6 +24,8 @@ describe("[P2-3] GET /api/health", () => {
       supabaseKeyConfigured: false,
       supabaseReachable: null,
       anthropicKeyConfigured: false,
+      // [BL-008] 서버관리자 자동 승격 설정 여부 — 값이 아니라 있고 없음만
+      adminEmailConfigured: false,
     });
   });
 

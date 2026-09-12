@@ -13,11 +13,14 @@ export async function GET() {
     supabaseKeyConfigured: boolean;
     supabaseReachable: boolean | null;
     anthropicKeyConfigured: boolean;
+    /** [BL-008] 서버관리자 자동 승격이 가능한 설정인지 — 값은 노출하지 않는다 */
+    adminEmailConfigured: boolean;
   } = {
     supabaseUrlConfigured: Boolean(supabaseUrl),
     supabaseKeyConfigured: Boolean(supabaseKey),
     supabaseReachable: null,
     anthropicKeyConfigured: Boolean(process.env.ANTHROPIC_API_KEY),
+    adminEmailConfigured: Boolean(process.env.ADMIN_EMAIL),
   };
 
   if (supabaseUrl && supabaseKey) {
