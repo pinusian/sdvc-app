@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { ARTIFACT_BUCKET } from "@/lib/artifacts/storage";
+import { ARTIFACT_BUCKET, contentTypeOf } from "@/lib/artifacts/storage";
 
 /**
  * [P7-6a] 산출물 버전 보관 (FR-012).
@@ -182,4 +182,59 @@ export async function deleteAllVersions(
   const { error } = await admin.storage.from(VERSION_BUCKET).remove(paths);
   if (error) throw new Error(`버전 사본 삭제 실패: ${error.message}`);
   return paths.length;
+}
+
+export interface RestoreResult {
+  fileCount: number;
+  removedCount: number;
+}
+
+/**
+ * [P7-6b] 그 버전으로 되돌린다 (FR-012).
+ *
+ * 가장 조심할 것은 **그 버전에 없던 파일을 지우는 일**이다. 남겨두면 옛 화면과
+ * 새 파일이 섞여 "되돌렸는데 이상한 상태"가 된다 — 되돌리기의 의미가 없어진다.
+ *
+ * 되돌린 결과도 나중에 새 버전으로 남긴다(부르는 쪽에서) — 되돌리기를 다시
+ * 되돌릴 수 있어야 하기 때문이다.
+ */
+export async function restoreVersion(
+  admin: SupabaseClient,
+  { projectId, version }: { projectId: string; version: string },
+): Promise<RestoreResult> {
+  const prefix = `${projectId}/${version}`;
+  const versionPaths = await listFilesUnder(admin, VERSION_BUCKET, prefix);
+  // meta.json은 우리 기록일 뿐 홈페이지 파일이 아니다.
+  const files = versionPaths.filter((path) => !path.endsWith("/meta.json"));
+
+  if (files.length === 0) {
+    throw new Error("그 버전을 찾을 수 없습니다.");
+  }
+
+  const wanted = new Set(files.map((path) => path.slice(prefix.length + 1)));
+
+  // 1) 그 버전의 파일을 덮어쓴다.
+  for (const path of files) {
+    const relative = path.slice(prefix.length + 1);
+    const { data, error } = await admin.storage.from(VERSION_BUCKET).download(path);
+    if (error || !data) continue;
+
+    const bytes = new Uint8Array(await data.arrayBuffer());
+    await admin.storage
+      .from(ARTIFACT_BUCKET)
+      .upload(`${projectId}/${relative}`, bytes as unknown as ArrayBuffer, {
+        contentType: contentTypeOf(relative),
+        upsert: true,
+      });
+  }
+
+  // 2) 그 버전에 없던 파일은 지운다.
+  const livePaths = await listFilesUnder(admin, ARTIFACT_BUCKET, projectId);
+  const extra = livePaths.filter((path) => !wanted.has(path.slice(projectId.length + 1)));
+  if (extra.length > 0) {
+    const { error } = await admin.storage.from(ARTIFACT_BUCKET).remove(extra);
+    if (error) throw new Error(`되돌리기 중 옛 파일 정리 실패: ${error.message}`);
+  }
+
+  return { fileCount: files.length, removedCount: extra.length };
 }

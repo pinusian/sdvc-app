@@ -139,3 +139,101 @@ describe("[P7-6a] 버전 보관", () => {
     expect(versions.map((v) => v.name)).toEqual(["0003", "0002", "0001"]);
   });
 });
+
+/**
+ * [P7-6b] 되돌리기 (FR-012).
+ *
+ * 가장 조심할 것: **그 버전에 없던 파일을 지우는 것.** 남겨두면 옛 화면과
+ * 새 파일이 섞여 "되돌렸는데 이상한 상태"가 된다 — 되돌리기의 의미가 없다.
+ */
+describe("[P7-6b] restoreVersion", () => {
+  function storageWith(live: string[], versioned: string[]) {
+    const calls: { op: string; args: unknown[] }[] = [];
+    const listOf = (paths: string[], prefix: string) => {
+      const under = paths
+        .filter((p) => p.startsWith(prefix ? `${prefix}/` : ""))
+        .map((p) => p.slice(prefix ? prefix.length + 1 : 0));
+      const seen = new Map<string, boolean>();
+      for (const rest of under) {
+        const head = rest.split("/")[0];
+        const isFile = !rest.includes("/");
+        if (!seen.has(head) || isFile) seen.set(head, isFile);
+      }
+      return [...seen].map(([name, isFile]) => ({ name, id: isFile ? `id-${name}` : null }));
+    };
+    const client = {
+      storage: {
+        from(bucket: string) {
+          const paths = bucket === "versions" ? versioned : live;
+          return {
+            async list(prefix: string) {
+              return { data: listOf(paths, prefix), error: null };
+            },
+            async download(path: string) {
+              return {
+                data: { arrayBuffer: async () => new TextEncoder().encode(path).buffer },
+                error: null,
+              };
+            },
+            async upload(path: string, body: unknown) {
+              calls.push({ op: "upload", args: [bucket, path, body] });
+              return { data: { path }, error: null };
+            },
+            async remove(p: string[]) {
+              calls.push({ op: "remove", args: [bucket, p] });
+              return { data: null, error: null };
+            },
+          };
+        },
+      },
+    };
+    return { client: client as never, calls };
+  }
+
+  it("그 버전의 파일을 산출물 자리로 되돌린다", async () => {
+    const { restoreVersion } = await import("@/lib/versions/store");
+    const { client, calls } = storageWith(
+      ["proj-1/index.html"],
+      ["proj-1/0001/index.html", "proj-1/0001/style.css", "proj-1/0001/meta.json"],
+    );
+
+    const restored = await restoreVersion(client, { projectId: "proj-1", version: "0001" });
+
+    const uploaded = calls
+      .filter((c) => c.op === "upload" && c.args[0] === "artifacts")
+      .map((c) => c.args[1]);
+    expect(uploaded).toContain("proj-1/index.html");
+    expect(uploaded).toContain("proj-1/style.css");
+    // meta.json은 우리 기록일 뿐 홈페이지 파일이 아니다
+    expect(uploaded).not.toContain("proj-1/meta.json");
+    expect(restored.fileCount).toBe(2);
+  });
+
+  it("그 버전에 없던 파일은 지운다 (옛 화면과 섞이면 안 된다)", async () => {
+    const { restoreVersion } = await import("@/lib/versions/store");
+    const { client, calls } = storageWith(
+      ["proj-1/index.html", "proj-1/나중에추가.css", "proj-1/images/새사진.png"],
+      ["proj-1/0001/index.html"],
+    );
+
+    await restoreVersion(client, { projectId: "proj-1", version: "0001" });
+
+    const removed = calls.find((c) => c.op === "remove" && c.args[0] === "artifacts");
+    expect(removed).toBeDefined();
+    const paths = removed!.args[1] as string[];
+    expect(paths).toContain("proj-1/나중에추가.css");
+    expect(paths).toContain("proj-1/images/새사진.png");
+    expect(paths).not.toContain("proj-1/index.html");
+  });
+
+  it("없는 버전이면 아무것도 건드리지 않고 알린다", async () => {
+    const { restoreVersion } = await import("@/lib/versions/store");
+    const { client, calls } = storageWith(["proj-1/index.html"], []);
+
+    await expect(
+      restoreVersion(client, { projectId: "proj-1", version: "9999" }),
+    ).rejects.toThrow(/찾을 수 없/);
+    expect(calls.some((c) => c.op === "remove")).toBe(false);
+    expect(calls.some((c) => c.op === "upload")).toBe(false);
+  });
+});

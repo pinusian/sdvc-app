@@ -10,6 +10,7 @@ const getProjectById = vi.fn();
 const deleteProjectRow = vi.fn();
 const deleteArtifactFiles = vi.fn();
 const renameProject = vi.fn();
+const deleteAllVersions = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({ auth: { getUser } }),
@@ -24,6 +25,10 @@ vi.mock("@/lib/projects/store", () => ({
 
 vi.mock("@/lib/artifacts/storage", () => ({
   deleteArtifactFiles: (...args: unknown[]) => deleteArtifactFiles(...args),
+}));
+
+vi.mock("@/lib/versions/store", () => ({
+  deleteAllVersions: (...args: unknown[]) => deleteAllVersions(...args),
 }));
 
 const context = { params: Promise.resolve({ id: "proj-1" }) };
@@ -164,5 +169,40 @@ describe("[P7-1b] PATCH /api/projects/[id] — 이름 변경", () => {
       expect(res.status, String(name)).toBe(400);
     }
     expect(renameProject).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * [P7-6c] 프로젝트를 지우면 되돌리기용 사본도 함께 지운다 (FR-012·FR-023).
+ *
+ * 본편만 지우고 사본이 남으면 "지웠다"는 말이 거짓이 된다 — 그 사본에는
+ * 옛 홈페이지가 통째로 들어 있다.
+ */
+describe("[P7-6c] 삭제할 때 버전 사본도", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getUser.mockResolvedValue({ data: { user: { id: "user-1" } }, error: null });
+    getProjectById.mockResolvedValue(PROJECT);
+    deleteArtifactFiles.mockResolvedValue(3);
+    deleteProjectRow.mockResolvedValue(true);
+    deleteAllVersions.mockResolvedValue(9);
+  });
+
+  it("프로젝트를 지우면 사본도 지운다", async () => {
+    const { DELETE } = await import("@/app/api/projects/[id]/route");
+    const res = await DELETE(request(), context);
+
+    expect(res.status).toBe(200);
+    expect(deleteAllVersions).toHaveBeenCalledWith(expect.anything(), "proj-1");
+  });
+
+  it("사본 삭제가 실패해도 본편 삭제는 끝낸다 (남은 것은 정리 작업이 다시 치운다)", async () => {
+    deleteAllVersions.mockRejectedValue(new Error("저장소 오류"));
+
+    const { DELETE } = await import("@/app/api/projects/[id]/route");
+    const res = await DELETE(request(), context);
+
+    expect(res.status).toBe(200);
+    expect(deleteProjectRow).toHaveBeenCalled();
   });
 });

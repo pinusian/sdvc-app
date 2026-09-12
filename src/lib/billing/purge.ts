@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { lockArtifacts } from "@/lib/billing/lifecycle";
 import { deleteArtifactFiles } from "@/lib/artifacts/storage";
+import { deleteAllVersions } from "@/lib/versions/store";
 
 /**
  * [P6-7b] 유예 만료 처리 — 하루 한 번 도는 예약 작업이 부른다.
@@ -59,6 +60,9 @@ export async function runLifecycleSweep(
       try {
         // 파일 먼저, 기록 나중 — 반대면 주인 없는 파일이 남는다([P4-3]과 같은 순서).
         await deleteArtifactFiles(admin, project.id);
+        // [P7-6c] 되돌리기용 사본에도 옛 홈페이지가 통째로 들어 있다.
+        // 본편만 지우고 사본을 남기면 "지웠다"는 말이 거짓이 된다.
+        await deleteAllVersions(admin, project.id);
         await admin.from("projects").delete().eq("id", project.id);
         result.purgedProjects += 1;
       } catch {

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { deleteProjectRow, getProjectById, renameProject } from "@/lib/projects/store";
 import { deleteArtifactFiles } from "@/lib/artifacts/storage";
+import { deleteAllVersions } from "@/lib/versions/store";
 import { normalizeProjectName, MAX_NAME_LENGTH } from "@/lib/projects/name";
 
 /**
@@ -41,6 +42,14 @@ export async function DELETE(
       },
       { status: 500 },
     );
+  }
+
+  // [P7-6c] 되돌리기용 사본에도 옛 홈페이지가 들어 있다 — 함께 지운다.
+  // 실패해도 본편 삭제는 끝낸다(남은 사본은 정리 작업이 다시 치운다).
+  try {
+    await deleteAllVersions(admin, project.id);
+  } catch {
+    // 조용히 넘긴다 — 사용자가 원한 것은 프로젝트 삭제다.
   }
 
   const deleted = await deleteProjectRow(admin, project.id, user.id);

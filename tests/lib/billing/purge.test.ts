@@ -12,6 +12,7 @@ import { describe, expect, it, vi } from "vitest";
 
 const lockArtifacts = vi.fn();
 const deleteArtifactFiles = vi.fn();
+const deleteAllVersions = vi.fn();
 
 vi.mock("@/lib/billing/lifecycle", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/billing/lifecycle")>()),
@@ -20,6 +21,10 @@ vi.mock("@/lib/billing/lifecycle", async (importOriginal) => ({
 
 vi.mock("@/lib/artifacts/storage", () => ({
   deleteArtifactFiles: (...args: unknown[]) => deleteArtifactFiles(...args),
+}));
+
+vi.mock("@/lib/versions/store", () => ({
+  deleteAllVersions: (...args: unknown[]) => deleteAllVersions(...args),
 }));
 
 const { runLifecycleSweep } = await import("@/lib/billing/purge");
@@ -147,5 +152,25 @@ describe("[P6-7b] runLifecycleSweep", () => {
 
     expect(result).toMatchObject({ locked: 0, purgedProjects: 0, failed: 0 });
     expect(deleted).toEqual([]);
+  });
+});
+
+/**
+ * [P7-6c] 유예가 끝나 지울 때 되돌리기용 사본도 함께 지운다 (FR-023).
+ */
+describe("[P7-6c] 정리 작업이 버전 사본도 지운다", () => {
+  it("프로젝트 파일과 사본을 모두 지운다", async () => {
+    vi.clearAllMocks();
+    deleteArtifactFiles.mockResolvedValue(2);
+    deleteAllVersions.mockResolvedValue(5);
+    const { admin } = fakeAdmin({
+      duePurge: [{ id: "user-1" }],
+      projects: { "user-1": [{ id: "proj-1" }] },
+    });
+
+    await runLifecycleSweep(admin, NOW);
+
+    expect(deleteArtifactFiles).toHaveBeenCalledWith(expect.anything(), "proj-1");
+    expect(deleteAllVersions).toHaveBeenCalledWith(expect.anything(), "proj-1");
   });
 });
