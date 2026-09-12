@@ -476,3 +476,128 @@ describe("[P7-4b] 유지보수 화면", () => {
     expect(screen.queryByRole("button", { name: /다음 단계로/ })).not.toBeInTheDocument();
   });
 });
+
+/**
+ * [P7-11] 입력창에 파일 붙이기 (FR-031·FR-032, BL-004·005).
+ *
+ * 고르는 즉시 올린다 — 보낼 때 한꺼번에 올리면 큰 파일에서 "보내기"가
+ * 한참 멈춘 것처럼 보이고, 형식이 틀렸다는 것도 그제야 알게 된다.
+ */
+describe("[P7-11] 프롬프트 첨부", () => {
+  function pngFile(name = "사진.png") {
+    return new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], name, { type: "image/png" });
+  }
+
+  function mockUpload(id = "att-1", name = "사진.png") {
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+      if (String(url).includes("/api/attachments")) {
+        return new Response(JSON.stringify({ attachments: [{ id, kind: "image", name }] }), {
+          status: 201,
+        });
+      }
+      return mockChatResponse({ type: "text", text: "네" }, { type: "done" });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("파일을 고르면 바로 올리고 이름을 보여준다", async () => {
+    const fetchMock = mockUpload();
+    render(<ChatView conversationId="conv-1" currentBlock="implement" initialMessages={[]} />);
+
+    await userEvent.upload(screen.getByLabelText("파일 붙이기"), pngFile());
+
+    await waitFor(() => expect(screen.getByText("사진.png")).toBeInTheDocument());
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toBe("/api/attachments");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBeInstanceOf(FormData);
+  });
+
+  it("보낼 때 첨부 id를 함께 보낸다", async () => {
+    const fetchMock = mockUpload("att-99");
+    render(<ChatView conversationId="conv-1" currentBlock="implement" initialMessages={[]} />);
+
+    await userEvent.upload(screen.getByLabelText("파일 붙이기"), pngFile());
+    await waitFor(() => expect(screen.getByText("사진.png")).toBeInTheDocument());
+
+    await userEvent.type(screen.getByLabelText("메시지"), "이 사진 넣어줘");
+    await userEvent.click(screen.getByRole("button", { name: "보내기" }));
+
+    await waitFor(() => {
+      const chatCall = fetchMock.mock.calls.find(([url]) => String(url) === "/api/chat");
+      expect(JSON.parse(chatCall![1].body).attachmentIds).toEqual(["att-99"]);
+    });
+  });
+
+  it("보내고 나면 붙인 것이 비워진다", async () => {
+    mockUpload();
+    render(<ChatView conversationId="conv-1" currentBlock="implement" initialMessages={[]} />);
+
+    await userEvent.upload(screen.getByLabelText("파일 붙이기"), pngFile());
+    await waitFor(() => expect(screen.getByText("사진.png")).toBeInTheDocument());
+
+    await userEvent.type(screen.getByLabelText("메시지"), "넣어줘");
+    await userEvent.click(screen.getByRole("button", { name: "보내기" }));
+
+    await waitFor(() => expect(screen.queryByText("사진.png")).not.toBeInTheDocument());
+  });
+
+  it("붙인 것을 하나씩 뗄 수 있다", async () => {
+    mockUpload();
+    render(<ChatView conversationId="conv-1" currentBlock="implement" initialMessages={[]} />);
+
+    await userEvent.upload(screen.getByLabelText("파일 붙이기"), pngFile());
+    await waitFor(() => expect(screen.getByText("사진.png")).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole("button", { name: /사진.png 떼기/ }));
+
+    expect(screen.queryByText("사진.png")).not.toBeInTheDocument();
+  });
+
+  it("올리다 실패하면 이유를 그대로 알린다", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({ error: "virus.png은(는) 실행파일이라 올릴 수 없어요." }),
+          { status: 400 },
+        ),
+      ),
+    );
+    render(<ChatView conversationId="conv-1" currentBlock="implement" initialMessages={[]} />);
+
+    await userEvent.upload(screen.getByLabelText("파일 붙이기"), pngFile("virus.png"));
+
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent("실행파일이라 올릴 수 없어요"),
+    );
+  });
+
+  it("이미지는 토큰을 많이 쓴다고 미리 알려준다", async () => {
+    mockUpload();
+    render(<ChatView conversationId="conv-1" currentBlock="implement" initialMessages={[]} />);
+
+    await userEvent.upload(screen.getByLabelText("파일 붙이기"), pngFile());
+
+    await waitFor(() => expect(screen.getByText(/토큰/)).toBeInTheDocument());
+  });
+
+  it("만들어진 산출물에 이미지가 들어가면 몇 장인지 알려준다", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        mockChatResponse(
+          { type: "artifact", slug: "site-1", fileCount: 2, imageCount: 1 },
+          { type: "done" },
+        ),
+      ),
+    );
+    render(<ChatView conversationId="conv-1" currentBlock="implement" initialMessages={[]} />);
+
+    await userEvent.type(screen.getByLabelText("메시지"), "만들어줘");
+    await userEvent.click(screen.getByRole("button", { name: "보내기" }));
+
+    await waitFor(() => expect(screen.getByText(/사진 1장/)).toBeInTheDocument());
+  });
+});
