@@ -158,6 +158,24 @@ export async function setProjectVisibility(
   assertNoError(error, "공개범위 변경");
 }
 
+/** [P7-1b] 이름을 바꾼다 (FR-030). 소유자 조건은 여기서 직접 건다. */
+export async function renameProject(
+  client: SupabaseClient,
+  projectId: string,
+  ownerId: string,
+  name: string,
+): Promise<void> {
+  const { error } = await client
+    .from("projects")
+    .update({ name })
+    .eq("id", projectId)
+    .eq("owner_id", ownerId)
+    .select("id")
+    .single();
+
+  assertNoError(error, "프로젝트 이름 변경");
+}
+
 /** 행을 지운다. 내 것이 아니어서 지운 게 없으면 false. */
 export async function deleteProjectRow(
   client: SupabaseClient,

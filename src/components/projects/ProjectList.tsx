@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import type { Project, Visibility } from "@/lib/projects/store";
+import { MAX_NAME_LENGTH } from "@/lib/projects/name";
 
 /**
  * [P4-4] 대시보드의 내 프로젝트 목록.
@@ -37,6 +38,8 @@ export function ProjectList({ projects }: { projects: ListItem[] }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  /** [P7-1b] 지금 이름을 고치고 있는 프로젝트와 입력값 */
+  const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
 
   /**
    * [P5-3] 공개범위 변경 (FR-007).
@@ -79,6 +82,37 @@ export function ProjectList({ projects }: { projects: ListItem[] }) {
     }
   }
 
+  /**
+   * [P7-1b] 이름 바꾸기 (FR-030).
+   * 공개범위와 같은 방식 — 화면을 먼저 바꾸고 실패하면 되돌린다.
+   */
+  async function saveName(id: string, next: string) {
+    const name = next.trim();
+    if (!name) return;
+    const previous = items.find((item) => item.id === id)?.name;
+
+    setError(null);
+    setRenaming(null);
+    setItems((prev) => prev.map((item) => (item.id === id ? { ...item, name } : item)));
+
+    try {
+      const res = await fetch(`/api/projects/${id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const data = (await res.json()) as { name?: string; error?: string };
+      if (!res.ok || !data.name) throw new Error(data.error ?? "이름을 바꾸지 못했습니다.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "이름을 바꾸지 못했습니다.");
+      if (previous !== undefined) {
+        setItems((prev) =>
+          prev.map((item) => (item.id === id ? { ...item, name: previous } : item)),
+        );
+      }
+    }
+  }
+
   async function remove(id: string) {
     setBusy(id);
     setError(null);
@@ -117,12 +151,57 @@ export function ProjectList({ projects }: { projects: ListItem[] }) {
       {items.map((project) => (
         <Card key={project.id} className="flex flex-wrap items-center justify-between gap-4 !p-5">
           <div className="min-w-0">
-            <div className="mb-1 flex items-center gap-2">
-              <h2 className="truncate text-base font-semibold text-ink">{project.name}</h2>
-              <span className="rounded-pill bg-surface-muted px-2 py-0.5 text-xs text-ink-muted">
-                {STATUS_LABEL[project.status] ?? project.status}
-              </span>
-            </div>
+            {renaming?.id === project.id ? (
+              <form
+                className="mb-2 flex flex-wrap items-center gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void saveName(project.id, renaming.value);
+                }}
+              >
+                <label className="sr-only" htmlFor={`rename-${project.id}`}>
+                  프로젝트 이름
+                </label>
+                <input
+                  id={`rename-${project.id}`}
+                  value={renaming.value}
+                  maxLength={MAX_NAME_LENGTH}
+                  autoFocus
+                  onChange={(event) => setRenaming({ id: project.id, value: event.target.value })}
+                  className="rounded-sm border border-border bg-surface px-2 py-1 text-sm text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft"
+                />
+                <Button
+                  type="submit"
+                  variant="accent"
+                  className="!px-2.5 !py-1 text-xs"
+                  disabled={!renaming.value.trim()}
+                >
+                  저장
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="!px-2.5 !py-1 text-xs"
+                  onClick={() => setRenaming(null)}
+                >
+                  취소
+                </Button>
+              </form>
+            ) : (
+              <div className="mb-1 flex items-center gap-2">
+                <h2 className="truncate text-base font-semibold text-ink">{project.name}</h2>
+                <span className="rounded-pill bg-surface-muted px-2 py-0.5 text-xs text-ink-muted">
+                  {STATUS_LABEL[project.status] ?? project.status}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setRenaming({ id: project.id, value: project.name })}
+                  className="shrink-0 rounded-sm px-1.5 py-0.5 text-xs text-ink-faint hover:text-accent-ink"
+                >
+                  이름 바꾸기
+                </button>
+              </div>
+            )}
             <p className="mb-2 font-mono text-xs text-ink-faint">/site/{project.slug}</p>
 
             <div className="flex flex-wrap items-center gap-2">

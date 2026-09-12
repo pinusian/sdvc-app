@@ -74,8 +74,10 @@ test.describe("[P3-7] 슬라이스 2 — 대화 화면", () => {
       ]);
 
       await page.getByRole("button", { name: /새 프로젝트/ }).click();
+      // [P7-1b] 이름을 정하는 단계가 생겼다 — 비워도 시작된다 (FR-030)
+      await page.getByRole("button", { name: "시작하기" }).click();
       await expect(page).toHaveURL(/\/conversations\//, { timeout: 30_000 });
-      await expect(page.getByText(/블록 1 \/ 5/)).toBeVisible();
+      await expect(page.getByText(/블록 1 \/ 6/)).toBeVisible();
 
       await page.getByLabel("메시지").fill("홈페이지 만들고 싶어");
       await page.getByRole("button", { name: "보내기" }).click();
@@ -93,7 +95,7 @@ test.describe("[P3-7] 슬라이스 2 — 대화 화면", () => {
         { type: "done" },
       ]);
       await page.getByRole("button", { name: /예, 이대로 진행/ }).click();
-      await expect(page.getByText(/블록 2 \/ 5/)).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByText(/블록 2 \/ 6/)).toBeVisible({ timeout: 15_000 });
       await expect(page.getByRole("button", { name: /예, 이대로 진행/ })).toHaveCount(0);
     } finally {
       await admin.auth.admin.deleteUser(userId);
@@ -119,7 +121,7 @@ test.describe("[P3-7] 슬라이스 2 — 대화 화면", () => {
       await login(page, email, password);
       await page.goto(`/conversations/${conversation.id}`);
 
-      await expect(page.getByText(/블록 3 \/ 5/)).toBeVisible();
+      await expect(page.getByText(/블록 3 \/ 6/)).toBeVisible();
       await expect(page.getByText("홈페이지 만들고 싶어")).toBeVisible();
       await expect(page.getByText("이런 계획을 제안합니다.")).toBeVisible();
     } finally {

@@ -60,8 +60,10 @@ test("[P5-5] 로그인 → 대화 시작 → 공개 → 익명 열람", async ({
 
     // 4) 새 프로젝트 → 대화 화면(블록 1)에서 시작한다
     await page.getByRole("button", { name: /새 프로젝트/ }).click();
+    // [P7-1b] 이름을 정하는 단계가 생겼다 — 비워도 시작된다 (FR-030)
+    await page.getByRole("button", { name: "시작하기" }).click();
     await expect(page).toHaveURL(/\/conversations\//, { timeout: 30_000 });
-    await expect(page.getByText(/블록 1 \/ 5/)).toBeVisible();
+    await expect(page.getByText(/블록 1 \/ 6/)).toBeVisible();
 
     // 5) 산출물 열람: AI 대신 파일을 직접 올려 서빙 경로를 확인한다
     const slug = `g5-${Date.now().toString(36)}`;

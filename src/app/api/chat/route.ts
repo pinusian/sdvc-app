@@ -22,6 +22,7 @@ import { publishArtifact } from "@/lib/artifacts/publish";
 import { recordUsage } from "@/lib/usage/store";
 import { loadAccountState } from "@/lib/billing/account";
 import { canStartChat } from "@/lib/billing/access";
+import { suggestProjectName } from "@/lib/projects/name";
 
 /**
  * SDVC 엔진과의 대화 API.
@@ -143,7 +144,9 @@ export async function POST(request: Request) {
 
   const publishContext: PublishContext = {
     ownerId: user.id,
-    projectName: title ?? "내 프로젝트",
+    // [P7-1b] 이름을 안 적었으면 첫 요청 문장으로 짓는다 (FR-030).
+    // 모델을 한 번 더 부르지 않는다 — 이름 하나에 돈을 쓸 이유가 없다.
+    projectName: title ?? suggestProjectName(firstUserMessage(history, message)),
     // 항상 null 또는 문자열로 맞춘다 (undefined가 DB까지 흘러가면 컬럼이 빠진다)
     projectId: conversation.projectId ?? null,
   };
@@ -158,6 +161,11 @@ export async function POST(request: Request) {
       },
     },
   );
+}
+
+/** 이름을 지을 근거가 되는 첫 사용자 발화. 기록이 비었으면 이번 메시지. */
+function firstUserMessage(history: { role: string; content: string }[], current: string): string {
+  return history.find((m) => m.role === "user")?.content ?? current;
 }
 
 /** 화면으로 흘려보내는 이벤트 — Claude 쪽 이벤트에 SDVC 진행 이벤트를 더한 것. */
