@@ -113,11 +113,12 @@ describe("[P8-7a] recordAdminAction", () => {
 });
 
 describe("[P8-7a] listAuditLogs", () => {
-  it("기록을 읽어온다 (보는 화면은 나중에 붙인다)", async () => {
+  it("기록을 읽어온다", async () => {
     const { client } = fakeAdmin();
 
-    const logs = await listAuditLogs(client, { limit: 50 });
+    const page = await listAuditLogs(client, { limit: 50 });
 
-    expect(logs).toHaveLength(1);
+    expect(page.rows).toHaveLength(1);
+    expect(page.hiddenCount).toBe(0);
   });
 });

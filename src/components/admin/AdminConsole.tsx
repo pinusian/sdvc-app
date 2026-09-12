@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import type { EconomicsSummary } from "@/lib/admin/economics";
 import type { DeveloperRow } from "@/lib/admin/developers";
 import { formatTokens } from "@/lib/billing/plans";
+import { endOfDaySeoul, formatSeoulDate } from "@/lib/time/seoul";
 
 /**
  * [P8-2][P8-3] 운영 화면 (FR-014·015, SC-006·007).
@@ -89,10 +90,9 @@ export function AdminConsole({ summary, developers }: Props) {
           userId,
           action: "grant_grade",
           grade: input.grade,
-          // 날짜만 고르므로 그날이 끝날 때까지로 본다.
-          ...(input.until
-            ? { until: new Date(input.until + "T23:59:59Z").toISOString() }
-            : {}),
+          // 날짜만 고르므로 **한국 시각 그날이 끝날 때까지**로 본다.
+          // UTC로 해석하면 만료가 9시간 늦어진다 — 그것이 BL-012였다.
+          ...(endOfDaySeoul(input.until) ? { until: endOfDaySeoul(input.until) } : {}),
           ...(input.reason.trim() ? { reason: input.reason.trim() } : {}),
         }
       : { userId, action: "grant_grade" };
@@ -104,7 +104,7 @@ export function AdminConsole({ summary, developers }: Props) {
             ? {
                 ...row,
                 grantedGrade: input ? input.grade : null,
-                grantedUntil: input && input.until ? input.until + "T23:59:59.000Z" : null,
+                grantedUntil: input ? endOfDaySeoul(input.until) : null,
                 grantedReason: input && input.reason.trim() ? input.reason.trim() : null,
               }
             : row,
@@ -164,7 +164,7 @@ export function AdminConsole({ summary, developers }: Props) {
           ),
         );
         setNotice(
-          `체험을 ${new Date(data.trialEndsAt).toLocaleDateString("ko-KR")}까지로 늘렸습니다.`,
+          `체험을 ${formatSeoulDate(data.trialEndsAt)}까지로 늘렸습니다.`,
         );
       } else {
         const suspended = action === "suspend";
@@ -282,8 +282,8 @@ export function AdminConsole({ summary, developers }: Props) {
                   {GRADE_LABEL[row.grade] ?? row.grade} ·{" "}
                   {STATUS_LABEL[row.subscriptionStatus] ?? row.subscriptionStatus}
                   {row.trialEndsAt &&
-                    ` · 체험 ~${new Date(row.trialEndsAt).toLocaleDateString("ko-KR")}`}
-                  {` · 가입 ${new Date(row.createdAt).toLocaleDateString("ko-KR")}`}
+                    ` · 체험 ~${formatSeoulDate(row.trialEndsAt)}`}
+                  {` · 가입 ${formatSeoulDate(row.createdAt)}`}
                 </p>
                 {row.suspendedAt && (
                   <p className="mt-0.5 text-xs font-medium text-red-700">
@@ -296,7 +296,7 @@ export function AdminConsole({ summary, developers }: Props) {
                     {row.grantedGrade &&
                       `부여: ${GRADE_LABEL[row.grantedGrade] ?? row.grantedGrade}` +
                         (row.grantedUntil
-                          ? ` (~${new Date(row.grantedUntil).toLocaleDateString("ko-KR")})`
+                          ? ` (~${formatSeoulDate(row.grantedUntil)})`
                           : " (무기한)") +
                         (row.grantedReason ? ` · ${row.grantedReason}` : "")}
                     {row.grantedGrade && row.monthlyTokenLimit != null && " · "}

@@ -44,6 +44,32 @@ describe("[P8-11a] AdminShell", () => {
     expect(banner?.className).toContain("bg-ink");
   });
 
+  it("[P8-7] 감사 기록 입구는 볼 수 있는 사람에게만 보인다", () => {
+    render(
+      <AdminShell email="ops@example.com" tier="super" canReadAudit>
+        <p>x</p>
+      </AdminShell>,
+    );
+    expect(screen.getByRole("link", { name: "감사 기록" })).toHaveAttribute(
+      "href",
+      "/admin/audit",
+    );
+  });
+
+  it("[P8-7] 지원 등급에게는 감사 기록 입구를 보이지 않는다 — 눌러도 못 보는 링크다", () => {
+    renderShell("support");
+    expect(screen.queryByRole("link", { name: "감사 기록" })).toBeNull();
+  });
+
+  it("[P8-7] 콘솔로 돌아가는 길도 있다", () => {
+    render(
+      <AdminShell email="ops@example.com" tier="super" canReadAudit>
+        <p>x</p>
+      </AdminShell>,
+    );
+    expect(screen.getByRole("link", { name: "개발자 관리" })).toHaveAttribute("href", "/admin");
+  });
+
   it("로그아웃 자리와 본문을 그대로 싣는다", () => {
     renderShell();
     expect(screen.getByRole("button", { name: "로그아웃" })).toBeInTheDocument();

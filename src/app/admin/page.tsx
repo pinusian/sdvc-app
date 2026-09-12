@@ -1,5 +1,6 @@
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { adminEntry, loadAdminActor } from "@/lib/admin/entry";
+import { adminCan } from "@/lib/admin/access";
 import { recordAdminAction } from "@/lib/admin/audit";
 import { listDevelopers } from "@/lib/admin/developers";
 import { summarizeEconomics, type UsageRow } from "@/lib/admin/economics";
@@ -59,6 +60,7 @@ export default async function AdminPage() {
     <AdminShell
       email={user!.email ?? ""}
       tier={actor!.adminTier}
+      canReadAudit={adminCan(actor!, "audit:read")}
       logout={
         <form action={logoutAction}>
           <Button

@@ -75,20 +75,79 @@ export interface AuditLogRow {
   created_at: string;
 }
 
-/** 기록을 읽어온다 (최신부터). 보는 화면은 나중에 붙인다. */
+/** [P8-7d] 조회 조건 (FR-041). */
+export interface AuditQuery {
+  actorId?: string;
+  action?: string;
+  succeeded?: boolean;
+  /**
+   * 콘솔 열람 기록을 접는다.
+   *
+   * 실물 8건 중 5건이 "콘솔 열었음"이었다 — 새로고침마다 한 건씩 쌓여
+   * 의미 있는 행위를 파묻는다. **지우지는 않는다**(열람도 증거다, Clarify 20).
+   */
+  hideConsoleOpens?: boolean;
+  limit?: number;
+}
+
+export interface AuditPage {
+  rows: AuditLogRow[];
+  /** 접어서 뺀 건수 — 화면이 "몇 건 숨김"이라고 말할 수 있게 */
+  hiddenCount: number;
+}
+
+/**
+ * 기록을 읽어온다 (최신부터).
+ *
+ * 콘솔 열람 거르기는 **DB가 아니라 여기서** 한다. `detail->>via`로 거르면
+ * `detail`이 없는 행(대부분)까지 null 비교에 걸려 조용히 사라진다 —
+ * 감사 기록에서 조용히 사라지는 행은 가장 위험한 종류의 버그다.
+ * 대신 넉넉히 읽어와서 걸러낸다(지금 규모에서 충분하다).
+ */
 export async function listAuditLogs(
   admin: SupabaseClient,
-  { actorId, limit = 100 }: { actorId?: string; limit?: number } = {},
-): Promise<AuditLogRow[]> {
+  { actorId, action, succeeded, hideConsoleOpens = false, limit = 100 }: AuditQuery = {},
+): Promise<AuditPage> {
+  // 걸러내고 나면 화면이 텅 비므로 접을 때는 여유를 두고 읽는다.
+  const fetchLimit = hideConsoleOpens ? limit * 4 : limit;
+
   let query = admin
     .from("admin_audit_logs")
     .select("id, actor_id, action, target_type, target_id, succeeded, detail, created_at")
     .order("created_at", { ascending: false })
-    .limit(limit);
+    .limit(fetchLimit);
 
   if (actorId) query = query.eq("actor_id", actorId);
+  if (action) query = query.eq("action", action);
+  if (succeeded !== undefined) query = query.eq("succeeded", succeeded);
 
   const { data, error } = await query;
   if (error) throw new Error(`감사 로그 조회 실패: ${error.message}`);
-  return (data ?? []) as AuditLogRow[];
+
+  const all = (data ?? []) as AuditLogRow[];
+  if (!hideConsoleOpens) return { rows: all.slice(0, limit), hiddenCount: 0 };
+
+  const kept = all.filter((row) => !(row.action === "developer:read" && row.detail?.via === "/admin"));
+  return { rows: kept.slice(0, limit), hiddenCount: all.length - kept.length };
+}
+
+/**
+ * id 뭉치를 이메일로 바꾼다.
+ *
+ * 기록에는 UUID만 남는다 — 화면에 `2c8303ba…`를 띄우면 아무도 못 읽는다.
+ * 탈퇴해 사라진 사람은 여기 없으므로, 부르는 쪽이 짧은 id로 대신 보여준다.
+ */
+export async function resolvePeopleEmails(
+  admin: SupabaseClient,
+  ids: (string | null)[],
+): Promise<Record<string, string>> {
+  const unique = [...new Set(ids.filter((id): id is string => Boolean(id)))];
+  if (unique.length === 0) return {};
+
+  const { data, error } = await admin.from("profiles").select("id, email").in("id", unique);
+  if (error) throw new Error(`계정 조회 실패: ${error.message}`);
+
+  const out: Record<string, string> = {};
+  for (const row of (data ?? []) as { id: string; email: string }[]) out[row.id] = row.email;
+  return out;
 }

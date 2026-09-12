@@ -24,10 +24,17 @@ interface Props {
   tier: AdminTier | null;
   /** 로그아웃 등 오른쪽 끝에 놓을 것 (서버 액션 폼을 그대로 받는다) */
   logout?: ReactNode;
+  /**
+   * [P8-7] 감사 기록을 볼 수 있는 등급인가 (FR-041).
+   *
+   * 볼 수 없는 사람에게는 링크를 그리지 않는다 — 눌러도 못 보는 링크는
+   * 없느니만 못하다(FR-040과 같은 원칙).
+   */
+  canReadAudit?: boolean;
   children: ReactNode;
 }
 
-export function AdminShell({ email, tier, logout, children }: Props) {
+export function AdminShell({ email, tier, logout, canReadAudit = false, children }: Props) {
   return (
     <div className="flex min-h-full flex-1 flex-col">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-ink px-7 py-4 text-surface">
@@ -42,7 +49,17 @@ export function AdminShell({ email, tier, logout, children }: Props) {
           )}
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4">
+          {canReadAudit && (
+            <>
+              <Link href="/admin" className="text-xs underline-offset-4 hover:underline">
+                개발자 관리
+              </Link>
+              <Link href="/admin/audit" className="text-xs underline-offset-4 hover:underline">
+                감사 기록
+              </Link>
+            </>
+          )}
           <span className="text-xs opacity-70">{email}</span>
           <Link href="/dashboard" className="text-xs underline-offset-4 hover:underline">
             개발자 화면
