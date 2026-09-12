@@ -38,12 +38,14 @@ describe("[P4-3] uploadArtifactFiles", () => {
   it("프로젝트 폴더 아래에 올리고 파일 종류를 알려준다", async () => {
     const { client, uploads, from } = fakeStorage();
 
-    const count = await uploadArtifactFiles(client, "proj-1", [
+    const result = await uploadArtifactFiles(client, "proj-1", [
       { path: "index.html", content: "<h1>안녕</h1>" },
       { path: "css/style.css", content: "body{}" },
     ]);
 
-    expect(count).toBe(2);
+    expect(result.count).toBe(2);
+    // [P7-12] 견줄 것이 없으면 '바뀐 것'으로 본다 — 모르면 경고하지 않는다
+    expect(result.unchanged).toEqual([]);
     expect(from).toHaveBeenCalledWith("artifacts");
     expect(uploads.map((u) => u.path)).toEqual(["proj-1/index.html", "proj-1/css/style.css"]);
     expect(uploads[0].options.contentType).toBe("text/html; charset=utf-8");

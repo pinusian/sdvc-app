@@ -30,6 +30,13 @@ export interface VersionMeta {
   at: string;
   /** 그때 사용자가 무엇을 요청했는지 — 목록에서 고를 때의 단서 */
   request: string;
+  /**
+   * [P7-12] 이 버전에서 **실제로 내용이 바뀐 파일들** (SC-008).
+   *
+   * "고쳤다"는 말이 아니라 결과를 남긴다. 옛 버전에는 없는 항목이라
+   * 선택값이다 — 없으면 "기록 이전"이라는 뜻이지 "안 바뀌었다"가 아니다.
+   */
+  changed?: string[];
 }
 
 export interface VersionEntry {
@@ -82,8 +89,9 @@ export async function saveVersion(
   {
     projectId,
     request,
+    changed,
     now = new Date(),
-  }: { projectId: string; request: string; now?: Date },
+  }: { projectId: string; request: string; changed?: string[]; now?: Date },
 ): Promise<string | null> {
   const livePaths = await listFilesUnder(admin, ARTIFACT_BUCKET, projectId);
   if (livePaths.length === 0) return null;
@@ -105,7 +113,7 @@ export async function saveVersion(
       });
   }
 
-  const meta: VersionMeta = { at: now.toISOString(), request };
+  const meta: VersionMeta = { at: now.toISOString(), request, ...(changed ? { changed } : {}) };
   await admin.storage
     .from(VERSION_BUCKET)
     .upload(`${projectId}/${version}/meta.json`, JSON.stringify(meta), {

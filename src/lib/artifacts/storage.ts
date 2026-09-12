@@ -35,22 +35,51 @@ export function contentTypeOf(path: string): string {
   return CONTENT_TYPES[extension] ?? "text/plain; charset=utf-8";
 }
 
+export interface UploadResult {
+  count: number;
+  /** [P7-12] 올리기 전과 내용이 **똑같았던** 파일들 (SC-008) */
+  unchanged: string[];
+}
+
 export async function uploadArtifactFiles(
   admin: SupabaseClient,
   projectId: string,
   files: ArtifactFile[],
-): Promise<number> {
+): Promise<UploadResult> {
   const bucket = admin.storage.from(ARTIFACT_BUCKET);
+  const unchanged: string[] = [];
 
   for (const file of files) {
-    const { error } = await bucket.upload(`${projectId}/${file.path}`, file.content, {
+    const key = `${projectId}/${file.path}`;
+
+    // [P7-12] 덮어쓰기 전에 지금 내용과 견줘본다 — "고쳤습니다"인데 글자
+    // 하나 안 바뀐 경우를 알려주기 위해서다. 읽기가 실패하면 그냥 넘어간다:
+    // 확인은 덤이고, 저장이 본래 할 일이다.
+    if (await sameAsStored(bucket, key, file.content)) unchanged.push(file.path);
+
+    const { error } = await bucket.upload(key, file.content, {
       contentType: contentTypeOf(file.path),
       upsert: true, // 다시 만들기(재생성)를 지원한다
     });
     if (error) throw new Error(`파일 저장 실패(${file.path}): ${error.message}`);
   }
 
-  return files.length;
+  return { count: files.length, unchanged };
+}
+
+/** 저장된 내용이 지금 올리려는 것과 같은가. 모르면 `false`(= 바뀐 것으로 본다). */
+async function sameAsStored(
+  bucket: ReturnType<SupabaseClient["storage"]["from"]>,
+  key: string,
+  content: string,
+): Promise<boolean> {
+  try {
+    const { data, error } = await bucket.download(key);
+    if (error || !data) return false;
+    return (await data.text()) === content;
+  } catch {
+    return false;
+  }
 }
 
 /** 프로젝트 폴더의 파일을 하위 폴더까지 모두 지운다. 지운 개수를 돌려준다. */

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { parseArtifactFiles, parseImageUses } from "@/lib/artifacts/parse";
+import { describeUnchanged } from "@/lib/artifacts/verify";
 import {
   artifactFileExists,
   copyAttachmentToArtifact,
@@ -62,11 +63,25 @@ export async function publishArtifact(
   if (!project) return null;
 
   try {
-    const fileCount = files.length > 0 ? await uploadArtifactFiles(admin, project.id, files) : 0;
+    // [P7-12] 올리면서 **실제로 바뀐 것이 있는지**도 함께 본다 (SC-008).
+    const upload =
+      files.length > 0
+        ? await uploadArtifactFiles(admin, project.id, files)
+        : { count: 0, unchanged: [] as string[] };
+    const fileCount = upload.count ?? 0;
+    const unchanged = upload.unchanged ?? [];
 
     // [P7-10] 이미지는 첨부 원본을 그대로 복사한다. 한 장이 실패해도
     // 나머지와 파일은 살리고, 무엇이 안 됐는지 알린다.
-    const warnings = [...invalid];
+    const warnings = invalid.map((item) => `이미지 지시를 알아보지 못했습니다: ${item}`);
+
+    // 고쳤다는데 글자 하나 안 바뀌었으면 사용자는 알 길이 없다 — BL-001b와
+    // 같은 종류의 조용한 실패다.
+    const unchangedWarning = describeUnchanged(
+      files.map((file) => file.path),
+      unchanged,
+    );
+    if (unchangedWarning) warnings.push(unchangedWarning);
     let imageCount = 0;
     for (const use of uses) {
       try {
@@ -89,12 +104,15 @@ export async function publishArtifact(
         const referenced = files.some((file) => file.content.includes(use.path));
         if (!replacing && !referenced) {
           warnings.push(
-            `${use.path} (사진은 저장했지만 홈페이지에서 그 사진을 쓰는 곳이 없어 화면에 보이지 않습니다. "사진을 화면에 보이게 해줘"라고 한 번 더 말씀해주세요.)`,
+            `${use.path} 사진은 저장했지만 홈페이지에서 그 사진을 쓰는 곳이 없어 ` +
+              `화면에 보이지 않습니다. "사진을 화면에 보이게 해줘"라고 한 번 더 말씀해주세요.`,
           );
         }
       } catch (error) {
         warnings.push(
-          `${use.path} (${error instanceof Error ? error.message : "이미지를 넣지 못했습니다"})`,
+          `이미지를 넣지 못했습니다: ${use.path} (${
+            error instanceof Error ? error.message : "알 수 없는 오류"
+          })`,
         );
       }
     }
@@ -105,7 +123,13 @@ export async function publishArtifact(
     // [P7-6a] 발행이 **끝난 뒤** 지금 상태를 버전으로 남긴다 (FR-012).
     // 실패해도 발행은 살린다 — 기록보다 결과가 먼저다. 대신 조용히 넘기지 않는다.
     try {
-      await saveVersion(admin, { projectId: project.id, request });
+      await saveVersion(admin, {
+        projectId: project.id,
+        request,
+        // [P7-12] 이 버전에서 **실제로 바뀐 파일**. 되돌리기 목록에서
+        // "이때 무엇이 달라졌는지"를 보려면 기록이 남아 있어야 한다 (SC-008).
+        changed: files.map((f) => f.path).filter((path) => !unchanged.includes(path)),
+      });
     } catch {
       warnings.push(
         "이번 변경은 저장됐지만 되돌리기용 사본을 남기지 못했습니다. 이 시점으로는 되돌릴 수 없습니다.",

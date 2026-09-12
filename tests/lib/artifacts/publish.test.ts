@@ -61,7 +61,7 @@ describe("[P4-3] publishArtifact", () => {
     vi.clearAllMocks();
     isSlugTaken.mockResolvedValue(false);
     createProject.mockResolvedValue(PROJECT);
-    uploadArtifactFiles.mockResolvedValue(2);
+    uploadArtifactFiles.mockResolvedValue({ count: 2, unchanged: [] });
     setProjectStatus.mockResolvedValue(undefined);
     setConversationProject.mockResolvedValue(undefined);
   });
@@ -160,7 +160,10 @@ describe("[P7-10] 산출물에 이미지 넣기", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getProjectById.mockResolvedValue(PROJECT);
-    uploadArtifactFiles.mockImplementation(async (_a, _id, files) => files.length);
+    uploadArtifactFiles.mockImplementation(async (_a, _id, files) => ({
+      count: (files as unknown[]).length,
+      unchanged: [],
+    }));
     setProjectStatus.mockResolvedValue(undefined);
     setConversationProject.mockResolvedValue(undefined);
   });
@@ -245,7 +248,10 @@ describe("[P7-11] 넣었는데 안 보이는 경우를 잡아낸다", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getProjectById.mockResolvedValue(PROJECT);
-    uploadArtifactFiles.mockImplementation(async (_a, _id, files) => files.length);
+    uploadArtifactFiles.mockImplementation(async (_a, _id, files) => ({
+      count: (files as unknown[]).length,
+      unchanged: [],
+    }));
     setProjectStatus.mockResolvedValue(undefined);
     setConversationProject.mockResolvedValue(undefined);
     copyAttachmentToArtifact.mockResolvedValue(undefined);
@@ -302,7 +308,10 @@ describe("[P7-6a] 발행 후 버전 보관", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getProjectById.mockResolvedValue(PROJECT);
-    uploadArtifactFiles.mockImplementation(async (_a, _id, files) => files.length);
+    uploadArtifactFiles.mockImplementation(async (_a, _id, files) => ({
+      count: (files as unknown[]).length,
+      unchanged: [],
+    }));
     setProjectStatus.mockResolvedValue(undefined);
     setConversationProject.mockResolvedValue(undefined);
     artifactFileExists.mockResolvedValue(false);

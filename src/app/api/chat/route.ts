@@ -25,6 +25,7 @@ import {
   setCurrentBlock,
 } from "@/lib/conversations/store";
 import { publishArtifact } from "@/lib/artifacts/publish";
+import { NOTHING_WRITTEN, claimsChange } from "@/lib/artifacts/verify";
 import { recordUsage } from "@/lib/usage/store";
 import { loadAccountState } from "@/lib/billing/account";
 import { canStartChat } from "@/lib/billing/access";
@@ -379,11 +380,13 @@ function captureAndFilter(
             // [P7-10] 못 넣은 이미지는 **조용히 넘어가지 않는다** — 모델이
             // "넣었습니다"라고 답했는데 사진이 없으면 사용자는 알 길이 없다.
             for (const warning of published.warnings ?? []) {
-              emit(controller, {
-                type: "error",
-                message: `이미지를 넣지 못했습니다: ${warning}`,
-              });
+              emit(controller, { type: "error", message: warning });
             }
+          } else if (publish.projectId && claimsChange(content)) {
+            // [P7-12] 고쳤다고 해놓고 **파일을 하나도 내지 않은** 경우 (SC-008).
+            // publishArtifact는 낼 것이 없으면 null을 돌려주고, 예전에는 여기서
+            // 조용히 넘어갔다 — 사용자는 고쳐진 줄 알았다(BL-001b).
+            emit(controller, { type: "error", message: NOTHING_WRITTEN });
           }
         } catch (error) {
           emit(controller, {
