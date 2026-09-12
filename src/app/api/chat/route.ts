@@ -26,6 +26,7 @@ import {
 } from "@/lib/conversations/store";
 import { publishArtifact } from "@/lib/artifacts/publish";
 import { NOTHING_WRITTEN, claimsChange } from "@/lib/artifacts/verify";
+import { loadCurrentFiles } from "@/lib/artifacts/current";
 import { recordUsage } from "@/lib/usage/store";
 import { loadAccountState } from "@/lib/billing/account";
 import { canStartChat } from "@/lib/billing/access";
@@ -156,6 +157,14 @@ export async function POST(request: Request) {
   await appendMessage(admin, { conversationId, role: "user", content: message });
 
   const title = conversation.title ?? undefined;
+
+  // [BL-018] 이미 만든 프로젝트면 **지금 저장된 파일**을 함께 알려준다.
+  // 대화 기록만 믿으면 되돌리기(P7-7) 뒤에 없는 버전을 고치게 되고,
+  // 기록이 잘린 대화에서는 "내용을 붙여넣어 주세요"라고 되묻는다.
+  const currentFiles = conversation.projectId
+    ? await loadCurrentFiles(admin, conversation.projectId)
+    : undefined;
+
   const stream = await createChatStream({
     apiKey,
     system: buildSystemPrompt({
@@ -165,6 +174,7 @@ export async function POST(request: Request) {
       published: Boolean(conversation.projectId),
       // [P7-10] 붙여준 첨부를 홈페이지에 넣는 방법을 알려준다 (FR-032)
       attachmentIds,
+      currentFiles,
     }),
     messages: [
       ...history,

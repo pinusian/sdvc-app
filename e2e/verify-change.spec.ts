@@ -172,9 +172,6 @@ test.describe("[P7-12] 고친 것을 실제로 확인한다", () => {
       const res = await page.request.post("/api/chat", {
         data: {
           conversationId: conv!.id,
-          // 내용을 직접 준다 — 이 시험이 재려는 것은 "모델이 옛 파일을
-          // 기억하는가"가 아니라 **바뀐 것을 서버가 확인하고 기록하는가**다.
-          // (모델이 배포된 파일을 모른다는 별개 문제는 BL-018로 접수했다.)
           message:
             "index.html을 정확히 다음 내용으로 바꿔주세요. 설명은 한 줄만 하세요.\n" +
             "<h1>바뀐 제목</h1>",
@@ -210,6 +207,82 @@ test.describe("[P7-12] 고친 것을 실제로 확인한다", () => {
 
       expect(meta.changed, "무엇이 바뀌었는지 기록이 남아야 한다").toBeDefined();
       expect(meta.changed).toContain("index.html");
+    } finally {
+      await cleanup(admin, userId);
+    }
+  });
+
+  test("[BL-018] 배포된 파일을 알려주므로 '내용을 붙여넣어 달라'고 되묻지 않는다", async ({
+    page,
+  }) => {
+    const { admin, email, userId } = await setup("know");
+
+    try {
+      await page.goto("/login");
+      await page.getByLabel("이메일").fill(email);
+      await page.getByLabel("비밀번호").fill(PASSWORD);
+      await page.getByRole("button", { name: "로그인" }).click();
+      await expect(page).toHaveURL(/\/dashboard/, { timeout: 20_000 });
+
+      const { data: project } = await admin
+        .from("projects")
+        .insert({
+          owner_id: userId,
+          name: "기억 확인",
+          slug: `p712k-${Date.now().toString(36)}`,
+          status: "deployed",
+          visibility: "private",
+        })
+        .select("id")
+        .single();
+
+      // 대화 기록은 **비어 있다** — 되돌리기 뒤나 기록이 잘린 대화와 같은 상태
+      await admin.storage
+        .from("artifacts")
+        .upload(
+          `${project!.id}/index.html`,
+          "<!doctype html><html><head><title>소금빵 가게</title></head><body><h1>소금빵 가게</h1></body></html>",
+          { contentType: "text/html; charset=utf-8", upsert: true },
+        );
+
+      const { data: conv } = await admin
+        .from("conversations")
+        .insert({
+          owner_id: userId,
+          title: "기억 확인",
+          current_block: "maintenance",
+          project_id: project!.id,
+        })
+        .select("id")
+        .single();
+
+      const res = await page.request.post("/api/chat", {
+        data: { conversationId: conv!.id, message: "제목을 '단팥빵 가게'로 바꿔주세요." },
+        timeout: 180_000,
+      });
+      expect(res.status()).toBe(200);
+      const stream = await res.text();
+      const answer = stream
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as { type: string; text?: string })
+        .filter((e) => e.type === "text")
+        .map((e) => e.text ?? "")
+        .join("");
+
+      // 예전에는 "현재 내용을 붙여넣어 주시겠어요?"라고 되물었다
+      expect(answer, `모델 답변: ${answer.slice(0, 300)}`).not.toMatch(
+        /붙여넣어|알려주시|전체 내용을.*주시/,
+      );
+
+      // 그리고 실제로 고쳐졌는가 — 기존 내용을 알아야만 할 수 있는 일이다
+      const { data: saved } = await admin.storage
+        .from("artifacts")
+        .download(`${project!.id}/index.html`);
+      const html = await saved!.text();
+      expect(html, `저장된 내용: ${html.slice(0, 200)}`).toContain("단팥빵 가게");
+      // 제목만 바꾸라 했으니 문서 뼈대는 남아 있어야 한다
+      expect(html.toLowerCase()).toContain("<!doctype html>");
     } finally {
       await cleanup(admin, userId);
     }
