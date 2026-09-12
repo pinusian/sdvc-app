@@ -192,6 +192,7 @@ export async function POST(request: Request) {
     projectName: title ?? suggestProjectName(firstUserMessage(history, message)),
     // 항상 null 또는 문자열로 맞춘다 (undefined가 DB까지 흘러가면 컬럼이 빠진다)
     projectId: conversation.projectId ?? null,
+    request: message,
   };
 
   return new Response(
@@ -233,6 +234,8 @@ interface PublishContext {
   ownerId: string;
   projectName: string;
   projectId: string | null;
+  /** [P7-6a] 이번 사용자 요청 — 버전 목록의 설명이 된다 */
+  request: string;
 }
 
 /** [P6-2] 스트림에서 걷어낸 사용량 — 화면에는 보내지 않고 기록만 한다. */
@@ -363,6 +366,8 @@ function captureAndFilter(
             answer: content,
             projectName: publish.projectName,
             projectId: publish.projectId,
+            // [P7-6a] 버전 목록에서 "무엇을 고쳐서 이렇게 됐는지" 보이도록
+            request: publish.request,
           });
           if (published) {
             emit(controller, {

@@ -14,6 +14,7 @@ import {
   type Project,
 } from "@/lib/projects/store";
 import { setConversationProject } from "@/lib/conversations/store";
+import { saveVersion } from "@/lib/versions/store";
 
 /**
  * [P4-3] 대화 답변 → 실제 산출물.
@@ -32,6 +33,8 @@ export interface PublishInput {
   projectName: string;
   /** 이미 이 대화로 만든 프로젝트가 있으면 그 id */
   projectId?: string | null;
+  /** [P7-6a] 이번에 사용자가 무엇을 요청했는지 — 버전 목록에서 고를 때의 단서 */
+  request?: string;
 }
 
 export interface PublishResult {
@@ -45,7 +48,7 @@ export interface PublishResult {
 
 export async function publishArtifact(
   admin: SupabaseClient,
-  { ownerId, conversationId, answer, projectName, projectId }: PublishInput,
+  { ownerId, conversationId, answer, projectName, projectId, request = "" }: PublishInput,
 ): Promise<PublishResult | null> {
   const files = parseArtifactFiles(answer);
   const { uses, invalid } = parseImageUses(answer);
@@ -98,6 +101,17 @@ export async function publishArtifact(
 
     await setProjectStatus(admin, project.id, ownerId, "deployed");
     await setConversationProject(admin, conversationId, ownerId, project.id);
+
+    // [P7-6a] 발행이 **끝난 뒤** 지금 상태를 버전으로 남긴다 (FR-012).
+    // 실패해도 발행은 살린다 — 기록보다 결과가 먼저다. 대신 조용히 넘기지 않는다.
+    try {
+      await saveVersion(admin, { projectId: project.id, request });
+    } catch {
+      warnings.push(
+        "이번 변경은 저장됐지만 되돌리기용 사본을 남기지 못했습니다. 이 시점으로는 되돌릴 수 없습니다.",
+      );
+    }
+
     // 방금 바꾼 상태를 반영해서 돌려준다 (부르는 쪽이 다시 조회하지 않도록).
     return { project: { ...project, status: "deployed" }, fileCount, imageCount, warnings };
   } catch (error) {

@@ -13,6 +13,7 @@ const setProjectStatus = vi.fn();
 const setConversationProject = vi.fn();
 const copyAttachmentToArtifact = vi.fn();
 const artifactFileExists = vi.fn();
+const saveVersion = vi.fn();
 
 vi.mock("@/lib/artifacts/storage", () => ({
   uploadArtifactFiles: (...args: unknown[]) => uploadArtifactFiles(...args),
@@ -29,6 +30,10 @@ vi.mock("@/lib/projects/store", () => ({
 
 vi.mock("@/lib/conversations/store", () => ({
   setConversationProject: (...args: unknown[]) => setConversationProject(...args),
+}));
+
+vi.mock("@/lib/versions/store", () => ({
+  saveVersion: (...args: unknown[]) => saveVersion(...args),
 }));
 
 const { publishArtifact } = await import("@/lib/artifacts/publish");
@@ -286,5 +291,53 @@ describe("[P7-11] 넣었는데 안 보이는 경우를 잡아낸다", () => {
     });
 
     expect(result?.warnings).toEqual([]);
+  });
+});
+
+/**
+ * [P7-6a] 발행이 끝나면 그 시점을 버전으로 남긴다 (FR-012).
+ * **발행 뒤**에 남겨야 "지금 보이는 상태"도 목록에 있다.
+ */
+describe("[P7-6a] 발행 후 버전 보관", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getProjectById.mockResolvedValue(PROJECT);
+    uploadArtifactFiles.mockImplementation(async (_a, _id, files) => files.length);
+    setProjectStatus.mockResolvedValue(undefined);
+    setConversationProject.mockResolvedValue(undefined);
+    artifactFileExists.mockResolvedValue(false);
+    saveVersion.mockResolvedValue("0001");
+  });
+
+  it("파일을 올린 뒤 사본을 남긴다", async () => {
+    await publishArtifact(admin, {
+      ownerId: "user-1",
+      conversationId: "conv-1",
+      answer: answerWithFiles(),
+      projectName: "내 홈페이지",
+      projectId: "proj-1",
+      request: "빵집 홈페이지 만들어줘",
+    });
+
+    expect(saveVersion).toHaveBeenCalledWith(
+      admin,
+      expect.objectContaining({ projectId: "proj-1", request: "빵집 홈페이지 만들어줘" }),
+    );
+  });
+
+  it("사본 남기기가 실패해도 발행은 살린다 (기록보다 결과가 먼저다)", async () => {
+    saveVersion.mockRejectedValue(new Error("저장소 오류"));
+
+    const result = await publishArtifact(admin, {
+      ownerId: "user-1",
+      conversationId: "conv-1",
+      answer: answerWithFiles(),
+      projectName: "내 홈페이지",
+      projectId: "proj-1",
+      request: "만들어줘",
+    });
+
+    expect(result?.fileCount).toBe(2);
+    expect(result?.warnings?.some((w) => w.includes("되돌리기"))).toBe(true);
   });
 });

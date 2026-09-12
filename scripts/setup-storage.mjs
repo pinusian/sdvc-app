@@ -26,6 +26,9 @@ import { createClient } from "@supabase/supabase-js";
 const BUCKETS = [
   { name: "artifacts", fileSizeLimit: "5MB" },
   { name: "attachments", fileSizeLimit: "10MB" },
+  // [P7-6a] 되돌리기용 사본. artifacts와 섞으면 서빙이 한 번만 어긋나도
+  // 옛 버전이 통째로 공개된다.
+  { name: "versions", fileSizeLimit: "10MB" },
 ];
 
 loadEnvLocal();
