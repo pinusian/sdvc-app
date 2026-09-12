@@ -21,6 +21,16 @@ export interface Plan {
   planId?: "basic" | "pro";
 }
 
+/**
+ * 등급별 월 요금(USD). **여기가 유일한 출처다** — 요금제 화면과 원가 계산
+ * ([P8-3])이 각자 숫자를 들고 있으면 언젠가 어긋나고, 그때 마진이 거짓말을 한다.
+ */
+export const GRADE_PRICE_USD: Record<Grade, number> = {
+  trial: 0,
+  basic: 12,
+  pro: 35,
+};
+
 /** 50만 → "50만", 200만 → "200만" (IT를 잘 모르는 사람도 읽히게) */
 export function formatTokens(tokens: number): string {
   if (tokens >= 100_000_000) return `${tokens / 100_000_000}억`;
@@ -45,7 +55,7 @@ export const PLANS: Plan[] = [
   {
     grade: "basic",
     title: "기본",
-    price: "$12",
+    price: `$${GRADE_PRICE_USD.basic}`,
     period: "월",
     summary: "혼자 쓰는 홈페이지 한두 개에 알맞습니다.",
     features: [...limitsOf("basic"), "만든 뒤 수정·기능 추가", "이메일 문의"],
@@ -54,7 +64,7 @@ export const PLANS: Plan[] = [
   {
     grade: "pro",
     title: "프로",
-    price: "$35",
+    price: `$${GRADE_PRICE_USD.pro}`,
     period: "월",
     summary: "여러 프로젝트를 계속 손보는 분께.",
     features: [...limitsOf("pro"), "기본의 모든 기능", "우선 문의"],
