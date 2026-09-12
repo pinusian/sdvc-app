@@ -8,6 +8,7 @@ describe("[P2-3] GET /api/health", () => {
     delete process.env.NEXT_PUBLIC_SUPABASE_URL;
     delete process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
     delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.VERCEL_GIT_COMMIT_SHA;
   });
 
   afterEach(() => {
@@ -26,7 +27,18 @@ describe("[P2-3] GET /api/health", () => {
       anthropicKeyConfigured: false,
       // [BL-008] 서버관리자 자동 승격 설정 여부 — 값이 아니라 있고 없음만
       adminEmailConfigured: false,
+      // [P8-12] 로컬에서는 배포 커밋이 없다
+      commit: null,
     });
+  });
+
+  it("[P8-12] 배포된 커밋을 짧게 알려준다 — '고쳤는데 반영됐나'를 매번 추측하지 않기 위해", async () => {
+    process.env.VERCEL_GIT_COMMIT_SHA = "6f41e9b1234567890abcdef1234567890abcdef1";
+
+    const { GET } = await import("@/app/api/health/route");
+    const body = await (await GET()).json();
+
+    expect(body.commit).toBe("6f41e9b");
   });
 
   it("Supabase 환경변수가 있으면 연결을 시도하고 결과를 boolean으로만 반환한다", async () => {

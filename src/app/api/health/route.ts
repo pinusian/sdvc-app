@@ -15,12 +15,21 @@ export async function GET() {
     anthropicKeyConfigured: boolean;
     /** [BL-008] 서버관리자 자동 승격이 가능한 설정인지 — 값은 노출하지 않는다 */
     adminEmailConfigured: boolean;
+    /**
+     * [P8-12] 지금 돌고 있는 배포의 커밋(짧게). 로컬에서는 null.
+     *
+     * "고쳤는데 반영이 됐나"를 두 번 추측으로 때웠다([BL-006]·[BL-010]).
+     * 공개해도 되는 값이다 — 저장소가 어차피 공개이고, 이것 하나로
+     * 배포 지연과 코드 결함을 구별할 수 있다.
+     */
+    commit: string | null;
   } = {
     supabaseUrlConfigured: Boolean(supabaseUrl),
     supabaseKeyConfigured: Boolean(supabaseKey),
     supabaseReachable: null,
     anthropicKeyConfigured: Boolean(process.env.ANTHROPIC_API_KEY),
     adminEmailConfigured: Boolean(process.env.ADMIN_EMAIL),
+    commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? null,
   };
 
   if (supabaseUrl && supabaseKey) {

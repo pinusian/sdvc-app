@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { describe, expect, it, vi, beforeAll, beforeEach, afterEach } from "vitest";
 
 /**
  * POST /api/chat 라우트 테스트.
@@ -105,6 +105,18 @@ function happyPath() {
 }
 
 const VALID = { conversationId: "conv-1", message: "홈페이지 만들고 싶어" };
+
+/**
+ * 라우트 모듈을 미리 한 번 불러 둔다.
+ *
+ * 각 테스트가 본문에서 `await import`를 하므로 **첫 테스트가 모듈 그래프
+ * 전체의 변환 비용을 혼자 뒤집어썼다**(기계가 바쁘면 5초 제한을 넘겼다).
+ * 더 나쁜 것은 그 다음이다: 시간이 초과돼도 진행 중이던 호출은 계속 끝나서
+ * **다음 테스트의 mock을 오염**시켜 2건이 연쇄로 깨졌다.
+ */
+beforeAll(async () => {
+  await import("@/app/api/chat/route");
+});
 
 describe("[P3-2] POST /api/chat — 접근 통제와 입력 검증", () => {
   const originalEnv = { ...process.env };
