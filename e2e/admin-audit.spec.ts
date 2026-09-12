@@ -61,8 +61,10 @@ test.describe("[P8-7f] 감사 기록", () => {
       await page.getByRole("link", { name: "감사 기록" }).click();
       await expect(page).toHaveURL(/\/admin\/audit/);
 
+      // 전체 실행에서 이 시험이 맨 처음 돈다 — dev 서버가 이 화면을 처음
+      // 컴파일하느라 기본 5초를 넘길 수 있다. 다른 시험들과 같게 넉넉히 준다.
       const row = page.getByRole("row", { name: /체험 연장/ }).first();
-      await expect(row).toBeVisible();
+      await expect(row).toBeVisible({ timeout: 30_000 });
       // UUID가 아니라 사람이 읽는 이메일이어야 한다
       await expect(row.getByText(boss.email)).toBeVisible();
       await expect(row.getByText(student.email)).toBeVisible();
@@ -83,7 +85,9 @@ test.describe("[P8-7f] 감사 기록", () => {
       for (let i = 0; i < 3; i += 1) await page.goto("/admin");
 
       await page.goto("/admin/audit");
-      await expect(page.getByText(/화면 열람 \d+건은 접었습니다/)).toBeVisible();
+      await expect(page.getByText(/화면 열람 \d+건은 접었습니다/)).toBeVisible({
+        timeout: 30_000,
+      });
       await expect(page.getByRole("row", { name: /개발자 목록 열람/ })).toHaveCount(0);
 
       // 켜면 함께 보인다

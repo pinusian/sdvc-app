@@ -6,6 +6,7 @@ import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { signUpDeveloper } from "@/lib/auth/signup";
 import { loginDeveloper } from "@/lib/auth/login";
 import { ensureAdminRole } from "@/lib/auth/admin";
+import { ensureProfile } from "@/lib/auth/profile";
 import { landingAfterAdminLogin, loadAdminActor } from "@/lib/admin/entry";
 
 export type AuthActionState = { error: string | null };
@@ -48,7 +49,7 @@ export async function loginAction(
     return { error: result.error };
   }
 
-  await promoteIfAdmin(supabase);
+  await healAccount(supabase);
 
   redirect("/dashboard");
 }
@@ -73,7 +74,7 @@ export async function adminLoginAction(
     return { error: result.error };
   }
 
-  await promoteIfAdmin(supabase);
+  await healAccount(supabase);
 
   redirect(await landingForCurrentUser(supabase));
 }
@@ -95,7 +96,7 @@ async function landingForCurrentUser(
 }
 
 /**
- * [BL-008] 서버관리자 자동 승격 (FR-024).
+ * [BL-008] 서버관리자 자동 승격 (FR-024) + [BL-016] 프로필 자가 복구 (FR-021).
  *
  * `ensureAdminRole`은 [P2-7]에서 만들었지만 **어디에서도 부르지 않았다** —
  * 함수가 있는 것과 동작하는 것은 다르다. ADMIN_EMAIL로 가입해도 계속
@@ -105,7 +106,7 @@ async function landingForCurrentUser(
  * 승격되지 않고, 나중에 ADMIN_EMAIL을 바꿔도 반영되지 않는다.
  * 승격 실패가 로그인을 막지는 않는다 — 들어가서 문의라도 할 수 있어야 한다.
  */
-async function promoteIfAdmin(
+async function healAccount(
   supabase: Awaited<ReturnType<typeof createClient>>,
 ): Promise<void> {
   try {
@@ -114,7 +115,14 @@ async function promoteIfAdmin(
     } = await supabase.auth.getUser();
     if (!user?.email) return;
 
-    await ensureAdminRole(createAdminClient(), user.id, user.email, process.env.ADMIN_EMAIL);
+    const admin = createAdminClient();
+
+    // [BL-016] **프로필을 먼저.** `ensureAdminRole`은 update라서 행이 없으면
+    // 0행을 고치고 조용히 지나간다 — 프로필 없는 계정은 승격도 함께 실패한다.
+    // 가입 트리거가 어떤 이유로든 걸렀을 때 여기서 스스로 낫는다.
+    await ensureProfile(admin, user.id, user.email);
+
+    await ensureAdminRole(admin, user.id, user.email, process.env.ADMIN_EMAIL);
   } catch {
     // 조용히 넘긴다 — 사용자가 원한 것은 로그인이다.
   }

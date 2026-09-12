@@ -12,6 +12,7 @@ const getUser = vi.fn();
 const loginDeveloper = vi.fn();
 const signUpDeveloper = vi.fn();
 const ensureAdminRole = vi.fn();
+const ensureProfile = vi.fn();
 
 vi.mock("next/headers", () => ({
   headers: async () => new Map([["host", "sdvc-app.vercel.app"]]),
@@ -38,6 +39,10 @@ vi.mock("@/lib/auth/signup", () => ({
 
 vi.mock("@/lib/auth/admin", () => ({
   ensureAdminRole: (...a: unknown[]) => ensureAdminRole(...a),
+}));
+
+vi.mock("@/lib/auth/profile", () => ({
+  ensureProfile: (...a: unknown[]) => ensureProfile(...a),
 }));
 
 function form(email: string, password = "TestPass123!") {
@@ -69,6 +74,7 @@ describe("[BL-008] loginAction — 관리자 자동 승격 (FR-024)", () => {
       error: null,
     });
     ensureAdminRole.mockResolvedValue({ promoted: true });
+    ensureProfile.mockResolvedValue({ created: false });
   });
 
   afterEach(() => {
@@ -121,6 +127,90 @@ describe("[BL-008] loginAction — 관리자 자동 승격 (FR-024)", () => {
       "user-2",
       "student@example.com",
       "boss@example.com",
+    );
+  });
+});
+
+/**
+ * [BL-016] 프로필 자가 복구가 로그인에 배선되어 있는가.
+ *
+ * **순서가 핵심이다.** `ensureAdminRole`은 `update`라서 프로필이 없으면
+ * 0행을 고치고 조용히 지나간다 — 프로필을 먼저 만들지 않으면 관리자
+ * 승격도 함께 실패한다.
+ */
+describe("[BL-016] loginAction — 프로필 자가 복구", () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.ADMIN_EMAIL = "boss@example.com";
+    loginDeveloper.mockResolvedValue({ success: true });
+    getUser.mockResolvedValue({
+      data: { user: { id: "user-1", email: "student@example.com" } },
+      error: null,
+    });
+    ensureAdminRole.mockResolvedValue({ promoted: false });
+    ensureProfile.mockResolvedValue({ created: false });
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  it("로그인할 때마다 프로필이 있는지 확인한다", async () => {
+    const { loginAction } = await import("@/app/(auth)/actions");
+    await run(() => loginAction({ error: null }, form("student@example.com")));
+
+    expect(ensureProfile).toHaveBeenCalledWith(
+      expect.anything(),
+      "user-1",
+      "student@example.com",
+    );
+  });
+
+  it("**프로필을 먼저** 만들고 그다음 승격한다 — update는 없는 행을 못 고친다", async () => {
+    const order: string[] = [];
+    ensureProfile.mockImplementation(async () => {
+      order.push("profile");
+      return { created: true };
+    });
+    ensureAdminRole.mockImplementation(async () => {
+      order.push("admin");
+      return { promoted: true };
+    });
+
+    const { loginAction } = await import("@/app/(auth)/actions");
+    await run(() => loginAction({ error: null }, form("boss@example.com")));
+
+    expect(order).toEqual(["profile", "admin"]);
+  });
+
+  it("복구가 실패해도 로그인은 막지 않는다", async () => {
+    ensureProfile.mockRejectedValue(new Error("DB 오류"));
+
+    const { loginAction } = await import("@/app/(auth)/actions");
+    const where = await run(() => loginAction({ error: null }, form("student@example.com")));
+
+    expect(where).toContain("REDIRECT:/dashboard");
+  });
+
+  it("로그인에 실패하면 확인하지 않는다", async () => {
+    loginDeveloper.mockResolvedValue({ success: false, error: "비밀번호가 틀렸습니다." });
+
+    const { loginAction } = await import("@/app/(auth)/actions");
+    await loginAction({ error: null }, form("student@example.com"));
+
+    expect(ensureProfile).not.toHaveBeenCalled();
+  });
+
+  it("관리자 화면 로그인(adminLoginAction)에서도 똑같이 복구한다", async () => {
+    const { adminLoginAction } = await import("@/app/(auth)/actions");
+    await run(() => adminLoginAction({ error: null }, form("student@example.com")));
+
+    expect(ensureProfile).toHaveBeenCalledWith(
+      expect.anything(),
+      "user-1",
+      "student@example.com",
     );
   });
 });
