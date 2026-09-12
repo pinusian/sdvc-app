@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ArtifactFile } from "@/lib/artifacts/parse";
+import { readAttachment, resolveAttachment } from "@/lib/attachments/store";
 
 /**
  * [P4-3] 산출물 파일을 Supabase Storage에 올리고 지운다.
@@ -20,6 +21,12 @@ const CONTENT_TYPES: Record<string, string> = {
   md: "text/markdown; charset=utf-8",
   txt: "text/plain; charset=utf-8",
   svg: "image/svg+xml",
+  // [P7-10] 첨부에서 복사해 오는 이미지들
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
   webmanifest: "application/manifest+json",
 };
 
@@ -74,4 +81,47 @@ async function collectPaths(bucket: Bucket, prefix: string): Promise<string[]> {
     else paths.push(full);
   }
   return paths;
+}
+
+/**
+ * [P7-10] 사용자가 올린 첨부를 산출물 폴더로 복사한다 (FR-032).
+ *
+ * 이미지는 모델이 만들 수 없으므로 **원본을 그대로 옮긴다.**
+ * 산출물 폴더에 들어간 뒤로는 공개범위·해지 잠금·유예 삭제 규칙이
+ * 나머지 파일과 똑같이 적용된다(Clarify 13) — 그래서 링크를 걸지 않고 복사한다.
+ */
+export async function copyAttachmentToArtifact(
+  admin: SupabaseClient,
+  {
+    ownerId,
+    conversationId,
+    attachmentId,
+    projectId,
+    path,
+  }: {
+    ownerId: string;
+    conversationId: string;
+    attachmentId: string;
+    projectId: string;
+    path: string;
+  },
+): Promise<void> {
+  const found = await resolveAttachment(admin, {
+    ownerId,
+    conversationId,
+    id: attachmentId,
+  });
+  if (!found) throw new Error("첨부를 찾을 수 없습니다.");
+  if (found.kind !== "image") throw new Error("이미지가 아닌 첨부는 넣을 수 없습니다.");
+
+  const bytes = await readAttachment(admin, found);
+
+  const { error } = await admin.storage
+    .from(ARTIFACT_BUCKET)
+    .upload(`${projectId}/${path}`, bytes as unknown as ArrayBuffer, {
+      contentType: found.mediaType,
+      upsert: true,
+    });
+
+  if (error) throw new Error(`이미지 저장 실패: ${error.message}`);
 }

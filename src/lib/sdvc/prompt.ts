@@ -13,6 +13,8 @@ export interface PromptState {
   projectName?: string;
   /** [P5-4b] 이 대화로 이미 산출물을 만들어 배포한 적이 있는가 (FR-025) */
   published?: boolean;
+  /** [P7-10] 이번 메시지에 붙은 첨부의 id들 (FR-032) */
+  attachmentIds?: string[];
 }
 
 /** 게이트 승인 요청 마커. 예: `<<SDVC_GATE:plan>>` */
@@ -55,7 +57,12 @@ const MAINTENANCE_SECTION = [
   "  처음 만들 때처럼 헌장부터 다시 묻지 않는다.",
 ].join("\n");
 
-export function buildSystemPrompt({ block, projectName, published }: PromptState): string {
+export function buildSystemPrompt({
+  block,
+  projectName,
+  published,
+  attachmentIds = [],
+}: PromptState): string {
   // [P7-4b] 예전에 done으로 굳은 대화도 유지보수로 읽는다.
   const here = resolveBlock(block);
   const current = getBlock(here);
@@ -100,10 +107,37 @@ export function buildSystemPrompt({ block, projectName, published }: PromptState
       .join("\n"),
     // 유지보수 블록은 그 지시가 이미 본문이므로 덧붙이지 않는다.
     published && !isMaintenance ? MAINTENANCE_SECTION : null,
+    attachmentIds.length > 0 ? attachmentSection(attachmentIds) : null,
     `## 항상 지킬 규칙\n\n${UNIVERSAL_RULES}`,
   ].filter((section): section is string => section !== null);
 
   return sections.join("\n\n");
+}
+
+/**
+ * [P7-10] 붙여준 첨부를 어떻게 쓰는지 알려준다 (FR-032).
+ *
+ * 알려주지 않으면 모델은 "이미지는 제가 만들 수 없습니다"라고 답하고 끝난다.
+ * 실제 파일은 사용자가 올린 것을 우리가 복사한다 — 모델은 **어디에 둘지만** 정한다.
+ */
+function attachmentSection(attachmentIds: string[]): string {
+  const list = attachmentIds.map((id, index) => `- 첨부 ${index + 1}: \`${id}\``).join("\n");
+  const example = attachmentIds[0];
+
+  return [
+    "## 사용자가 붙여준 첨부",
+    "",
+    list,
+    "",
+    "**이미지를 홈페이지에 넣는 방법**: 이미지는 직접 만들 수 없다. 붙여준 첨부를",
+    "쓰려면 답변에 다음 한 줄을 그대로 넣는다(설명 코드블록이 아니라 지시다).",
+    "",
+    "```use-image:images/hero.png@" + example + "```",
+    "",
+    "`images/hero.png` 자리에 넣고 싶은 경로를 적는다. 그 경로로 파일이 저장되므로,",
+    "HTML에서는 같은 경로를 그대로 쓴다 — 예: `<img src=\"images/hero.png\">`.",
+    "확장자는 png·jpg·gif·webp만 쓴다. 글파일 첨부에는 이 지시를 쓰지 않는다.",
+  ].join("\n");
 }
 
 /** 모델 응답에서 게이트 마커를 찾아 어떤 블록의 승인 요청인지 알아낸다. */

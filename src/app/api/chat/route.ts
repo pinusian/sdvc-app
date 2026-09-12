@@ -162,6 +162,8 @@ export async function POST(request: Request) {
       projectName: title,
       // [P5-4b] 이미 만든 프로젝트면 전체를 다시 만들지 않도록 알려준다 (FR-025)
       published: Boolean(conversation.projectId),
+      // [P7-10] 붙여준 첨부를 홈페이지에 넣는 방법을 알려준다 (FR-032)
+      attachmentIds,
     }),
     messages: [
       ...history,
@@ -225,7 +227,7 @@ type StreamEvent =
   | ChatEvent
   | { type: "gate"; block: BlockId }
   | { type: "block"; block: BlockId }
-  | { type: "artifact"; slug: string; fileCount: number };
+  | { type: "artifact"; slug: string; fileCount: number; imageCount: number };
 
 interface PublishContext {
   ownerId: string;
@@ -367,7 +369,16 @@ function captureAndFilter(
               type: "artifact",
               slug: published.project.slug,
               fileCount: published.fileCount,
+              imageCount: published.imageCount ?? 0,
             });
+            // [P7-10] 못 넣은 이미지는 **조용히 넘어가지 않는다** — 모델이
+            // "넣었습니다"라고 답했는데 사진이 없으면 사용자는 알 길이 없다.
+            for (const warning of published.warnings ?? []) {
+              emit(controller, {
+                type: "error",
+                message: `이미지를 넣지 못했습니다: ${warning}`,
+              });
+            }
           }
         } catch (error) {
           emit(controller, {

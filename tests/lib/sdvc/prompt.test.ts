@@ -157,3 +157,33 @@ describe("[P5-4b] 이미 만든 프로젝트를 고칠 때 (FR-025)", () => {
     expect(buildSystemPrompt({ block: "implement" })).not.toContain("이미 만들어져");
   });
 });
+
+/**
+ * [P7-10] 첨부가 붙었으면 그것을 홈페이지에 넣는 방법을 알려준다 (FR-032).
+ *
+ * 모델은 이미지를 만들 수 없다. 어떻게 가져다 쓰는지 알려주지 않으면
+ * "이미지는 제가 만들 수 없습니다"라고 답하고 끝난다.
+ */
+describe("[P7-10] 첨부 안내", () => {
+  it("첨부가 있으면 use-image 형식과 id를 알려준다", () => {
+    const prompt = buildSystemPrompt({
+      block: "maintenance",
+      attachmentIds: ["abc-123"],
+    });
+
+    expect(prompt).toContain("use-image:");
+    expect(prompt).toContain("abc-123");
+  });
+
+  it("이미지는 직접 만들지 말고 붙여준 것을 쓰라고 한다", () => {
+    const prompt = buildSystemPrompt({ block: "implement", attachmentIds: ["abc-123"] });
+
+    expect(prompt).toMatch(/붙여준|첨부/);
+  });
+
+  it("첨부가 없으면 그 안내를 붙이지 않는다 (쓸데없는 말을 줄인다)", () => {
+    const prompt = buildSystemPrompt({ block: "implement" });
+
+    expect(prompt).not.toContain("use-image:");
+  });
+});

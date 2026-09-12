@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { parseArtifactFiles } from "@/lib/artifacts/parse";
-import { uploadArtifactFiles } from "@/lib/artifacts/storage";
+import { parseArtifactFiles, parseImageUses } from "@/lib/artifacts/parse";
+import { copyAttachmentToArtifact, uploadArtifactFiles } from "@/lib/artifacts/storage";
 import { pickUniqueSlug, toSlug } from "@/lib/projects/slug";
 import {
   createProject,
@@ -33,6 +33,10 @@ export interface PublishInput {
 export interface PublishResult {
   project: Project;
   fileCount: number;
+  /** [P7-10] 첨부에서 복사해 넣은 이미지 수 */
+  imageCount: number;
+  /** 알아보지 못했거나 실패한 지시. **조용히 버리지 않고 사용자에게 알린다** */
+  warnings: string[];
 }
 
 export async function publishArtifact(
@@ -40,7 +44,9 @@ export async function publishArtifact(
   { ownerId, conversationId, answer, projectName, projectId }: PublishInput,
 ): Promise<PublishResult | null> {
   const files = parseArtifactFiles(answer);
-  if (files.length === 0) return null;
+  const { uses, invalid } = parseImageUses(answer);
+  // 파일도 이미지도 없으면 발행할 것이 없다.
+  if (files.length === 0 && uses.length === 0 && invalid.length === 0) return null;
 
   const project = projectId
     ? await getProjectById(admin, projectId, ownerId)
@@ -49,11 +55,33 @@ export async function publishArtifact(
   if (!project) return null;
 
   try {
-    const fileCount = await uploadArtifactFiles(admin, project.id, files);
+    const fileCount = files.length > 0 ? await uploadArtifactFiles(admin, project.id, files) : 0;
+
+    // [P7-10] 이미지는 첨부 원본을 그대로 복사한다. 한 장이 실패해도
+    // 나머지와 파일은 살리고, 무엇이 안 됐는지 알린다.
+    const warnings = [...invalid];
+    let imageCount = 0;
+    for (const use of uses) {
+      try {
+        await copyAttachmentToArtifact(admin, {
+          ownerId,
+          conversationId,
+          attachmentId: use.attachmentId,
+          projectId: project.id,
+          path: use.path,
+        });
+        imageCount += 1;
+      } catch (error) {
+        warnings.push(
+          `${use.path} (${error instanceof Error ? error.message : "이미지를 넣지 못했습니다"})`,
+        );
+      }
+    }
+
     await setProjectStatus(admin, project.id, ownerId, "deployed");
     await setConversationProject(admin, conversationId, ownerId, project.id);
     // 방금 바꾼 상태를 반영해서 돌려준다 (부르는 쪽이 다시 조회하지 않도록).
-    return { project: { ...project, status: "deployed" }, fileCount };
+    return { project: { ...project, status: "deployed" }, fileCount, imageCount, warnings };
   } catch (error) {
     // 반쯤 올라간 채로 "완료"처럼 보이지 않게 표시해둔다.
     await setProjectStatus(admin, project.id, ownerId, "failed").catch(() => {});

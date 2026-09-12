@@ -380,6 +380,8 @@ describe("[P4-3] POST /api/chat — 산출물 발행", () => {
       type: "artifact",
       slug: "my-homepage",
       fileCount: 1,
+      // [P7-10]에서 넣은 이미지 수도 함께 온다
+      imageCount: 0,
     });
   });
 
@@ -888,5 +890,77 @@ describe("[P7-9] 첨부 전달", () => {
       expect.anything(),
       expect.objectContaining({ inputTokens: 4000, model: "claude-sonnet-5" }),
     );
+  });
+});
+
+/**
+ * [P7-10] 이미지를 넣었는지, 못 넣었는지 화면에 알린다 (FR-032, BL-005).
+ */
+describe("[P7-10] 산출물 이미지 알림", () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.ANTHROPIC_API_KEY = "sk-ant-test";
+    happyPath();
+    createChatStream.mockResolvedValue(
+      streamOf({ type: "text", text: "사진을 넣었습니다." }, { type: "done" }),
+    );
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  it("넣은 이미지 수를 산출물 알림에 함께 보낸다", async () => {
+    publishArtifact.mockResolvedValue({
+      project: { slug: "site-abc" },
+      fileCount: 2,
+      imageCount: 1,
+      warnings: [],
+    });
+
+    const { POST } = await import("@/app/api/chat/route");
+    const res = await POST(request(VALID));
+    const events = await eventsOf(res);
+
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "artifact", slug: "site-abc", fileCount: 2, imageCount: 1 }),
+    );
+  });
+
+  it("못 넣은 이미지는 조용히 넘어가지 않고 알린다", async () => {
+    publishArtifact.mockResolvedValue({
+      project: { slug: "site-abc" },
+      fileCount: 1,
+      imageCount: 0,
+      warnings: ["images/hero.png (첨부를 찾을 수 없습니다.)"],
+    });
+
+    const { POST } = await import("@/app/api/chat/route");
+    const res = await POST(request(VALID));
+    const events = await eventsOf(res);
+
+    const notice = events.find((e) => e.type === "error");
+    expect(notice?.message).toContain("images/hero.png");
+  });
+
+  it("첨부 id를 프롬프트로 알려준다 (모델이 그 id로 지시를 쓴다)", async () => {
+    resolveAttachment.mockResolvedValue({
+      ownerId: "user-1",
+      conversationId: "conv-1",
+      id: "att-img",
+      extension: "png",
+      kind: "image",
+      mediaType: "image/png",
+    });
+    readAttachment.mockResolvedValue(new Uint8Array([1, 2, 3]));
+
+    const { POST } = await import("@/app/api/chat/route");
+    await POST(request({ ...VALID, attachmentIds: ["att-img"] }));
+
+    const { system } = createChatStream.mock.calls[0][0] as { system: string };
+    expect(system).toContain("att-img");
+    expect(system).toContain("use-image:");
   });
 });
