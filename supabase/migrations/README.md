@@ -21,6 +21,8 @@
 | `0004_projects.sql` | `projects` 표(주소 slug·공개범위·상태) + `conversations.project_id` 외래키 연결 | 2026-09-11 적용됨 (제약·RLS 실검증 완료) |
 | `0005_usage_logs.sql` | `usage_logs` 표(토큰 사용량·원가) — 등급 한도 판정과 원가 모니터링의 근거 | 2026-09-11 적용됨 (제약·RLS·실제 대화 기록까지 검증) |
 | `0006_artifact_lifecycle.sql` | 해지·체험만료 시 산출물 잠금/복구/삭제용 컬럼 (FR-023·FR-027) | 2026-09-12 적용됨 (잠금→복구→삭제 실검증 완료) |
+| `0008_admin_operations.sql` | 관리자 등급·계정정지·산출물차단·감사로그 (FR-014·016·017·034) | 2026-09-12 적용됨 (CHECK·브라우저키 차단 실검증) |
+| `0009_education_operations.sql` | 결제 없이 부여하는 등급·계정별 월 한도 (FR-035·036) — 교육용 운영 | 2026-09-12 적용됨 (CHECK·0 허용 실검증) |
 | `0007_conversation_maintenance.sql` | `current_block`에 `maintenance` 허용 (FR-029) — **코드는 바꿨는데 스키마를 안 바꿔 쓰기가 거부되던 것을 [P7-9] 검증에서 발견** | 2026-09-12 적용됨 (e2e 회귀 테스트로 고정) |
 
 > Storage(파일 저장소) 설정은 SQL이 아니라 `scripts/setup-storage.mjs`로 만든다 — `node scripts/setup-storage.mjs`.
