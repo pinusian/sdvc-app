@@ -120,6 +120,18 @@ async function promoteIfAdmin(
   }
 }
 
+/**
+ * [P8-12] 관리자 화면에서의 로그아웃.
+ *
+ * 평범한 `logoutAction`은 `/login`으로 보낸다 — 계정을 갈아타려던 관리자는
+ * 거기서 관리자 주소를 다시 잃는다. 여기서는 제자리로 돌려보낸다.
+ */
+export async function adminLogoutAction(): Promise<void> {
+  const supabase = await createClient();
+  await supabase.auth.signOut();
+  redirect("/admin");
+}
+
 export async function logoutAction(): Promise<void> {
   const supabase = await createClient();
   await supabase.auth.signOut();

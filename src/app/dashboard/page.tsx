@@ -9,7 +9,7 @@ import { findConversationsByProjects } from "@/lib/conversations/store";
 import { AccountStatus } from "@/components/billing/AccountStatus";
 import { loadAccountState } from "@/lib/billing/account";
 import { AppHeader } from "@/components/layout/AppHeader";
-import { adminEntry } from "@/lib/admin/entry";
+import { canOpenAdminConsole } from "@/lib/admin/entry";
 import type { AdminTier } from "@/lib/admin/access";
 
 const GRADE_LABEL: Record<string, string> = {
@@ -44,12 +44,11 @@ export default async function DashboardPage({
 
   // [P8-11] 입구를 보일지도 콘솔이 열릴지와 **같은 판정**으로 정한다 —
   // 눌러도 404가 뜨는 링크는 없느니만 못하다 (FR-040).
-  const showAdminEntry =
-    adminEntry({
-      role: profile?.role ?? "",
-      adminTier: (profile?.admin_tier ?? null) as AdminTier | null,
-      suspendedAt: profile?.suspended_at ?? null,
-    }) === "console";
+  const showAdminEntry = canOpenAdminConsole({
+    role: profile?.role ?? "",
+    adminTier: (profile?.admin_tier ?? null) as AdminTier | null,
+    suspendedAt: profile?.suspended_at ?? null,
+  });
 
   // projects는 RLS 정책이 없어 브라우저 키로는 못 읽는다([P4-2]) — 서버가
   // secret key로 읽되 소유자 조건은 store가 직접 건다.

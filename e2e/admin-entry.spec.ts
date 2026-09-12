@@ -120,18 +120,53 @@ test.describe("[P8-11e] 관리자 입구", () => {
     }
   });
 
-  test("로그인한 일반 개발자가 /admin을 열면 없는 척한다", async ({ page }) => {
-    const { admin, email, userId } = await makeUser("404", false);
+  test("자격 없는 계정으로 로그인한 채 /admin에 오면 맨 404가 아니라 지금 누구인지 알려준다", async ({
+    page,
+  }) => {
+    const { admin, email, userId } = await makeUser("who", false);
 
     try {
       await loginAt(page, "/login", email);
       await expect(page).toHaveURL(/\/dashboard/, { timeout: 20_000 });
 
       await page.goto("/admin");
-      await expect(page.getByText(/찾을 수 없|not be found|404/i).first()).toBeVisible();
-      await expect(page.getByText("운영 콘솔")).toHaveCount(0);
+
+      // 예전에는 여기가 맨 404였다 — 배포가 깨진 것인지 계정이 틀린 것인지 알 수 없었다
+      await expect(page.getByText(/not be found|404/i)).toHaveCount(0);
+      await expect(page.getByRole("heading", { name: "서버 관리자 로그인" })).toBeVisible();
+      await expect(page.getByText(email)).toBeVisible();
+      await expect(page.getByText(/이 계정으로는 운영 콘솔에 들어올 수 없습니다/)).toBeVisible();
+      // 콘솔 알맹이는 보이지 않는다
+      await expect(page.getByText(/이번 달 수지/)).toHaveCount(0);
     } finally {
       await admin.auth.admin.deleteUser(userId);
+    }
+  });
+
+  test("'다른 계정으로 로그인'은 관리자 주소를 잃지 않는다", async ({ page }) => {
+    const dev = await makeUser("swp", false);
+    const boss = await makeUser("swb", true);
+
+    try {
+      await loginAt(page, "/login", dev.email);
+      await expect(page).toHaveURL(/\/dashboard/, { timeout: 20_000 });
+
+      await page.goto("/admin");
+      await page.getByRole("button", { name: "다른 계정으로 로그인" }).click();
+
+      // `/login`이 아니라 제자리로 돌아온다
+      await expect(page).toHaveURL(/\/admin$/, { timeout: 20_000 });
+      await expect(page.getByText(/계정으로 로그인되어 있습니다/)).toHaveCount(0);
+
+      await page.getByLabel("이메일").fill(boss.email);
+      await page.getByLabel("비밀번호").fill(PASSWORD);
+      await page.getByRole("button", { name: "로그인" }).click();
+
+      await expect(page).toHaveURL(/\/admin$/, { timeout: 20_000 });
+      await expect(page.getByText("최고관리자")).toBeVisible();
+    } finally {
+      await dev.admin.auth.admin.deleteUser(dev.userId);
+      await boss.admin.auth.admin.deleteUser(boss.userId);
     }
   });
 
