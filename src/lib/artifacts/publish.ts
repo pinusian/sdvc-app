@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { parseArtifactFiles, parseImageUses } from "@/lib/artifacts/parse";
-import { copyAttachmentToArtifact, uploadArtifactFiles } from "@/lib/artifacts/storage";
+import {
+  artifactFileExists,
+  copyAttachmentToArtifact,
+  uploadArtifactFiles,
+} from "@/lib/artifacts/storage";
 import { pickUniqueSlug, toSlug } from "@/lib/projects/slug";
 import {
   createProject,
@@ -63,6 +67,9 @@ export async function publishArtifact(
     let imageCount = 0;
     for (const use of uses) {
       try {
+        // 이미 있던 사진을 바꾸는 것인지, 새로 넣는 것인지 먼저 본다.
+        const replacing = await artifactFileExists(admin, project.id, use.path);
+
         await copyAttachmentToArtifact(admin, {
           ownerId,
           conversationId,
@@ -71,6 +78,17 @@ export async function publishArtifact(
           path: use.path,
         });
         imageCount += 1;
+
+        // [P7-11 검증에서 발견] 모델이 사진만 넣고 HTML은 그대로 두면
+        // **화면에는 아무 변화가 없다.** "넣었습니다"라는 답변과 달라지지 않은
+        // 화면이 함께 나오면 사용자는 무엇이 잘못됐는지 알 수 없다.
+        // 바꾸는 경우(이미 있던 경로)는 HTML이 그대로여도 맞으므로 넘어간다.
+        const referenced = files.some((file) => file.content.includes(use.path));
+        if (!replacing && !referenced) {
+          warnings.push(
+            `${use.path} (사진은 저장했지만 홈페이지에서 그 사진을 쓰는 곳이 없어 화면에 보이지 않습니다. "사진을 화면에 보이게 해줘"라고 한 번 더 말씀해주세요.)`,
+          );
+        }
       } catch (error) {
         warnings.push(
           `${use.path} (${error instanceof Error ? error.message : "이미지를 넣지 못했습니다"})`,

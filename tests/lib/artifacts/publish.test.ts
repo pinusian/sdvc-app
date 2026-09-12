@@ -12,10 +12,12 @@ const isSlugTaken = vi.fn();
 const setProjectStatus = vi.fn();
 const setConversationProject = vi.fn();
 const copyAttachmentToArtifact = vi.fn();
+const artifactFileExists = vi.fn();
 
 vi.mock("@/lib/artifacts/storage", () => ({
   uploadArtifactFiles: (...args: unknown[]) => uploadArtifactFiles(...args),
   copyAttachmentToArtifact: (...args: unknown[]) => copyAttachmentToArtifact(...args),
+  artifactFileExists: (...args: unknown[]) => artifactFileExists(...args),
 }));
 
 vi.mock("@/lib/projects/store", () => ({
@@ -226,5 +228,63 @@ describe("[P7-10] 산출물에 이미지 넣기", () => {
     expect(result?.fileCount).toBe(1);
     expect(result?.imageCount).toBe(0);
     expect(result?.warnings?.[0]).toContain("images/a.png");
+  });
+});
+
+/**
+ * [P7-11 검증에서 발견] 모델이 `use-image`만 내고 HTML을 고치지 않았다.
+ * 사진은 저장됐는데 **화면에는 아무 변화가 없다** — 사용자는 "넣었습니다"라는
+ * 답변만 보고 왜 안 보이는지 알 수 없다.
+ */
+describe("[P7-11] 넣었는데 안 보이는 경우를 잡아낸다", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getProjectById.mockResolvedValue(PROJECT);
+    uploadArtifactFiles.mockImplementation(async (_a, _id, files) => files.length);
+    setProjectStatus.mockResolvedValue(undefined);
+    setConversationProject.mockResolvedValue(undefined);
+    copyAttachmentToArtifact.mockResolvedValue(undefined);
+    artifactFileExists.mockResolvedValue(false);
+  });
+
+  it("새 사진인데 아무 파일도 그 경로를 쓰지 않으면 알린다", async () => {
+    const result = await publishArtifact(admin, {
+      ownerId: "user-1",
+      conversationId: "conv-1",
+      answer: "```use-image:images/photo.png@att-1```",
+      projectName: "내 홈페이지",
+      projectId: "proj-1",
+    });
+
+    expect(result?.imageCount).toBe(1);
+    expect(result?.warnings?.[0]).toContain("images/photo.png");
+    expect(result?.warnings?.[0]).toMatch(/보이지|쓰는 곳/);
+  });
+
+  it("같은 답변의 파일이 그 경로를 쓰면 조용하다", async () => {
+    const result = await publishArtifact(admin, {
+      ownerId: "user-1",
+      conversationId: "conv-1",
+      answer:
+        '```file:index.html\n<img src="images/photo.png">\n```\n\n```use-image:images/photo.png@att-1```',
+      projectName: "내 홈페이지",
+      projectId: "proj-1",
+    });
+
+    expect(result?.warnings).toEqual([]);
+  });
+
+  it("이미 있던 사진을 바꾸는 것이면 조용하다 (HTML은 그대로면 된다)", async () => {
+    artifactFileExists.mockResolvedValue(true);
+
+    const result = await publishArtifact(admin, {
+      ownerId: "user-1",
+      conversationId: "conv-1",
+      answer: "```use-image:images/photo.png@att-2```",
+      projectName: "내 홈페이지",
+      projectId: "proj-1",
+    });
+
+    expect(result?.warnings).toEqual([]);
   });
 });

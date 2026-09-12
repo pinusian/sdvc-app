@@ -134,8 +134,11 @@ function attachmentSection(attachmentIds: string[]): string {
     "",
     "```use-image:images/hero.png@" + example + "```",
     "",
-    "`images/hero.png` 자리에 넣고 싶은 경로를 적는다. 그 경로로 파일이 저장되므로,",
-    "HTML에서는 같은 경로를 그대로 쓴다 — 예: `<img src=\"images/hero.png\">`.",
+    "`images/hero.png` 자리에 넣고 싶은 경로를 적는다. 그 경로로 파일이 저장된다.",
+    "",
+    "**이 지시만으로는 화면에 아무것도 보이지 않는다.** 사진을 쓰는 HTML(또는 CSS)을",
+    "`file:` 블록으로 **반드시 함께** 내야 한다 — 예: `<img src=\"images/hero.png\">`.",
+    "이미 그 경로를 쓰고 있는 사진을 바꾸는 경우에만 HTML을 다시 내지 않아도 된다.",
     "확장자는 png·jpg·gif·webp만 쓴다. 글파일 첨부에는 이 지시를 쓰지 않는다.",
   ].join("\n");
 }

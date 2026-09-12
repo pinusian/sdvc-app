@@ -125,3 +125,21 @@ export async function copyAttachmentToArtifact(
 
   if (error) throw new Error(`이미지 저장 실패: ${error.message}`);
 }
+
+/** [P7-11] 이 경로의 파일이 프로젝트에 이미 있는가. */
+export async function artifactFileExists(
+  admin: SupabaseClient,
+  projectId: string,
+  path: string,
+): Promise<boolean> {
+  const slash = path.lastIndexOf("/");
+  const folder = slash === -1 ? "" : path.slice(0, slash);
+  const name = slash === -1 ? path : path.slice(slash + 1);
+
+  const { data, error } = await admin.storage
+    .from(ARTIFACT_BUCKET)
+    .list(folder ? `${projectId}/${folder}` : projectId);
+
+  if (error || !data) return false;
+  return data.some((file) => file.name === name);
+}

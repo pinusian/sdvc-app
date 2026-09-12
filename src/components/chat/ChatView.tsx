@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { SDVC_BLOCKS, resolveBlock, type BlockId } from "@/lib/sdvc/blocks";
+import { MAX_ATTACHMENTS_PER_MESSAGE } from "@/lib/attachments/validate";
 import type { ChatMessage } from "@/lib/claude/chat";
 import { Button } from "@/components/ui/Button";
 
@@ -14,6 +15,13 @@ import { Button } from "@/components/ui/Button";
  *   보이지 않게 하려고 [P3-3]에서 추가한 이벤트)
  * - error: 그대로 알린다
  */
+
+/** [P7-11] 올려둔 첨부 하나 — 서버가 돌려준 id로만 다시 가리킨다 */
+interface Attachment {
+  id: string;
+  kind: "image" | "text";
+  name: string;
+}
 
 interface Props {
   conversationId: string;
@@ -32,20 +40,72 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
   /** [P3-6] 승인 대기 중인 게이트. null이면 대기 중이 아니다. */
   const [gate, setGate] = useState<BlockId | null>(null);
   /** [P4-4] 방금 만들어진 산출물 */
-  const [artifact, setArtifact] = useState<{ slug: string; fileCount: number } | null>(null);
+  const [artifact, setArtifact] = useState<{
+    slug: string;
+    fileCount: number;
+    imageCount: number;
+  } | null>(null);
   /** [P4-5] 답변이 최대 길이에 걸려 끊겼는가 */
   const [truncated, setTruncated] = useState(false);
   /** [P6-4] 체험 만료·한도 초과로 막혔는가 — 요금제로 가는 길을 함께 보여준다 */
   const [blocked, setBlocked] = useState(false);
+  /** [P7-11] 지금 붙여둔 첨부 — 고르는 즉시 올려 id를 받아둔다 (FR-031) */
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [uploading, setUploading] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const blockInfo = SDVC_BLOCKS.find((b) => b.id === resolveBlock(block));
+
+  /**
+   * [P7-11] 고른 파일을 **바로** 올린다.
+   * 보낼 때 한꺼번에 올리면 큰 파일에서 "보내기"가 멈춘 것처럼 보이고,
+   * 형식이 틀렸다는 것도 그제야 알게 된다.
+   */
+  async function attach(files: FileList | null) {
+    if (!files || files.length === 0 || uploading) return;
+
+    const room = MAX_ATTACHMENTS_PER_MESSAGE - attachments.length;
+    if (room <= 0) {
+      setError(`한 번에 ${MAX_ATTACHMENTS_PER_MESSAGE}개까지 붙일 수 있어요.`);
+      return;
+    }
+
+    setUploading(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.append("conversationId", conversationId);
+      for (const file of Array.from(files).slice(0, room)) form.append("files", file);
+
+      const res = await fetch("/api/attachments", { method: "POST", body: form });
+      const data = (await res.json().catch(() => null)) as
+        | { attachments?: Attachment[]; error?: string }
+        | null;
+
+      if (!res.ok || !data?.attachments) {
+        throw new Error(data?.error ?? "파일을 올리지 못했습니다.");
+      }
+      setAttachments((prev) => [...prev, ...data.attachments!]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "파일을 올리지 못했습니다.");
+    } finally {
+      setUploading(false);
+      // 같은 파일을 다시 고를 수 있게 비운다.
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
 
   async function send(options?: { message?: string; approved?: boolean }) {
     const message = (options?.message ?? draft).trim();
     if (!message || streaming) return;
 
-    if (!options?.message) setDraft("");
+    // 보낸 첨부는 화면에서 비운다 — 다음 메시지에 또 붙지 않게.
+    const sending = options?.message ? [] : attachments;
+    if (!options?.message) {
+      setDraft("");
+      setAttachments([]);
+    }
     setError(null);
     setStreaming(true);
     setGate(null);
@@ -62,6 +122,7 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
           conversationId,
           message,
           ...(options?.approved ? { approved: true } : {}),
+          ...(sending.length > 0 ? { attachmentIds: sending.map((a) => a.id) } : {}),
         }),
       });
 
@@ -183,7 +244,8 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
         {artifact && (
           <div className="rounded-lg border border-accent bg-accent-soft px-4 py-3">
             <p className="mb-1 text-sm font-medium text-accent-ink">
-              홈페이지가 만들어졌습니다 (파일 {artifact.fileCount}개)
+              홈페이지가 만들어졌습니다 (파일 {artifact.fileCount}개
+              {artifact.imageCount > 0 ? `, 사진 ${artifact.imageCount}장` : ""})
             </p>
             <p className="mb-3 font-mono text-xs text-accent-ink">/site/{artifact.slug}</p>
             <a
@@ -236,6 +298,39 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
       </div>
 
       <div className="border-t border-border bg-surface px-7 py-4">
+        {/* [P7-11] 붙인 파일들. 고르는 즉시 올라가므로 여기 보이면 이미 준비된 것이다 */}
+        {(attachments.length > 0 || uploading) && (
+          <div className="mx-auto mb-2 w-full max-w-[760px]">
+            <div className="flex flex-wrap items-center gap-2">
+              {attachments.map((file) => (
+                <span
+                  key={file.id}
+                  className="inline-flex items-center gap-1.5 rounded-pill bg-surface-muted px-2.5 py-1 text-xs text-ink"
+                >
+                  <span aria-hidden>{file.kind === "image" ? "🖼" : "📄"}</span>
+                  <span>{file.name}</span>
+                  <button
+                    type="button"
+                    aria-label={`${file.name} 떼기`}
+                    onClick={() =>
+                      setAttachments((prev) => prev.filter((a) => a.id !== file.id))
+                    }
+                    className="text-ink-faint hover:text-ink"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+              {uploading && <span className="text-xs text-ink-faint">올리는 중…</span>}
+            </div>
+            {attachments.some((file) => file.kind === "image") && (
+              <p className="mt-1 text-xs text-ink-faint">
+                사진은 글보다 토큰을 많이 씁니다 — 이번 달 사용량이 빨리 줄어들 수 있어요.
+              </p>
+            )}
+          </div>
+        )}
+
         <form
           className="mx-auto flex w-full max-w-[760px] items-end gap-3"
           onSubmit={(event) => {
@@ -260,6 +355,24 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
               className="w-full resize-none rounded-sm border border-border bg-surface px-3.5 py-2.5 text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft"
             />
           </label>
+          <label
+            className="inline-flex cursor-pointer items-center rounded-sm border border-border px-3 py-2.5 text-sm text-ink-muted hover:border-accent hover:text-accent-ink"
+            title="사진이나 글파일을 붙입니다"
+          >
+            📎
+            <span className="sr-only">파일 붙이기</span>
+            <input
+              ref={fileRef}
+              type="file"
+              aria-label="파일 붙이기"
+              multiple
+              accept=".png,.jpg,.jpeg,.gif,.webp,.txt,.md,.csv,.json"
+              className="sr-only"
+              disabled={uploading || streaming}
+              onChange={(event) => void attach(event.target.files)}
+            />
+          </label>
+
           <Button type="submit" variant="accent" disabled={streaming}>
             {streaming ? "보내는 중…" : "보내기"}
           </Button>
@@ -300,7 +413,7 @@ interface EventHandlers {
   onError: (message: string) => void;
   onGate: (block: BlockId) => void;
   onBlock: (block: BlockId) => void;
-  onArtifact: (artifact: { slug: string; fileCount: number }) => void;
+  onArtifact: (artifact: { slug: string; fileCount: number; imageCount: number }) => void;
   onTruncated: () => void;
 }
 
@@ -319,6 +432,7 @@ async function readEvents(body: ReadableStream<Uint8Array>, handlers: EventHandl
       block?: BlockId;
       slug?: string;
       fileCount?: number;
+      imageCount?: number;
     };
     try {
       event = JSON.parse(line);
@@ -330,7 +444,11 @@ async function readEvents(body: ReadableStream<Uint8Array>, handlers: EventHandl
     else if (event.type === "gate" && event.block) handlers.onGate(event.block);
     else if (event.type === "block" && event.block) handlers.onBlock(event.block);
     else if (event.type === "artifact" && event.slug)
-      handlers.onArtifact({ slug: event.slug, fileCount: event.fileCount ?? 0 });
+      handlers.onArtifact({
+        slug: event.slug,
+        fileCount: event.fileCount ?? 0,
+        imageCount: event.imageCount ?? 0,
+      });
     else if (event.type === "truncated") handlers.onTruncated();
     else if (event.type === "error") handlers.onError(event.message ?? "오류가 발생했습니다.");
   };
