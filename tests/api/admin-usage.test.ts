@@ -35,7 +35,6 @@ vi.mock("@/lib/admin/audit", () => ({
   recordAdminAction: (...a: unknown[]) => recordAdminAction(...a),
 }));
 
-const get = () => new Request("http://localhost:3000/api/admin/usage");
 
 describe("[P8-3] GET /api/admin/usage", () => {
   beforeEach(() => {
@@ -66,19 +65,19 @@ describe("[P8-3] GET /api/admin/usage", () => {
     });
 
     const { GET } = await import("@/app/api/admin/usage/route");
-    expect((await GET(get())).status).toBe(404);
+    expect((await GET()).status).toBe(404);
   });
 
   it("지원 등급도 볼 수 있다 (읽기 전용)", async () => {
     const { GET } = await import("@/app/api/admin/usage/route");
-    const res = await GET(get());
+    const res = await GET();
 
     expect(res.status).toBe(200);
   });
 
   it("총원가·총매출·마진·비율을 돌려준다", async () => {
     const { GET } = await import("@/app/api/admin/usage/route");
-    const body = await (await GET(get())).json();
+    const body = await (await GET()).json();
 
     expect(body.summary.totalCostUsd).toBe(6);
     expect(body.summary.totalRevenueUsd).toBe(47);
@@ -88,7 +87,7 @@ describe("[P8-3] GET /api/admin/usage", () => {
 
   it("보는 것도 감사 로그에 남는다", async () => {
     const { GET } = await import("@/app/api/admin/usage/route");
-    await GET(get());
+    await GET();
 
     expect(recordAdminAction).toHaveBeenCalledWith(
       expect.anything(),
@@ -98,7 +97,7 @@ describe("[P8-3] GET /api/admin/usage", () => {
 
   it("이번 달 것만 센다", async () => {
     const { GET } = await import("@/app/api/admin/usage/route");
-    await GET(get());
+    await GET();
 
     // usage_logs를 gte(월초)로 걸러 불렀는지 — 체인이 호출됐다는 것으로 확인
     expect(usageRows).toHaveBeenCalled();
