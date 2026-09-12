@@ -263,3 +263,97 @@ describe("[P7-1b] 프로젝트 이름 바꾸기", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * [P7-6d] 되돌리기 화면 (FR-012).
+ *
+ * 되돌리기는 지금 화면을 통째로 바꾼다 — 삭제만큼은 아니어도
+ * 한 번 더 확인을 받는다.
+ */
+describe("[P7-6d] 되돌리기", () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.unstubAllGlobals());
+
+  function mockVersions() {
+    const fetchMock = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+      if (String(url).includes("/rollback") && init?.method === "POST") {
+        return new Response(JSON.stringify({ version: "0001", fileCount: 2, removedCount: 1 }));
+      }
+      if (String(url).includes("/rollback")) {
+        return new Response(
+          JSON.stringify({
+            versions: [
+              { name: "0002", at: "2026-09-12T11:00:00.000Z", request: "제목 크게" },
+              { name: "0001", at: "2026-09-12T10:00:00.000Z", request: "빵집 만들어줘" },
+            ],
+          }),
+        );
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("되돌리기를 누르면 버전 목록을 보여준다", async () => {
+    mockVersions();
+    render(<ProjectList projects={PROJECTS} />);
+
+    await userEvent.click(screen.getAllByRole("button", { name: "되돌리기" })[0]);
+
+    await waitFor(() => expect(screen.getByText(/제목 크게/)).toBeInTheDocument());
+    expect(screen.getByText(/빵집 만들어줘/)).toBeInTheDocument();
+  });
+
+  it("완성되지 않은 프로젝트에는 되돌리기가 없다", () => {
+    render(<ProjectList projects={PROJECTS} />);
+    // PROJECTS[1]은 draft 상태다
+    expect(screen.getAllByRole("button", { name: "되돌리기" })).toHaveLength(1);
+  });
+
+  it("고르면 한 번 더 확인받고 되돌린다", async () => {
+    const fetchMock = mockVersions();
+    render(<ProjectList projects={PROJECTS} />);
+
+    await userEvent.click(screen.getAllByRole("button", { name: "되돌리기" })[0]);
+    await waitFor(() => expect(screen.getByText(/빵집 만들어줘/)).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole("button", { name: /빵집 만들어줘.*으로 되돌리기/ }));
+    // 바로 되돌리지 않는다
+    expect(fetchMock.mock.calls.filter(([, i]) => i?.method === "POST")).toHaveLength(0);
+
+    await userEvent.click(screen.getByRole("button", { name: "네, 되돌립니다" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith("/api/projects/proj-1/rollback", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ version: "0001" }),
+      }),
+    );
+  });
+
+  it("되돌린 뒤 결과를 알려준다", async () => {
+    mockVersions();
+    render(<ProjectList projects={PROJECTS} />);
+
+    await userEvent.click(screen.getAllByRole("button", { name: "되돌리기" })[0]);
+    await waitFor(() => expect(screen.getByText(/빵집 만들어줘/)).toBeInTheDocument());
+    await userEvent.click(screen.getByRole("button", { name: /빵집 만들어줘.*으로 되돌리기/ }));
+    await userEvent.click(screen.getByRole("button", { name: "네, 되돌립니다" }));
+
+    await waitFor(() => expect(screen.getByText(/되돌렸습니다/)).toBeInTheDocument());
+  });
+
+  it("보관된 버전이 없으면 그렇게 알려준다", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ versions: [] }))),
+    );
+    render(<ProjectList projects={PROJECTS} />);
+
+    await userEvent.click(screen.getAllByRole("button", { name: "되돌리기" })[0]);
+
+    await waitFor(() => expect(screen.getByText(/되돌릴 수 있는 시점이 없어요/)).toBeInTheDocument());
+  });
+});

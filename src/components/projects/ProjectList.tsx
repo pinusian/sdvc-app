@@ -13,6 +13,13 @@ import { MAX_NAME_LENGTH } from "@/lib/projects/name";
  * 않도록 같은 자리에서 한 번 더 확인을 받는다(브라우저 기본 경고창 대신).
  */
 
+/** [P7-6d] 되돌릴 수 있는 시점 하나 */
+interface VersionChoice {
+  name: string;
+  at: string | null;
+  request: string;
+}
+
 type ListItem = Pick<Project, "id" | "name" | "slug" | "status" | "visibility"> & {
   /** [P5-4b] 이 프로젝트를 만든 대화. 있으면 "이어서 수정"으로 들어간다 */
   conversationId?: string | null;
@@ -40,6 +47,13 @@ export function ProjectList({ projects }: { projects: ListItem[] }) {
   const [copied, setCopied] = useState<string | null>(null);
   /** [P7-1b] 지금 이름을 고치고 있는 프로젝트와 입력값 */
   const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
+  /** [P7-6d] 되돌리기 패널 — 어느 프로젝트의 버전 목록을 펼쳤는가 */
+  const [rollback, setRollback] = useState<{
+    id: string;
+    versions: VersionChoice[] | null;
+    confirming: string | null;
+  } | null>(null);
+  const [restored, setRestored] = useState<string | null>(null);
 
   /**
    * [P5-3] 공개범위 변경 (FR-007).
@@ -113,6 +127,51 @@ export function ProjectList({ projects }: { projects: ListItem[] }) {
     }
   }
 
+  /** [P7-6d] 보관된 버전 목록을 불러온다 (FR-012). */
+  async function openRollback(id: string) {
+    setError(null);
+    setRestored(null);
+    setRollback({ id, versions: null, confirming: null });
+    try {
+      const res = await fetch(`/api/projects/${id}/rollback`);
+      const data = (await res.json()) as { versions?: VersionChoice[]; error?: string };
+      if (!res.ok || !data.versions) throw new Error(data.error ?? "버전을 불러오지 못했습니다.");
+      setRollback({ id, versions: data.versions, confirming: null });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "버전을 불러오지 못했습니다.");
+      setRollback(null);
+    }
+  }
+
+  /** 되돌리기는 지금 화면을 통째로 바꾼다 — 한 번 더 확인받은 뒤에만 부른다. */
+  async function doRollback(id: string, version: string) {
+    setBusy(id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/projects/${id}/rollback`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ version }),
+      });
+      const data = (await res.json()) as {
+        fileCount?: number;
+        removedCount?: number;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(data.error ?? "되돌리지 못했습니다.");
+      setRestored(
+        `그 시점으로 되돌렸습니다 (파일 ${data.fileCount ?? 0}개` +
+          (data.removedCount ? `, 그 뒤에 생긴 파일 ${data.removedCount}개 정리` : "") +
+          ")",
+      );
+      setRollback(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "되돌리지 못했습니다.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function remove(id: string) {
     setBusy(id);
     setError(null);
@@ -145,6 +204,12 @@ export function ProjectList({ projects }: { projects: ListItem[] }) {
       {error && (
         <p role="alert" className="text-sm text-red-700">
           {error}
+        </p>
+      )}
+
+      {restored && (
+        <p className="rounded-lg border border-accent bg-accent-soft px-4 py-2.5 text-sm text-accent-ink">
+          {restored}
         </p>
       )}
 
@@ -235,6 +300,69 @@ export function ProjectList({ projects }: { projects: ListItem[] }) {
             </div>
           </div>
 
+          {/* [P7-6d] 되돌리기 패널 (FR-012) */}
+          {rollback?.id === project.id && (
+            <div className="w-full rounded-lg border border-border bg-surface-muted p-3">
+              {rollback.versions === null ? (
+                <p className="text-xs text-ink-muted">불러오는 중…</p>
+              ) : rollback.versions.length === 0 ? (
+                <p className="text-xs text-ink-muted">
+                  되돌릴 수 있는 시점이 없어요. 한 번 고치고 나면 생깁니다.
+                </p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {rollback.versions.map((version) => (
+                    <li key={version.name} className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs text-ink-muted">
+                        {version.at ? new Date(version.at).toLocaleString("ko-KR") : "시각 모름"}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-xs text-ink">
+                        {version.request || "(설명 없음)"}
+                      </span>
+                      {rollback.confirming === version.name ? (
+                        <span className="flex items-center gap-1.5">
+                          <Button
+                            variant="accent"
+                            className="!px-2.5 !py-1 text-xs"
+                            disabled={busy === project.id}
+                            onClick={() => void doRollback(project.id, version.name)}
+                          >
+                            네, 되돌립니다
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            className="!px-2.5 !py-1 text-xs"
+                            onClick={() =>
+                              setRollback({ ...rollback, confirming: null })
+                            }
+                          >
+                            아니요
+                          </Button>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          aria-label={`${version.request || version.name} 시점으로 되돌리기`}
+                          onClick={() => setRollback({ ...rollback, confirming: version.name })}
+                          className="rounded-sm border border-border px-2 py-0.5 text-xs text-ink-muted hover:border-accent hover:text-accent-ink"
+                        >
+                          이 시점으로
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <button
+                type="button"
+                onClick={() => setRollback(null)}
+                className="mt-2 text-xs text-ink-faint hover:text-ink"
+              >
+                닫기
+              </button>
+            </div>
+          )}
+
           <div className="flex shrink-0 items-center gap-2">
             {/* [P5-4b] 버그 수정·기능 추가는 그 프로젝트를 만든 대화에서 이어서 한다 (FR-025) */}
             {project.conversationId && (
@@ -244,6 +372,17 @@ export function ProjectList({ projects }: { projects: ListItem[] }) {
               >
                 이어서 수정
               </a>
+            )}
+
+            {/* [P7-6d] 되돌리기는 완성된 프로젝트에만 있다 (FR-012) */}
+            {project.status === "deployed" && (
+              <button
+                type="button"
+                onClick={() => void openRollback(project.id)}
+                className="inline-flex items-center rounded-sm border border-border px-3 py-1.5 text-xs font-semibold text-ink hover:border-accent hover:text-accent-ink"
+              >
+                되돌리기
+              </button>
             )}
 
             {project.status === "deployed" && (
