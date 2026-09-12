@@ -11,6 +11,13 @@
 /** 파일 하나의 최대 크기 (Clarify 11에서 확정) */
 export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 
+/**
+ * 이미지만 더 낮다 — **Anthropic API가 이미지 한 장을 5MB까지만 받는다.**
+ * 10MB로 받아두면 올릴 때는 성공했다가 모델에게 보낼 때 실패해서,
+ * 사용자는 왜 안 되는지 알 수 없다. 받는 순간에 막는 편이 정직하다([P7-9]).
+ */
+export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
 /** 한 번에 붙일 수 있는 개수 */
 export const MAX_ATTACHMENTS_PER_MESSAGE = 5;
 
@@ -127,6 +134,13 @@ export function validateAttachment({ name, bytes }: Candidate): AttachmentCheck 
   // 내용이 이미지면 이름이 무엇이든 이미지로 받는다.
   for (const signature of IMAGE_SIGNATURES) {
     if (signature.matches(bytes)) {
+      if (bytes.length > MAX_IMAGE_BYTES) {
+        const mb = Math.round(MAX_IMAGE_BYTES / 1024 / 1024);
+        return invalid(
+          "too_large",
+          `${name}이(가) 너무 큽니다. 이미지는 한 장에 ${mb}MB까지 올릴 수 있어요.`,
+        );
+      }
       return {
         ok: true,
         kind: "image",

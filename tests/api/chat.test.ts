@@ -800,7 +800,7 @@ describe("[P7-9] 첨부 전달", () => {
     );
   });
 
-  it("글파일 첨부는 파일 이름과 함께 글로 싣는다", async () => {
+  it("글파일 첨부는 첨부임을 밝히고 내용을 싣는다", async () => {
     readAttachment.mockResolvedValue(new TextEncoder().encode("# 기획서\n메뉴 3개"));
 
     const { POST } = await import("@/app/api/chat/route");
@@ -812,6 +812,7 @@ describe("[P7-9] 첨부 전달", () => {
     const blocks = messages[messages.length - 1].content;
     const texts = blocks.filter((b) => b.type === "text").map((b) => b.text ?? "");
     expect(texts.some((t) => t.includes("# 기획서"))).toBe(true);
+    expect(texts.some((t) => t.includes("첨부한 글파일"))).toBe(true);
   });
 
   it("사용자가 쓴 메시지도 함께 실린다", async () => {

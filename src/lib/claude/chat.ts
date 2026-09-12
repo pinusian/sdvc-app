@@ -11,9 +11,17 @@
 
 export type ChatRole = "user" | "assistant";
 
+/**
+ * [P7-9] 첨부가 붙은 메시지는 글 대신 **블록 배열**로 보낸다.
+ * 이미지는 글로 옮길 수 없기 때문이다. Anthropic이 받는 모양 그대로 싣는다.
+ */
+export type ContentBlock =
+  | { type: "text"; text: string }
+  | { type: "image"; source: { type: "base64"; media_type: string; data: string } };
+
 export interface ChatMessage {
   role: ChatRole;
-  content: string;
+  content: string | ContentBlock[];
 }
 
 export type ChatEvent =

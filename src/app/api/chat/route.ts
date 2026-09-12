@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { createChatStream, DEFAULT_MAX_TOKENS, type ChatEvent } from "@/lib/claude/chat";
+import {
+  createChatStream,
+  DEFAULT_MAX_TOKENS,
+  type ChatEvent,
+  type ChatMessage,
+  type ContentBlock,
+} from "@/lib/claude/chat";
 
 /**
  * 파일을 통째로 써야 하는 단계는 훨씬 긴 답변을 허용한다([P4-5]).
@@ -23,6 +29,7 @@ import { recordUsage } from "@/lib/usage/store";
 import { loadAccountState } from "@/lib/billing/account";
 import { canStartChat } from "@/lib/billing/access";
 import { suggestProjectName } from "@/lib/projects/name";
+import { AttachmentError, buildAttachmentBlocks } from "@/lib/attachments/message";
 
 /**
  * SDVC 엔진과의 대화 API.
@@ -37,6 +44,8 @@ interface ChatRequestBody {
   conversationId?: unknown;
   message?: unknown;
   approved?: unknown;
+  /** [P7-9] 프롬프트에 붙인 첨부의 id들. 내용은 서버가 저장소에서 다시 읽는다 */
+  attachmentIds?: unknown;
 }
 
 export async function POST(request: Request) {
@@ -120,6 +129,28 @@ export async function POST(request: Request) {
     );
   }
 
+  // [P7-9] 첨부는 Claude를 부르기 **전에** 준비한다 — 여기서 실패하면
+  // 메시지를 저장하지도, 돈을 쓰지도 않는다.
+  const attachmentIds = Array.isArray(body.attachmentIds)
+    ? body.attachmentIds.filter((id): id is string => typeof id === "string")
+    : [];
+  let attachmentBlocks: ContentBlock[] = [];
+  if (attachmentIds.length > 0) {
+    try {
+      attachmentBlocks = await buildAttachmentBlocks(admin, {
+        ownerId: user.id,
+        conversationId,
+        attachmentIds,
+      });
+    } catch (error) {
+      const message =
+        error instanceof AttachmentError
+          ? error.message
+          : "첨부를 읽지 못했습니다. 다시 올려주세요.";
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+  }
+
   const history = await listMessages(admin, conversationId);
   await appendMessage(admin, { conversationId, role: "user", content: message });
 
@@ -132,7 +163,17 @@ export async function POST(request: Request) {
       // [P5-4b] 이미 만든 프로젝트면 전체를 다시 만들지 않도록 알려준다 (FR-025)
       published: Boolean(conversation.projectId),
     }),
-    messages: [...history, { role: "user", content: message }],
+    messages: [
+      ...history,
+      // 첨부가 있으면 글 대신 블록으로 보낸다. 첨부를 먼저 두어야 모델이
+      // "이 사진에 대해서" 같은 말을 제대로 받는다.
+      attachmentBlocks.length > 0
+        ? {
+            role: "user" as const,
+            content: [...attachmentBlocks, { type: "text" as const, text: message }],
+          }
+        : { role: "user" as const, content: message },
+    ],
     // 구현 단계는 파일을 통째로 써야 해서 기본 길이로는 중간에 끊긴다([P4-5]
     // 검증에서 실제로 겪음). max_tokens는 상한일 뿐이라 늘려도 안 쓰면 비용은 없다.
     maxTokens: LONG_ANSWER_BLOCKS.includes(block) ? IMPLEMENT_MAX_TOKENS : DEFAULT_MAX_TOKENS,
@@ -164,8 +205,19 @@ export async function POST(request: Request) {
 }
 
 /** 이름을 지을 근거가 되는 첫 사용자 발화. 기록이 비었으면 이번 메시지. */
-function firstUserMessage(history: { role: string; content: string }[], current: string): string {
-  return history.find((m) => m.role === "user")?.content ?? current;
+function firstUserMessage(history: ChatMessage[], current: string): string {
+  const first = history.find((m) => m.role === "user")?.content;
+  // 첨부가 붙은 메시지는 블록 배열이다 — 글 부분만 모아서 본다([P7-9]).
+  if (typeof first === "string") return first;
+  if (Array.isArray(first)) {
+    const text = first
+      .filter((block): block is { type: "text"; text: string } => block.type === "text")
+      .map((block) => block.text)
+      .join(" ")
+      .trim();
+    if (text) return text;
+  }
+  return current;
 }
 
 /** 화면으로 흘려보내는 이벤트 — Claude 쪽 이벤트에 SDVC 진행 이벤트를 더한 것. */

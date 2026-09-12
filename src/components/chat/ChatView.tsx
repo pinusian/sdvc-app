@@ -150,7 +150,7 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
                   : "border border-border bg-surface text-ink"
               }`}
             >
-              {message.content}
+              {textOf(message.content)}
             </div>
           </div>
         ))}
@@ -269,11 +269,23 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
   );
 }
 
+/**
+ * 화면에 보일 글자만 꺼낸다.
+ * [P7-9]에서 메시지 내용이 블록 배열일 수도 있게 됐다(첨부). 저장되는 것은
+ * 여전히 글자뿐이지만, 타입이 넓어졌으므로 여기서 좁혀 받는다.
+ */
+function textOf(content: ChatMessage["content"]): string {
+  if (typeof content === "string") return content;
+  return content
+    .map((block) => (block.type === "text" ? block.text : "[첨부한 이미지]"))
+    .join("\n");
+}
+
 /** 마지막 assistant 메시지에 이어붙이고, 없으면 새로 만든다. */
 function appendToAssistant(messages: ChatMessage[], text: string): ChatMessage[] {
   const last = messages[messages.length - 1];
   if (last?.role === "assistant") {
-    return [...messages.slice(0, -1), { ...last, content: last.content + text }];
+    return [...messages.slice(0, -1), { ...last, content: textOf(last.content) + text }];
   }
   return [...messages, { role: "assistant", content: text }];
 }

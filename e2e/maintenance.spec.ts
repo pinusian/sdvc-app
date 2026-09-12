@@ -131,6 +131,26 @@ test.describe("[P5-4b] 이어서 수정", () => {
     }
   });
 
+  /**
+   * [P7-9 검증에서 발견] 코드는 유지보수로 넘겼는데 **DB가 그 값을 거부했다.**
+   * 0003의 CHECK 제약에 'maintenance'가 없었기 때문이다 — 단위 테스트는
+   * 저장소를 목으로 대체하고, e2e는 이미 'done'인 행만 써서 아무도 이 구간을
+   * 지나가지 않았다. 스키마와 코드가 다시 어긋나면 여기서 걸린다.
+   */
+  test("[P7-4b] DB가 maintenance 상태를 받아들인다 (스키마와 코드가 맞다)", async () => {
+    const { admin, userId } = await createTestUser();
+
+    try {
+      const { error } = await admin
+        .from("conversations")
+        .insert({ owner_id: userId, current_block: "maintenance" });
+
+      expect(error, error?.message).toBeNull();
+    } finally {
+      await admin.auth.admin.deleteUser(userId);
+    }
+  });
+
   test("대화가 연결되지 않은 프로젝트에는 그 버튼이 없다", async ({ page }) => {
     const { admin, email, password, userId } = await createTestUser();
 
