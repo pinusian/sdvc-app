@@ -47,6 +47,15 @@ export default function SignupPage() {
           로그인
         </Link>
       </p>
+
+      {/* [P10-2a] 이메일을 받는 순간 개인정보보호법이 적용된다 (FR-037) */}
+      <p className="mt-3 text-center text-xs text-ink-faint">
+        가입하시면{" "}
+        <Link href="/privacy" className="underline hover:text-accent-ink">
+          개인정보 처리방침
+        </Link>
+        에 동의하는 것으로 봅니다.
+      </p>
     </Card>
   );
 }

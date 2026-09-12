@@ -134,3 +134,83 @@ describe("[P8-2] extendTrial", () => {
     expect(updates[0].values).toEqual({ trial_ends_at: "2026-09-19T00:00:00.000Z" });
   });
 });
+
+/**
+ * [P8-2b][P8-4a] 등급 부여와 계정별 한도 (FR-035·036).
+ */
+describe("[P8-2b] grantGrade", () => {
+  it("등급과 만료일·사유를 함께 남긴다", async () => {
+    const { grantGrade } = await import("@/lib/admin/developers");
+    const { client, updates } = fakeAdmin();
+
+    await grantGrade(client, "user-9", {
+      grade: "basic",
+      until: "2026-12-31T00:00:00.000Z",
+      reason: "가을 강의 수강생",
+    });
+
+    expect(updates[0].values).toEqual({
+      granted_grade: "basic",
+      granted_until: "2026-12-31T00:00:00.000Z",
+      granted_reason: "가을 강의 수강생",
+    });
+  });
+
+  it("해제하면 세 값을 모두 지운다 (사유만 남으면 준 것처럼 보인다)", async () => {
+    const { grantGrade } = await import("@/lib/admin/developers");
+    const { client, updates } = fakeAdmin();
+
+    await grantGrade(client, "user-9", null);
+
+    expect(updates[0].values).toEqual({
+      granted_grade: null,
+      granted_until: null,
+      granted_reason: null,
+    });
+  });
+
+  it("만료일 없이도 줄 수 있다 (무기한)", async () => {
+    const { grantGrade } = await import("@/lib/admin/developers");
+    const { client, updates } = fakeAdmin();
+
+    await grantGrade(client, "user-9", { grade: "pro" });
+
+    expect(updates[0].values).toMatchObject({ granted_grade: "pro", granted_until: null });
+  });
+});
+
+describe("[P8-4a] setMonthlyLimit", () => {
+  it("한도를 지정한다", async () => {
+    const { setMonthlyLimit } = await import("@/lib/admin/developers");
+    const { client, updates } = fakeAdmin();
+
+    await setMonthlyLimit(client, "user-9", 300000);
+
+    expect(updates[0].values).toEqual({ monthly_token_limit: 300000 });
+  });
+
+  it("0도 그대로 저장한다 (완전 차단이며 비움과 다르다)", async () => {
+    const { setMonthlyLimit } = await import("@/lib/admin/developers");
+    const { client, updates } = fakeAdmin();
+
+    await setMonthlyLimit(client, "user-9", 0);
+
+    expect(updates[0].values).toEqual({ monthly_token_limit: 0 });
+  });
+
+  it("null이면 등급 기본값으로 되돌린다", async () => {
+    const { setMonthlyLimit } = await import("@/lib/admin/developers");
+    const { client, updates } = fakeAdmin();
+
+    await setMonthlyLimit(client, "user-9", null);
+
+    expect(updates[0].values).toEqual({ monthly_token_limit: null });
+  });
+
+  it("음수는 거부한다 (DB 제약에 닿기 전에 막는다)", async () => {
+    const { setMonthlyLimit } = await import("@/lib/admin/developers");
+    const { client } = fakeAdmin();
+
+    await expect(setMonthlyLimit(client, "user-9", -1)).rejects.toThrow(/0 이상/);
+  });
+});

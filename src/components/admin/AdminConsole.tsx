@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import type { EconomicsSummary } from "@/lib/admin/economics";
 import type { DeveloperRow } from "@/lib/admin/developers";
+import { formatTokens } from "@/lib/billing/plans";
 
 /**
  * [P8-2][P8-3] 운영 화면 (FR-014·015, SC-006·007).
@@ -37,8 +38,102 @@ export function AdminConsole({ summary, developers }: Props) {
   const [notice, setNotice] = useState<string | null>(null);
   /** 정지하려는 대상과 사유 — 사유 없이는 정지할 수 없다 */
   const [suspending, setSuspending] = useState<{ id: string; reason: string } | null>(null);
+  /** [P8-2c] 등급을 부여하려는 대상 (FR-035) */
+  const [granting, setGranting] = useState<{
+    id: string;
+    grade: "basic" | "pro";
+    until: string;
+    reason: string;
+  } | null>(null);
+  /** [P8-2c] 한도를 고치려는 대상 (FR-036) */
+  const [limiting, setLimiting] = useState<{ id: string; value: string } | null>(null);
 
   const inTheRed = summary.costRatio !== null && summary.costRatio >= 1;
+
+  /**
+   * 관리 API 호출 하나 — 오류·감사 경고 처리를 한곳에 모은다.
+   * 부여·한도·정지가 각자 처리하면 감사 경고를 빠뜨리는 곳이 생긴다.
+   */
+  async function send(
+    userId: string,
+    body: Record<string, unknown>,
+    onOk: (data: Record<string, unknown>) => string,
+  ) {
+    setBusy(userId);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await fetch("/api/admin/developers", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = (await res.json()) as Record<string, unknown>;
+      if (!res.ok) throw new Error((data.error as string) ?? "처리하지 못했습니다.");
+      setNotice(onOk(data));
+      if (data.auditWarning) setError(data.auditWarning as string);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "처리하지 못했습니다.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /** [P8-2c] 등급 부여·해제 (FR-035) */
+  async function grant(
+    userId: string,
+    input: { grade: "basic" | "pro"; until: string; reason: string } | null,
+  ) {
+    const body: Record<string, unknown> = input
+      ? {
+          userId,
+          action: "grant_grade",
+          grade: input.grade,
+          // 날짜만 고르므로 그날이 끝날 때까지로 본다.
+          ...(input.until
+            ? { until: new Date(input.until + "T23:59:59Z").toISOString() }
+            : {}),
+          ...(input.reason.trim() ? { reason: input.reason.trim() } : {}),
+        }
+      : { userId, action: "grant_grade" };
+
+    await send(userId, body, () => {
+      setRows((prev) =>
+        prev.map((row) =>
+          row.id === userId
+            ? {
+                ...row,
+                grantedGrade: input ? input.grade : null,
+                grantedUntil: input && input.until ? input.until + "T23:59:59.000Z" : null,
+                grantedReason: input && input.reason.trim() ? input.reason.trim() : null,
+              }
+            : row,
+        ),
+      );
+      setGranting(null);
+      return input ? "등급을 부여했습니다." : "부여를 해제했습니다.";
+    });
+  }
+
+  /** [P8-2c] 계정별 한도 (FR-036). 빈칸이면 null — 등급 기본값으로 되돌린다. */
+  async function saveLimit(userId: string, raw: string) {
+    const trimmed = raw.trim();
+    const limit = trimmed === "" ? null : Number(trimmed);
+    if (limit !== null && (!Number.isInteger(limit) || limit < 0)) {
+      setError("월 한도는 0 이상의 정수여야 합니다.");
+      return;
+    }
+
+    await send(userId, { userId, action: "set_limit", limit }, () => {
+      setRows((prev) =>
+        prev.map((row) => (row.id === userId ? { ...row, monthlyTokenLimit: limit } : row)),
+      );
+      setLimiting(null);
+      return limit === null
+        ? "한도를 등급 기본값으로 되돌렸습니다."
+        : "한도를 " + limit.toLocaleString("ko-KR") + " 토큰으로 정했습니다.";
+    });
+  }
 
   async function act(
     userId: string,
@@ -195,6 +290,20 @@ export function AdminConsole({ summary, developers }: Props) {
                     정지됨{row.suspendedReason ? ` — ${row.suspendedReason}` : ""}
                   </p>
                 )}
+                {/* [P8-2c] 부여받은 등급·계정 한도는 결제분과 구별해 보여준다 */}
+                {(row.grantedGrade || row.monthlyTokenLimit != null) && (
+                  <p className="mt-0.5 text-xs text-accent-ink">
+                    {row.grantedGrade &&
+                      `부여: ${GRADE_LABEL[row.grantedGrade] ?? row.grantedGrade}` +
+                        (row.grantedUntil
+                          ? ` (~${new Date(row.grantedUntil).toLocaleDateString("ko-KR")})`
+                          : " (무기한)") +
+                        (row.grantedReason ? ` · ${row.grantedReason}` : "")}
+                    {row.grantedGrade && row.monthlyTokenLimit != null && " · "}
+                    {row.monthlyTokenLimit != null &&
+                      `한도 ${formatTokens(row.monthlyTokenLimit)} 토큰`}
+                  </p>
+                )}
               </div>
 
               <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -206,6 +315,45 @@ export function AdminConsole({ summary, developers }: Props) {
                   onClick={() => void act(row.id, "extend_trial")}
                 >
                   체험 연장
+                </Button>
+
+                {row.grantedGrade ? (
+                  <Button
+                    variant="secondary"
+                    className="!px-2.5 !py-1 text-xs"
+                    disabled={busy === row.id}
+                    aria-label={`${row.email} 부여 해제`}
+                    onClick={() => void grant(row.id, null)}
+                  >
+                    부여 해제
+                  </Button>
+                ) : (
+                  <Button
+                    variant="secondary"
+                    className="!px-2.5 !py-1 text-xs"
+                    disabled={busy === row.id}
+                    aria-label={`${row.email} 등급 부여`}
+                    onClick={() =>
+                      setGranting({ id: row.id, grade: "basic", until: "", reason: "" })
+                    }
+                  >
+                    등급 부여
+                  </Button>
+                )}
+
+                <Button
+                  variant="secondary"
+                  className="!px-2.5 !py-1 text-xs"
+                  disabled={busy === row.id}
+                  aria-label={`${row.email} 한도`}
+                  onClick={() =>
+                    setLimiting({
+                      id: row.id,
+                      value: row.monthlyTokenLimit != null ? String(row.monthlyTokenLimit) : "",
+                    })
+                  }
+                >
+                  한도
                 </Button>
 
                 {row.suspendedAt ? (
@@ -230,6 +378,106 @@ export function AdminConsole({ summary, developers }: Props) {
                   </Button>
                 )}
               </div>
+
+              {/* [P8-2c] 등급 부여 (FR-035) */}
+              {granting?.id === row.id && (
+                <form
+                  className="flex w-full flex-wrap items-center gap-2 rounded-sm bg-surface-muted p-2.5"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void grant(row.id, granting);
+                  }}
+                >
+                  <label className="text-xs text-ink-muted" htmlFor={`grade-${row.id}`}>
+                    부여할 등급
+                  </label>
+                  <select
+                    id={`grade-${row.id}`}
+                    value={granting.grade}
+                    onChange={(event) =>
+                      setGranting({ ...granting, grade: event.target.value as "basic" | "pro" })
+                    }
+                    className="rounded-sm border border-border bg-surface px-2 py-1 text-xs text-ink focus:border-accent focus:outline-none"
+                  >
+                    <option value="basic">기본</option>
+                    <option value="pro">프로</option>
+                  </select>
+
+                  <label className="text-xs text-ink-muted" htmlFor={`until-${row.id}`}>
+                    언제까지
+                  </label>
+                  <input
+                    id={`until-${row.id}`}
+                    type="date"
+                    value={granting.until}
+                    onChange={(event) => setGranting({ ...granting, until: event.target.value })}
+                    className="rounded-sm border border-border bg-surface px-2 py-1 text-xs text-ink focus:border-accent focus:outline-none"
+                  />
+
+                  <input
+                    value={granting.reason}
+                    placeholder="사유 (예: 가을 강의 수강생)"
+                    onChange={(event) => setGranting({ ...granting, reason: event.target.value })}
+                    className="min-w-0 flex-1 rounded-sm border border-border bg-surface px-2 py-1 text-xs text-ink focus:border-accent focus:outline-none"
+                  />
+
+                  <Button
+                    type="submit"
+                    variant="accent"
+                    className="!px-2.5 !py-1 text-xs"
+                    disabled={busy === row.id}
+                  >
+                    부여합니다
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="!px-2.5 !py-1 text-xs"
+                    onClick={() => setGranting(null)}
+                  >
+                    취소
+                  </Button>
+                </form>
+              )}
+
+              {/* [P8-2c] 계정별 한도 (FR-036). 비우면 등급 기본값, 0은 완전 차단 */}
+              {limiting?.id === row.id && (
+                <form
+                  className="flex w-full flex-wrap items-center gap-2 rounded-sm bg-surface-muted p-2.5"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void saveLimit(row.id, limiting.value);
+                  }}
+                >
+                  <label className="text-xs text-ink-muted" htmlFor={`limit-${row.id}`}>
+                    월 토큰 한도
+                  </label>
+                  <input
+                    id={`limit-${row.id}`}
+                    value={limiting.value}
+                    inputMode="numeric"
+                    placeholder="비우면 등급 기본값 · 0은 완전 차단"
+                    onChange={(event) => setLimiting({ id: row.id, value: event.target.value })}
+                    className="min-w-0 flex-1 rounded-sm border border-border bg-surface px-2 py-1 text-xs text-ink focus:border-accent focus:outline-none"
+                  />
+                  <Button
+                    type="submit"
+                    variant="accent"
+                    className="!px-2.5 !py-1 text-xs"
+                    disabled={busy === row.id}
+                  >
+                    한도 저장
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="!px-2.5 !py-1 text-xs"
+                    onClick={() => setLimiting(null)}
+                  >
+                    취소
+                  </Button>
+                </form>
+              )}
 
               {/* 사유 없이는 정지할 수 없다 — 나중에 왜 정지했는지 알아야 한다 */}
               {suspending?.id === row.id && (

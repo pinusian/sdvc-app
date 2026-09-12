@@ -186,3 +186,146 @@ describe("[P8-6] 정지된 계정", () => {
     expect(canStartChat({ ...paying, suspendedAt: null }).allowed).toBe(true);
   });
 });
+
+/**
+ * [P8-2b][P8-4a] 교육용 운영 — 부여한 등급과 계정별 한도 (FR-035·036).
+ *
+ * 실효 등급 순서가 핵심이다. 섞이면 **"결제했는데 강등"** 이나
+ * **"공짜로 프로"** 가 생긴다.
+ */
+describe("[P8-2b] 부여한 등급", () => {
+  const expiredTrial: AccountState = {
+    grade: "trial",
+    subscriptionStatus: "none",
+    trialEndsAt: "2026-09-01T00:00:00.000Z", // 이미 지남
+    monthlyTokensUsed: 0,
+    projectCount: 0,
+  };
+  const NOW = new Date("2026-09-12T00:00:00.000Z");
+
+  it("체험이 끝났어도 부여가 살아 있으면 쓸 수 있다", () => {
+    const decision = canStartChat(
+      { ...expiredTrial, grantedGrade: "basic", grantedUntil: "2026-12-31T00:00:00.000Z" },
+      NOW,
+    );
+
+    expect(decision.allowed).toBe(true);
+  });
+
+  it("부여가 만료되면 즉시 다시 막힌다 (정리 작업을 기다리지 않는다)", () => {
+    const decision = canStartChat(
+      { ...expiredTrial, grantedGrade: "pro", grantedUntil: "2026-09-11T00:00:00.000Z" },
+      NOW,
+    );
+
+    expect(decision.allowed).toBe(false);
+    if (!decision.allowed) expect(decision.reason).toBe("trial_expired");
+  });
+
+  it("만료일이 없는 부여는 계속 유효하다", () => {
+    const decision = canStartChat(
+      { ...expiredTrial, grantedGrade: "basic", grantedUntil: null },
+      NOW,
+    );
+
+    expect(decision.allowed).toBe(true);
+  });
+
+  it("부여받으면 그 등급의 한도를 쓴다", () => {
+    // 체험 한도(50만)를 넘었지만 기본(200만) 한도 안이다
+    const decision = canStartChat(
+      {
+        ...expiredTrial,
+        monthlyTokensUsed: 900_000,
+        grantedGrade: "basic",
+        grantedUntil: "2026-12-31T00:00:00.000Z",
+      },
+      NOW,
+    );
+
+    expect(decision.allowed).toBe(true);
+  });
+
+  it("정지가 부여보다 세다", () => {
+    const decision = canStartChat(
+      {
+        ...expiredTrial,
+        grantedGrade: "pro",
+        grantedUntil: "2026-12-31T00:00:00.000Z",
+        suspendedAt: "2026-09-12T00:00:00.000Z",
+      },
+      NOW,
+    );
+
+    expect(decision.allowed).toBe(false);
+    if (!decision.allowed) expect(decision.reason).toBe("suspended");
+  });
+
+  it("결제한 사람은 부여 때문에 강등되지 않는다", () => {
+    // 프로를 결제 중인데 기본을 부여받았다 — 결제한 쪽이 이겨야 한다
+    const decision = canStartChat(
+      {
+        grade: "pro",
+        subscriptionStatus: "active",
+        trialEndsAt: null,
+        monthlyTokensUsed: 3_000_000, // 기본(200만) 초과, 프로(800만) 이내
+        projectCount: 0,
+        grantedGrade: "basic",
+        grantedUntil: "2026-12-31T00:00:00.000Z",
+      },
+      NOW,
+    );
+
+    expect(decision.allowed).toBe(true);
+  });
+
+  it("부여받은 사람도 프로젝트 수는 그 등급 기준이다", () => {
+    const decision = canCreateProject(
+      {
+        ...expiredTrial,
+        projectCount: 2, // 체험은 1개, 기본은 3개
+        grantedGrade: "basic",
+        grantedUntil: "2026-12-31T00:00:00.000Z",
+      },
+      NOW,
+    );
+
+    expect(decision.allowed).toBe(true);
+  });
+});
+
+describe("[P8-4a] 계정별 한도", () => {
+  const base: AccountState = {
+    grade: "basic",
+    subscriptionStatus: "active",
+    trialEndsAt: null,
+    monthlyTokensUsed: 500_000,
+    projectCount: 0,
+  };
+
+  it("지정하면 등급 기본값 대신 그 값을 쓴다", () => {
+    // 기본 등급은 200만이지만 30만으로 조였다
+    const decision = canStartChat({ ...base, monthlyTokenLimit: 300_000 });
+
+    expect(decision.allowed).toBe(false);
+    if (!decision.allowed) expect(decision.reason).toBe("token_limit");
+  });
+
+  it("지정한 값이 등급보다 넉넉해도 그 값을 쓴다", () => {
+    const decision = canStartChat({ ...base, monthlyTokensUsed: 5_000_000, monthlyTokenLimit: 9_000_000 });
+
+    expect(decision.allowed).toBe(true);
+  });
+
+  it("**0이면 완전히 막는다** — null과 다르다", () => {
+    const decision = canStartChat({ ...base, monthlyTokensUsed: 0, monthlyTokenLimit: 0 });
+
+    expect(decision.allowed).toBe(false);
+  });
+
+  it("비워두면(null) 등급 기본값을 쓴다", () => {
+    const decision = canStartChat({ ...base, monthlyTokenLimit: null });
+
+    expect(decision.allowed).toBe(true);
+  });
+});

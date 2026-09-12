@@ -18,6 +18,11 @@ interface ProfileRow {
   trial_ends_at: string | null;
   /** [P8-6] 계정 정지 (FR-014) */
   suspended_at: string | null;
+  /** [P8-2b] 결제 없이 부여한 등급 (FR-035) */
+  granted_grade: Grade | null;
+  granted_until: string | null;
+  /** [P8-4a] 계정별 월 한도 (FR-036). 0도 유효한 값이다 */
+  monthly_token_limit: number | null;
 }
 
 export async function loadAccountState(
@@ -27,7 +32,9 @@ export async function loadAccountState(
 ): Promise<AccountState | null> {
   const { data: profile } = await admin
     .from("profiles")
-    .select("grade, subscription_status, trial_ends_at, suspended_at")
+    .select(
+      "grade, subscription_status, trial_ends_at, suspended_at, granted_grade, granted_until, monthly_token_limit",
+    )
     .eq("id", userId)
     .maybeSingle();
 
@@ -44,6 +51,10 @@ export async function loadAccountState(
     subscriptionStatus: row.subscription_status,
     trialEndsAt: row.trial_ends_at,
     suspendedAt: row.suspended_at,
+    grantedGrade: row.granted_grade,
+    grantedUntil: row.granted_until,
+    // `?? null`로 쓰면 0이 null이 되어 "완전 차단"이 "기본값"으로 바뀐다.
+    monthlyTokenLimit: row.monthly_token_limit,
     monthlyTokensUsed,
     projectCount,
   };

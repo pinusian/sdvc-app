@@ -13,6 +13,8 @@ const maybeSingle = vi.fn();
 const listDevelopers = vi.fn();
 const setSuspended = vi.fn();
 const extendTrial = vi.fn();
+const grantGrade = vi.fn();
+const setMonthlyLimit = vi.fn();
 const recordAdminAction = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -26,6 +28,8 @@ vi.mock("@/lib/admin/developers", () => ({
   listDevelopers: (...a: unknown[]) => listDevelopers(...a),
   setSuspended: (...a: unknown[]) => setSuspended(...a),
   extendTrial: (...a: unknown[]) => extendTrial(...a),
+  grantGrade: (...a: unknown[]) => grantGrade(...a),
+  setMonthlyLimit: (...a: unknown[]) => setMonthlyLimit(...a),
 }));
 
 vi.mock("@/lib/admin/audit", () => ({
@@ -166,5 +170,103 @@ describe("[P8-2] /api/admin/developers", () => {
     expect(res.status).toBe(200);
     expect(setSuspended).toHaveBeenCalled();
     expect((await res.json()).auditWarning).toContain("권한 없음");
+  });
+});
+
+/**
+ * [P8-2c] 등급 부여·한도 지정도 같은 관문·같은 감사 로그를 탄다 (FR-035·036).
+ */
+describe("[P8-2c] 부여와 한도", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getUser.mockResolvedValue({ data: { user: { id: "admin-1" } }, error: null });
+    maybeSingle.mockResolvedValue({
+      data: { role: "admin", admin_tier: "super", suspended_at: null },
+      error: null,
+    });
+    grantGrade.mockResolvedValue(undefined);
+    setMonthlyLimit.mockResolvedValue(undefined);
+    recordAdminAction.mockResolvedValue({ recorded: true });
+  });
+
+  it("등급을 기간과 함께 부여하고 로그에 남긴다", async () => {
+    const { POST } = await import("@/app/api/admin/developers/route");
+    const res = await POST(
+      post({
+        userId: "user-9",
+        action: "grant_grade",
+        grade: "basic",
+        until: "2026-12-31T00:00:00.000Z",
+        reason: "가을 강의",
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(grantGrade).toHaveBeenCalledWith(expect.anything(), "user-9", {
+      grade: "basic",
+      until: "2026-12-31T00:00:00.000Z",
+      reason: "가을 강의",
+    });
+    expect(recordAdminAction).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        action: "policy:change",
+        targetId: "user-9",
+        detail: expect.objectContaining({ grade: "basic" }),
+      }),
+    );
+  });
+
+  it("부여 해제는 grade 없이 부른다", async () => {
+    const { POST } = await import("@/app/api/admin/developers/route");
+    const res = await POST(post({ userId: "user-9", action: "grant_grade" }));
+
+    expect(res.status).toBe(200);
+    expect(grantGrade).toHaveBeenCalledWith(expect.anything(), "user-9", null);
+  });
+
+  it("모르는 등급은 400 (아무 등급이나 끼워넣지 못하게)", async () => {
+    const { POST } = await import("@/app/api/admin/developers/route");
+    const res = await POST(post({ userId: "user-9", action: "grant_grade", grade: "vip" }));
+
+    expect(res.status).toBe(400);
+    expect(grantGrade).not.toHaveBeenCalled();
+  });
+
+  it("부여는 정책 변경이라 운영자는 못 한다 (최고관리자만)", async () => {
+    maybeSingle.mockResolvedValue({
+      data: { role: "admin", admin_tier: "operator", suspended_at: null },
+      error: null,
+    });
+
+    const { POST } = await import("@/app/api/admin/developers/route");
+    const res = await POST(post({ userId: "user-9", action: "grant_grade", grade: "pro" }));
+
+    expect(res.status).toBe(403);
+    expect(grantGrade).not.toHaveBeenCalled();
+  });
+
+  it("한도를 지정한다 (0도 그대로)", async () => {
+    const { POST } = await import("@/app/api/admin/developers/route");
+    const res = await POST(post({ userId: "user-9", action: "set_limit", limit: 0 }));
+
+    expect(res.status).toBe(200);
+    expect(setMonthlyLimit).toHaveBeenCalledWith(expect.anything(), "user-9", 0);
+  });
+
+  it("한도를 비우면 등급 기본값으로 되돌린다", async () => {
+    const { POST } = await import("@/app/api/admin/developers/route");
+    const res = await POST(post({ userId: "user-9", action: "set_limit", limit: null }));
+
+    expect(res.status).toBe(200);
+    expect(setMonthlyLimit).toHaveBeenCalledWith(expect.anything(), "user-9", null);
+  });
+
+  it("숫자가 아닌 한도는 400", async () => {
+    const { POST } = await import("@/app/api/admin/developers/route");
+    const res = await POST(post({ userId: "user-9", action: "set_limit", limit: "많이" }));
+
+    expect(res.status).toBe(400);
+    expect(setMonthlyLimit).not.toHaveBeenCalled();
   });
 });

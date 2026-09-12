@@ -43,6 +43,39 @@ export interface AccountState {
   projectCount: number;
   /** [P8-6] 계정 정지 시각. null이면 정상 (FR-014) */
   suspendedAt?: string | null;
+  /** [P8-2b] 운영자가 결제 없이 부여한 등급 (FR-035). 결제분(`grade`)과 섞지 않는다 */
+  grantedGrade?: Grade | null;
+  /** 부여 만료 시각. null이면 무기한 */
+  grantedUntil?: string | null;
+  /** [P8-4a] 이 계정만의 월 한도 (FR-036). null이면 등급 기본값, **0은 완전 차단** */
+  monthlyTokenLimit?: number | null;
+}
+
+/**
+ * [P8-2b] 지금 실제로 적용되는 등급 (FR-035).
+ *
+ * 순서를 섞으면 **"결제했는데 강등"** 이나 **"공짜로 프로"** 가 생긴다:
+ *   1) 구독이 살아 있으면 → 결제한 등급 (돈을 낸 쪽이 우선)
+ *   2) 아니고 부여가 살아 있으면 → 부여한 등급
+ *   3) 둘 다 아니면 → 원래 등급
+ */
+export function effectiveGrade(state: AccountState, now: Date = new Date()): Grade {
+  if (state.subscriptionStatus === "active") return state.grade;
+  return hasLiveGrant(state, now) ? state.grantedGrade! : state.grade;
+}
+
+/** 부여가 지금 살아 있는가. 만료는 **읽을 때** 판정한다 — 정리 작업을 기다리면 하루 더 공짜가 된다. */
+function hasLiveGrant(state: AccountState, now: Date): boolean {
+  if (!state.grantedGrade) return false;
+  if (!state.grantedUntil) return true; // 만료일이 없으면 무기한
+  return new Date(state.grantedUntil).getTime() > now.getTime();
+}
+
+/** 이 계정에 적용되는 월 토큰 한도. **0도 유효한 값**이라 `??`를 쓰면 안 된다. */
+function tokenLimitOf(state: AccountState, grade: Grade): number {
+  return state.monthlyTokenLimit != null
+    ? state.monthlyTokenLimit
+    : GRADE_LIMITS[grade].monthlyTokens;
 }
 
 export type DenyReason =
@@ -79,14 +112,17 @@ export function canStartChat(state: AccountState, now: Date = new Date()): Decis
     );
   }
 
-  const limits = GRADE_LIMITS[state.grade];
+  const grade = effectiveGrade(state, now);
+  const limits = GRADE_LIMITS[grade];
   if (!limits) {
     return deny("unknown_grade", "등급 정보를 확인할 수 없습니다. 관리자에게 문의해주세요.");
   }
 
   const paying = state.subscriptionStatus === "active";
+  // [P8-2b] 운영자가 부여한 기간 동안은 체험 만료를 따지지 않는다 (FR-035).
+  const granted = hasLiveGrant(state, now);
 
-  if (!paying) {
+  if (!paying && !granted) {
     if (state.subscriptionStatus === "past_due" || state.subscriptionStatus === "canceled") {
       return deny(
         "subscription_inactive",
@@ -109,8 +145,8 @@ export function canStartChat(state: AccountState, now: Date = new Date()): Decis
     }
   }
 
-  if (state.monthlyTokensUsed >= limits.monthlyTokens) {
-    const upgrade = nextGrade(state.grade);
+  if (state.monthlyTokensUsed >= tokenLimitOf(state, grade)) {
+    const upgrade = nextGrade(grade);
     return deny(
       "token_limit",
       upgrade
@@ -128,9 +164,10 @@ export function canCreateProject(state: AccountState, now: Date = new Date()): D
   const chat = canStartChat(state, now);
   if (!chat.allowed) return chat;
 
-  const limits = GRADE_LIMITS[state.grade];
+  const grade = effectiveGrade(state, now);
+  const limits = GRADE_LIMITS[grade];
   if (state.projectCount >= limits.projects) {
-    const upgrade = nextGrade(state.grade);
+    const upgrade = nextGrade(grade);
     return deny(
       "project_limit",
       `지금 등급에서는 프로젝트를 ${limits.projects}개까지 만들 수 있어요. ` +

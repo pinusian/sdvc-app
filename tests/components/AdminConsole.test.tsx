@@ -30,6 +30,10 @@ const DEVELOPERS = [
     suspendedAt: null,
     suspendedReason: null,
     createdAt: "2026-09-01T00:00:00.000Z",
+    grantedGrade: null,
+    grantedUntil: null,
+    grantedReason: null,
+    monthlyTokenLimit: null,
   },
   {
     id: "b",
@@ -41,6 +45,10 @@ const DEVELOPERS = [
     suspendedAt: "2026-09-12T00:00:00.000Z",
     suspendedReason: "불법 콘텐츠",
     createdAt: "2026-09-05T00:00:00.000Z",
+    grantedGrade: null,
+    grantedUntil: null,
+    grantedReason: null,
+    monthlyTokenLimit: null,
   },
 ];
 
@@ -162,6 +170,104 @@ describe("[P8-2][P8-3] AdminConsole", () => {
 
     await waitFor(() =>
       expect(screen.getByRole("alert")).toHaveTextContent("권한이 없습니다"),
+    );
+  });
+});
+
+/**
+ * [P8-2c] 교육용 운영 조작 (FR-035·036).
+ *
+ * 수강생에게 등급을 주고, 폭주하는 한 명만 조인다.
+ */
+describe("[P8-2c] 등급 부여와 한도", () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.unstubAllGlobals());
+
+  const withGrant = [
+    {
+      ...DEVELOPERS[0],
+      grantedGrade: "basic",
+      grantedUntil: "2026-12-31T00:00:00.000Z",
+      grantedReason: "가을 강의",
+      monthlyTokenLimit: 300000,
+    },
+    { ...DEVELOPERS[1], grantedGrade: null, grantedUntil: null, grantedReason: null, monthlyTokenLimit: null },
+  ];
+
+  function mockOk(body: Record<string, unknown> = {}) {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(body)));
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("부여받은 등급과 기간을 보여준다", () => {
+    render(<AdminConsole summary={SUMMARY} developers={withGrant} />);
+
+    expect(screen.getByText(/부여: 기본/)).toBeInTheDocument();
+    expect(screen.getByText(/가을 강의/)).toBeInTheDocument();
+  });
+
+  it("지정된 한도를 보여준다 (등급 기본값과 구별되게)", () => {
+    render(<AdminConsole summary={SUMMARY} developers={withGrant} />);
+
+    expect(screen.getByText(/한도 30만/)).toBeInTheDocument();
+  });
+
+  it("등급을 기간과 함께 부여한다", async () => {
+    const fetchMock = mockOk({ granted: { grade: "basic" } });
+    render(<AdminConsole summary={SUMMARY} developers={withGrant} />);
+
+    await userEvent.click(screen.getByRole("button", { name: /bad@x.com 등급 부여/ }));
+    await userEvent.selectOptions(screen.getByLabelText("부여할 등급"), "pro");
+    await userEvent.type(screen.getByLabelText("언제까지"), "2026-12-31");
+    await userEvent.click(screen.getByRole("button", { name: "부여합니다" }));
+
+    await waitFor(() => {
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body).toMatchObject({ userId: "b", action: "grant_grade", grade: "pro" });
+      expect(body.until).toContain("2026-12-31");
+    });
+  });
+
+  it("부여를 해제할 수 있다", async () => {
+    const fetchMock = mockOk({ granted: null });
+    render(<AdminConsole summary={SUMMARY} developers={withGrant} />);
+
+    await userEvent.click(screen.getByRole("button", { name: /heavy@x.com 부여 해제/ }));
+
+    await waitFor(() => {
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body).toEqual({ userId: "a", action: "grant_grade" });
+    });
+  });
+
+  it("한도를 바꾼다", async () => {
+    const fetchMock = mockOk({ monthlyTokenLimit: 500000 });
+    render(<AdminConsole summary={SUMMARY} developers={withGrant} />);
+
+    await userEvent.click(screen.getByRole("button", { name: /bad@x.com 한도/ }));
+    await userEvent.type(screen.getByLabelText("월 토큰 한도"), "500000");
+    await userEvent.click(screen.getByRole("button", { name: "한도 저장" }));
+
+    await waitFor(() =>
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+        userId: "b",
+        action: "set_limit",
+        limit: 500000,
+      }),
+    );
+  });
+
+  it("한도를 비우면 null로 보낸다 (등급 기본값으로 되돌리기)", async () => {
+    const fetchMock = mockOk({ monthlyTokenLimit: null });
+    render(<AdminConsole summary={SUMMARY} developers={withGrant} />);
+
+    await userEvent.click(screen.getByRole("button", { name: /heavy@x.com 한도/ }));
+    await userEvent.clear(screen.getByLabelText("월 토큰 한도"));
+    await userEvent.click(screen.getByRole("button", { name: "한도 저장" }));
+
+    await waitFor(() =>
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body).limit).toBeNull(),
     );
   });
 });
