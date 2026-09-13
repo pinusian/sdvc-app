@@ -33,3 +33,12 @@ desktop.ini
 /test-results/
 /playwright-report/
 /blob-report/
+
+# --- office lock files ---
+~$*.docx
+~$*.xlsx
+~$*.pptx
+
+# --- 이 저장소에 속하지 않는 사본 (정본은 SDVC/docs/에 있음, 루트에만 적용) ---
+/20260913_SDVC웹서비스_매뉴얼_상세본.docx
+/20260913_SDVC웹서비스_매뉴얼_간략본.docx
