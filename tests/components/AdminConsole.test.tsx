@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AdminConsole } from "@/components/admin/AdminConsole";
 
@@ -51,6 +51,96 @@ const DEVELOPERS = [
     monthlyTokenLimit: null,
   },
 ];
+
+const ALL_PROJECTS = [
+  {
+    id: "proj-1",
+    ownerEmail: "heavy@x.com",
+    name: "소금빵 가게",
+    slug: "sogeumppang",
+    status: "deployed",
+    visibility: "private",
+    createdAt: "2026-09-10T00:00:00.000Z",
+  },
+  {
+    id: "proj-2",
+    ownerEmail: "bad@x.com",
+    name: "만드는 중인 것",
+    slug: "wip-site",
+    status: "building",
+    visibility: "private",
+    createdAt: "2026-09-11T00:00:00.000Z",
+  },
+];
+
+/**
+ * [P8-13] 전체 프로젝트 열람표 (FR-045).
+ *
+ * "운영자(최고관리자)는 개발자들이 만든 모든 프로젝트를 유지보수 차원에서
+ * 볼 수 있으면 좋겠다"는 요청 그대로 — 개발자 관리 표 **아래**에 둔다.
+ */
+describe("[P8-13] 전체 프로젝트 열람표", () => {
+  it("개발자 관리 표 아래에 개발자·프로젝트명·제작일·제작단계·바로보기를 보여준다", () => {
+    render(
+      <AdminConsole summary={SUMMARY} developers={DEVELOPERS} allProjects={ALL_PROJECTS} />,
+    );
+
+    const table = screen.getByRole("table", { name: "전체 프로젝트" });
+    const developerHeading = screen.getByRole("heading", { name: /개발자 2명/ });
+    // 개발자 관리 표보다 아래(문서 순서상 뒤)에 있어야 한다
+    expect(
+      developerHeading.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    const row = screen.getByRole("row", { name: /소금빵 가게/ });
+    expect(row).toHaveTextContent("heavy@x.com");
+    expect(row).toHaveTextContent("2026-09-10");
+    expect(row).toHaveTextContent("완성");
+  });
+
+  it("제작 단계는 개발자 화면과 같은 말로 보여준다", () => {
+    render(
+      <AdminConsole summary={SUMMARY} developers={DEVELOPERS} allProjects={ALL_PROJECTS} />,
+    );
+
+    const wip = screen.getByRole("row", { name: /만드는 중인 것/ });
+    expect(wip).toHaveTextContent("만드는 중");
+  });
+
+  it("완성된 프로젝트만 바로보기가 있다 — 만들다 만 것은 볼 파일이 없다", () => {
+    render(
+      <AdminConsole summary={SUMMARY} developers={DEVELOPERS} allProjects={ALL_PROJECTS} />,
+    );
+
+    const done = screen.getByRole("row", { name: /소금빵 가게/ });
+    expect(
+      within(done).getByRole("link", { name: /바로보기/ }),
+    ).toHaveAttribute("href", "/site/sogeumppang");
+
+    const wip = screen.getByRole("row", { name: /만드는 중인 것/ });
+    expect(within(wip).queryByRole("link", { name: /바로보기/ })).toBeNull();
+  });
+
+  it("바로보기는 새 탭으로 연다 — 관리자가 자기 작업 화면을 잃지 않는다", () => {
+    render(
+      <AdminConsole summary={SUMMARY} developers={DEVELOPERS} allProjects={ALL_PROJECTS} />,
+    );
+
+    const link = screen.getByRole("link", { name: /바로보기/ });
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
+  });
+
+  it("프로젝트가 없으면 그 사실을 분명히 말한다", () => {
+    render(<AdminConsole summary={SUMMARY} developers={DEVELOPERS} allProjects={[]} />);
+    expect(screen.getByText(/프로젝트가 없습니다/)).toBeInTheDocument();
+  });
+
+  it("최고관리자가 아니면(전달받지 않으면) 표 자체를 그리지 않는다", () => {
+    render(<AdminConsole summary={SUMMARY} developers={DEVELOPERS} />);
+    expect(screen.queryByRole("table", { name: "전체 프로젝트" })).toBeNull();
+  });
+});
 
 describe("[P8-2][P8-3] AdminConsole", () => {
   beforeEach(() => vi.clearAllMocks());

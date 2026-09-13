@@ -3,6 +3,7 @@ import { adminEntry, loadAdminActor } from "@/lib/admin/entry";
 import { adminCan } from "@/lib/admin/access";
 import { recordAdminAction } from "@/lib/admin/audit";
 import { listDevelopers } from "@/lib/admin/developers";
+import { listAllProjectsForAdmin } from "@/lib/admin/projects";
 import { summarizeEconomics, type UsageRow } from "@/lib/admin/economics";
 import { AdminConsole } from "@/components/admin/AdminConsole";
 import { AdminShell } from "@/components/admin/AdminShell";
@@ -56,6 +57,20 @@ export default async function AdminPage() {
     detail: { via: "/admin", count: developers.length },
   });
 
+  // [P8-13] 전체 프로젝트 열람 (FR-045). "운영자(최고관리자)는 개발자들이
+  // 만든 모든 프로젝트를 유지보수 차원에서 볼 수 있으면 좋겠다"는 요청
+  // 그대로 — 감사 로그와 같은 민감도라 최고관리자만 본다.
+  const canViewAllProjects = adminCan(actor!, "project:view_any");
+  const allProjects = canViewAllProjects ? await listAllProjectsForAdmin(admin) : undefined;
+
+  if (canViewAllProjects) {
+    await recordAdminAction(admin, {
+      actorId: user!.id,
+      action: "project:view_any",
+      detail: { via: "/admin", count: allProjects!.length },
+    });
+  }
+
   return (
     <AdminShell
       email={user!.email ?? ""}
@@ -74,7 +89,7 @@ export default async function AdminPage() {
         </form>
       }
     >
-      <AdminConsole summary={summary} developers={developers} />
+      <AdminConsole summary={summary} developers={developers} allProjects={allProjects} />
     </AdminShell>
   );
 }

@@ -25,6 +25,8 @@ export const ADMIN_ACTIONS = [
   "policy:change",
   "report:read",
   "report:handle",
+  /** [P8-13] 유지보수 목적으로 남의 프로젝트를 열람한다 (FR-046). 감사 로그와 같은 민감도라 최고관리자만 준다. */
+  "project:view_any",
 ] as const;
 
 export type AdminAction = (typeof ADMIN_ACTIONS)[number];

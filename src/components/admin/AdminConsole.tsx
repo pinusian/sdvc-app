@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import type { EconomicsSummary } from "@/lib/admin/economics";
 import type { DeveloperRow } from "@/lib/admin/developers";
+import type { AdminProjectRow } from "@/lib/admin/projects";
 import { formatTokens } from "@/lib/billing/plans";
 import { endOfDaySeoul, formatSeoulDate } from "@/lib/time/seoul";
 
@@ -17,6 +18,11 @@ import { endOfDaySeoul, formatSeoulDate } from "@/lib/time/seoul";
 interface Props {
   summary: EconomicsSummary;
   developers: DeveloperRow[];
+  /**
+   * [P8-13] 전체 프로젝트 열람 (FR-045). 최고관리자가 아니면 아예 전달하지
+   * 않는다 — 값이 없으면 표 자체를 그리지 않는다(있는데 숨기지 않는다).
+   */
+  allProjects?: AdminProjectRow[];
 }
 
 const GRADE_LABEL: Record<string, string> = { trial: "체험", basic: "기본", pro: "프로" };
@@ -28,11 +34,19 @@ const STATUS_LABEL: Record<string, string> = {
   trialing: "구독 중",
 };
 
+/** 개발자 화면(ProjectList)과 같은 말을 쓴다 — 같은 개념에 다른 이름을 붙이면 헷갈린다. */
+const PROJECT_STATUS_LABEL: Record<string, string> = {
+  draft: "작성 중",
+  building: "만드는 중",
+  deployed: "완성",
+  failed: "실패",
+};
+
 const money = (usd: number) => `$${usd.toFixed(2).replace(/\.00$/, "")}`;
 const percent = (ratio: number | null) =>
   ratio === null ? "—" : `${Math.round(ratio * 100)}%`;
 
-export function AdminConsole({ summary, developers }: Props) {
+export function AdminConsole({ summary, developers, allProjects }: Props) {
   const [rows, setRows] = useState(developers);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -523,6 +537,66 @@ export function AdminConsole({ summary, developers }: Props) {
           ))}
         </ul>
       </section>
+
+      {/* [P8-13] 전체 프로젝트 열람 (FR-045).
+          "운영자(최고관리자)는 개발자들이 만든 모든 프로젝트를 유지보수
+          차원에서 볼 수 있으면 좋겠다"는 요청 그대로. `allProjects`가
+          안 넘어오면(최고관리자가 아니면) 아예 그리지 않는다 — 남의
+          산출물을 보는 표를 없는 척 감춰야지, 빈 표로 있음을 알리면 안 된다. */}
+      {allProjects && (
+        <section className="rounded-lg border border-border bg-surface">
+          <h2 className="border-b border-border px-5 py-3 text-base font-semibold text-ink">
+            전체 프로젝트 {allProjects.length}개
+          </h2>
+
+          {allProjects.length === 0 ? (
+            <p className="px-5 py-6 text-sm text-ink-muted">아직 만들어진 프로젝트가 없습니다.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table aria-label="전체 프로젝트" className="w-full min-w-[640px] text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-xs text-ink-muted">
+                    <th className="px-5 py-2.5 font-medium">개발자</th>
+                    <th className="px-5 py-2.5 font-medium">프로젝트명</th>
+                    <th className="px-5 py-2.5 font-medium">제작일</th>
+                    <th className="px-5 py-2.5 font-medium">제작 단계</th>
+                    <th className="px-5 py-2.5 font-medium">바로보기</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {allProjects.map((project) => (
+                    <tr key={project.id}>
+                      <td className="px-5 py-2.5 text-ink">{project.ownerEmail}</td>
+                      <td className="px-5 py-2.5 text-ink">{project.name}</td>
+                      <td className="px-5 py-2.5 text-ink-muted">
+                        {formatSeoulDate(project.createdAt)}
+                      </td>
+                      <td className="px-5 py-2.5 text-ink-muted">
+                        {PROJECT_STATUS_LABEL[project.status] ?? project.status}
+                      </td>
+                      <td className="px-5 py-2.5">
+                        {/* 완성 전에는 볼 파일이 없다 — ProjectList의 "열어보기"와 같은 조건 */}
+                        {project.status === "deployed" ? (
+                          <a
+                            href={`/site/${project.slug}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center rounded-sm border border-border px-2.5 py-1 text-xs font-semibold text-ink hover:border-accent hover:text-accent-ink"
+                          >
+                            바로보기 ↗
+                          </a>
+                        ) : (
+                          <span className="text-xs text-ink-faint">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
 }

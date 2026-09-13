@@ -10,6 +10,8 @@ const getUser = vi.fn();
 const getProjectBySlug = vi.fn();
 const download = vi.fn();
 const isOwnerSuspended = vi.fn();
+const loadAdminActor = vi.fn();
+const recordAdminAction = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({ auth: { getUser } }),
@@ -22,6 +24,14 @@ vi.mock("@/lib/projects/store", () => ({
 
 vi.mock("@/lib/admin/suspension", () => ({
   isOwnerSuspended: (...args: unknown[]) => isOwnerSuspended(...args),
+}));
+
+vi.mock("@/lib/admin/entry", () => ({
+  loadAdminActor: (...args: unknown[]) => loadAdminActor(...args),
+}));
+
+vi.mock("@/lib/admin/audit", () => ({
+  recordAdminAction: (...args: unknown[]) => recordAdminAction(...args),
 }));
 
 const PROJECT = {
@@ -52,6 +62,8 @@ describe("[P5-1] GET /site/[slug]", () => {
     getProjectBySlug.mockResolvedValue(PROJECT);
     download.mockResolvedValue({ data: fileBlob("<h1>안녕</h1>"), error: null });
     isOwnerSuspended.mockResolvedValue(false);
+    loadAdminActor.mockResolvedValue({ role: "developer", adminTier: null, suspendedAt: null });
+    recordAdminAction.mockResolvedValue({ recorded: true });
   });
 
   it("주소만 주면 index.html을 보여준다", async () => {
@@ -298,5 +310,75 @@ describe("[P8-6] 차단된 산출물", () => {
     const res = await GET(request(), context());
 
     expect(res.status).toBe(200);
+  });
+});
+
+/**
+ * [P8-13] 최고관리자는 유지보수 목적으로 남의 프로젝트도 볼 수 있다 (FR-046).
+ *
+ * "운영자(최고관리자)는 개발자들이 만든 모든 프로젝트를 유지보수 차원에서
+ * 볼 수 있으면 좋겠다"는 요청 그대로. 열람도 남의 것을 보는 일이므로
+ * 감사 기록에 남긴다(Clarify 20과 같은 원칙).
+ */
+describe("[P8-13] 최고관리자의 전체 열람", () => {
+  beforeEach(() => {
+    getProjectBySlug.mockResolvedValue({ ...PROJECT, visibility: "private" });
+    getUser.mockResolvedValue({ data: { user: { id: "admin-1" } }, error: null });
+  });
+
+  it("최고관리자는 비공개 프로젝트도 볼 수 있다", async () => {
+    loadAdminActor.mockResolvedValue({ role: "admin", adminTier: "super", suspendedAt: null });
+
+    const { GET } = await import("@/app/site/[slug]/[[...path]]/route");
+    const res = await GET(request(), context());
+
+    expect(res.status).toBe(200);
+  });
+
+  it("열람한 사실이 감사 기록에 남는다", async () => {
+    loadAdminActor.mockResolvedValue({ role: "admin", adminTier: "super", suspendedAt: null });
+
+    const { GET } = await import("@/app/site/[slug]/[[...path]]/route");
+    await GET(request(), context());
+
+    expect(recordAdminAction).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        actorId: "admin-1",
+        action: "project:view_any",
+        targetType: "project",
+        targetId: "proj-1",
+      }),
+    );
+  });
+
+  it("운영자·지원 등급은 안 된다 — 감사 로그와 같은 민감도다", async () => {
+    loadAdminActor.mockResolvedValue({ role: "admin", adminTier: "operator", suspendedAt: null });
+
+    const { GET } = await import("@/app/site/[slug]/[[...path]]/route");
+    const res = await GET(request(), context());
+
+    expect(res.status).toBe(404);
+    expect(recordAdminAction).not.toHaveBeenCalled();
+  });
+
+  it("일반 개발자는 여전히 404 — 로그인했다고 다 되는 게 아니다", async () => {
+    loadAdminActor.mockResolvedValue({ role: "developer", adminTier: null, suspendedAt: null });
+
+    const { GET } = await import("@/app/site/[slug]/[[...path]]/route");
+    const res = await GET(request(), context());
+
+    expect(res.status).toBe(404);
+  });
+
+  it("이미 볼 수 있는 사람(주인·공개범위)에게는 관리자 판정을 아예 하지 않는다", async () => {
+    getProjectBySlug.mockResolvedValue({ ...PROJECT, visibility: "public" });
+    getUser.mockResolvedValue({ data: { user: null }, error: null });
+
+    const { GET } = await import("@/app/site/[slug]/[[...path]]/route");
+    const res = await GET(request(), context());
+
+    expect(res.status).toBe(200);
+    expect(loadAdminActor).not.toHaveBeenCalled();
   });
 });

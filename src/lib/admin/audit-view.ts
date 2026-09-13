@@ -24,6 +24,7 @@ const ACTION_LABEL: Record<string, string> = {
   "policy:change": "정책 변경",
   "report:read": "신고 열람",
   "report:handle": "신고 처리",
+  "project:view_any": "남의 프로젝트 열람",
 };
 
 const GRADE_LABEL: Record<string, string> = { trial: "체험", basic: "기본", pro: "프로" };

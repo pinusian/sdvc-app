@@ -2,6 +2,9 @@ import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { getProjectBySlug } from "@/lib/projects/store";
 import { canViewArtifact } from "@/lib/projects/access";
 import { isOwnerSuspended } from "@/lib/admin/suspension";
+import { loadAdminActor } from "@/lib/admin/entry";
+import { adminCan } from "@/lib/admin/access";
+import { recordAdminAction } from "@/lib/admin/audit";
 import { ARTIFACT_BUCKET, contentTypeOf } from "@/lib/artifacts/storage";
 
 /** 확장자로 종류를 알 수 있으면 그 값을, 모르면 null. */
@@ -47,7 +50,23 @@ export async function GET(
   // [P8-6] 주인이 정지됐으면 그 사람의 산출물도 함께 가린다 (FR-014·016).
   const ownerSuspended = await isOwnerSuspended(admin, project.ownerId);
 
-  if (!canViewArtifact(project, user?.id ?? null, { ownerSuspended })) return notFound();
+  if (!canViewArtifact(project, user?.id ?? null, { ownerSuspended })) {
+    // [P8-13] 최고관리자는 유지보수 목적으로 그래도 볼 수 있다 (FR-046).
+    // "볼 수 있으면 좋겠다"는 요청 그대로 — 다만 남의 산출물을 보는 일이라
+    // 최고관리자만, 그리고 열람 자체를 감사 기록에 남긴다(Clarify 20).
+    // 이미 볼 수 있는 사람(주인·공개범위)에게는 이 판정을 하지 않는다 —
+    // 매 요청마다 DB를 한 번 더 물을 이유가 없다.
+    const actor = user ? await loadAdminActor(admin, user.id) : null;
+    if (!actor || !adminCan(actor, "project:view_any")) return notFound();
+
+    await recordAdminAction(admin, {
+      actorId: user!.id,
+      action: "project:view_any",
+      targetType: "project",
+      targetId: project.id,
+      detail: { via: "/site", slug, ownerId: project.ownerId },
+    });
+  }
 
   const bucket = admin.storage.from(ARTIFACT_BUCKET);
   const candidates = fileCandidates(relativePath);

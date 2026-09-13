@@ -83,6 +83,7 @@ describe("[P8-1a] adminCan", () => {
       "developer:read",
       "developer:suspend",
       "policy:change",
+      "project:view_any",
       "report:handle",
       "report:read",
       "usage:read",
@@ -120,5 +121,32 @@ describe("[P8-5c] 신고 처리 권한", () => {
   it("관리자가 아니면 둘 다 안 된다", () => {
     expect(adminCan(developer, "report:read")).toBe(false);
     expect(adminCan(developer, "report:handle")).toBe(false);
+  });
+});
+
+/**
+ * [P8-13] 전체 프로젝트 열람 권한 (FR-046).
+ *
+ * "운영자(최고관리자)는 개발자들이 만든 모든 프로젝트를 유지보수 차원에서
+ * 볼 수 있으면 좋겠다"는 요청 그대로 — 감사 로그와 같은 민감도로 다룬다.
+ * 다른 개발자의 비공개 산출물 내용을 보는 일이라 **최고관리자만** 허용한다.
+ */
+describe("[P8-13] project:view_any", () => {
+  const superAdmin: AdminActor = { role: "admin", adminTier: "super", suspendedAt: null };
+  const operator: AdminActor = { role: "admin", adminTier: "operator", suspendedAt: null };
+  const support: AdminActor = { role: "admin", adminTier: "support", suspendedAt: null };
+  const developer: AdminActor = { role: "developer", adminTier: "super", suspendedAt: null };
+
+  it("최고관리자만 된다", () => {
+    expect(adminCan(superAdmin, "project:view_any")).toBe(true);
+  });
+
+  it("운영자·지원 등급은 안 된다 — 감사 로그와 같은 민감도다", () => {
+    expect(adminCan(operator, "project:view_any")).toBe(false);
+    expect(adminCan(support, "project:view_any")).toBe(false);
+  });
+
+  it("관리자가 아니면 당연히 안 된다", () => {
+    expect(adminCan(developer, "project:view_any")).toBe(false);
   });
 });
