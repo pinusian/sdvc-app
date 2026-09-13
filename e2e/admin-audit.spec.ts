@@ -182,4 +182,30 @@ test.describe("[P8-7f] 감사 기록", () => {
       await student.admin.auth.admin.deleteUser(student.userId);
     }
   });
+
+  test("[BL-020] 자기 자신의 필터 기록이 [object Object]로 뜨지 않는다", async ({ page }) => {
+    const boss = await makeUser("obj", "super");
+
+    try {
+      await login(page, boss.email);
+
+      // /admin/audit을 여는 것 자체가 자기 필터(action/denied/opens)를 감사
+      // 기록에 남긴다 — 그 filter 값이 중첩 객체라 "[object Object]"로
+      // 뜨던 것이 BL-020이었다. 걸러서(action=policy:change) 한 번 더 열어
+      // 실제로 중첩 객체 detail을 만든다.
+      await page.goto("/admin/audit?action=policy%3Achange");
+      await page.waitForLoadState("networkidle");
+      await page.goto("/admin/audit");
+      await page.waitForLoadState("networkidle");
+
+      await expect(page.getByText("[object Object]")).toHaveCount(0);
+
+      const row = page.getByRole("row", { name: /감사 로그 열람/ }).first();
+      await expect(row).toBeVisible();
+      // filter 안의 값(모두 비어 있음)이 펼쳐져 보인다 — 감춰지지 않는다
+      await expect(row.getByText(/action=null|action=policy:change/)).toBeVisible();
+    } finally {
+      await boss.admin.auth.admin.deleteUser(boss.userId);
+    }
+  });
 });

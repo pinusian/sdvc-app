@@ -113,6 +113,28 @@ describe("[P8-7b] toAuditView — 무슨 일이 있었나", () => {
   it("detail이 없어도 터지지 않는다", () => {
     expect(() => first([row({ detail: null })])).not.toThrow();
   });
+
+  it("[BL-020] detail 값이 중첩 객체여도 [object Object]가 아니라 안을 펼쳐 보여준다", () => {
+    // /admin/audit 자신의 감사 기록이 정확히 이 모양이다: filter가 객체다
+    const v = first([
+      row({
+        action: "audit:read",
+        detail: { via: "/admin/audit", count: 19, filter: { action: null, denied: null, opens: null } },
+      }),
+    ]);
+
+    expect(v.summary).not.toContain("[object Object]");
+    expect(v.summary).toContain("action=null");
+    expect(v.summary).toContain("denied=null");
+  });
+
+  it("[BL-020] detail 값이 배열이어도 펼쳐 보여준다", () => {
+    const v = first([row({ action: "future:thing", detail: { tags: ["a", "b"] } })]);
+
+    expect(v.summary).not.toContain("[object Object]");
+    expect(v.summary).toContain("a");
+    expect(v.summary).toContain("b");
+  });
 });
 
 describe("[P8-7b] 화면 열람은 따로 센다", () => {

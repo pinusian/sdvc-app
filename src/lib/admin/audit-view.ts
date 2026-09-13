@@ -115,8 +115,25 @@ function summarize(row: AuditLogRow): string {
       return `산출물을 가렸습니다${detail.reason ? ` — ${detail.reason}` : ""}`;
   }
 
-  const pairs = Object.entries(detail).map(([k, v]) => `${k}=${v}`);
+  const pairs = Object.entries(detail).map(([k, v]) => `${k}=${formatValue(v)}`);
   return pairs.length ? pairs.join(", ") : "—";
+}
+
+/**
+ * [BL-020] 모르는 detail의 값이 **중첩 객체**일 때 `${v}`로 그냥 이어붙이면
+ * "[object Object]"가 된다 — `/admin/audit` 자신의 감사 기록(`filter`가
+ * 객체)이 정확히 이 모양이었다. 배열은 `${v}`로도 알아볼 수 있게 나오지만
+ * (`a,b`), 일관되게 여기서 함께 다룬다.
+ */
+function formatValue(v: unknown): string {
+  if (v === null || v === undefined) return "null";
+  if (Array.isArray(v)) return v.map(formatValue).join(",");
+  if (typeof v === "object") {
+    return Object.entries(v as Record<string, unknown>)
+      .map(([k, inner]) => `${k}=${formatValue(inner)}`)
+      .join(", ");
+  }
+  return String(v);
 }
 
 export function toAuditView(
