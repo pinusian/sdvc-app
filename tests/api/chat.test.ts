@@ -1089,3 +1089,56 @@ describe("[P7-10] 산출물 이미지 알림", () => {
     expect(system).toContain("use-image:");
   });
 });
+
+/**
+ * [BL-021a·BL-021b] 예상 못 한 오류와 실행 시간 한도.
+ *
+ * 사용자가 긴 요청을 보냈다가 `요청에 실패했습니다. (상태 500)`만 보고
+ * **쓴 글까지 잃었다.** 500 본문에 JSON이 없어 화면이 기본 문구로 떨어진
+ * 것이 증거였다 — 라우트가 예외를 그대로 터뜨리고 있었다.
+ */
+describe("[BL-021] 예상 못 한 오류를 삼키지 않고 알린다", () => {
+  beforeEach(() => {
+    happyPath();
+  });
+
+  it("대화를 읽다 예외가 나도 맨 500이 아니라 JSON으로 알린다", async () => {
+    getConversation.mockRejectedValue(new Error("대화 조회 실패: connection reset"));
+
+    const { POST } = await import("@/app/api/chat/route");
+    const res = await POST(request(VALID));
+
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as { error?: string };
+    // 화면이 보여줄 말이 반드시 있어야 한다. 없으면 "(상태 500)"만 뜬다.
+    expect(body.error).toBeTruthy();
+  });
+
+  it("메시지를 저장하다 예외가 나도 JSON으로 알린다", async () => {
+    appendMessage.mockRejectedValue(new Error("메시지 저장 실패: timeout"));
+
+    const { POST } = await import("@/app/api/chat/route");
+    const res = await POST(request(VALID));
+
+    expect(res.status).toBe(500);
+    expect((await res.json() as { error?: string }).error).toBeTruthy();
+  });
+
+  it("속사정(스택·연결 문자열)은 사용자에게 내보내지 않는다", async () => {
+    getConversation.mockRejectedValue(new Error("postgres://user:pw@10.0.0.1:5432 연결 실패"));
+
+    const { POST } = await import("@/app/api/chat/route");
+    const res = await POST(request(VALID));
+    const body = (await res.json()) as { error?: string };
+
+    expect(body.error).not.toContain("postgres://");
+    expect(body.error).not.toContain("10.0.0.1");
+  });
+
+  it("[BL-021b] 실행 시간 한도를 명시한다 (플랫폼 기본값에 맡기지 않는다)", async () => {
+    const route = await import("@/app/api/chat/route");
+    // 복잡한 요청은 글자가 나오기까지 85초를 사고만 한 적이 있다(실측).
+    expect(typeof route.maxDuration).toBe("number");
+    expect(route.maxDuration).toBeGreaterThanOrEqual(60);
+  });
+});

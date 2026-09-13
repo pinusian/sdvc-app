@@ -601,3 +601,67 @@ describe("[P7-11] 프롬프트 첨부", () => {
     await waitFor(() => expect(screen.getByText(/사진 1장/)).toBeInTheDocument());
   });
 });
+
+/**
+ * [BL-021a] 실패하면 **쓴 글을 돌려준다.**
+ *
+ * 사용자가 5개 항목짜리 긴 요청을 보냈다가 500을 받았는데, 입력창은 이미
+ * 비워진 뒤라 **그 글이 통째로 사라졌다.** 다시 쓰라는 것은 답이 아니다.
+ */
+describe("[BL-021a] 요청이 실패하면 입력을 되살린다", () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.unstubAllGlobals());
+
+  const LONG = "기존 프로젝트에 회원가입, 로그인, 운영자 화면, 문의 게시판을 추가해줘.";
+
+  it("500이 오면 입력창에 쓰던 글이 그대로 남는다", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("서버 오류", { status: 500 })),
+    );
+
+    render(<ChatView conversationId="conv-1" currentBlock="maintenance" initialMessages={[]} />);
+
+    const box = screen.getByLabelText("메시지");
+    await userEvent.type(box, LONG);
+    await userEvent.click(screen.getByRole("button", { name: "보내기" }));
+
+    await waitFor(() => expect(box).toHaveValue(LONG));
+  });
+
+  it("실패한 요청은 대화에 남기지 않는다 — 되살린 입력과 겹쳐 두 번 보이면 안 된다", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("서버 오류", { status: 500 })),
+    );
+
+    render(<ChatView conversationId="conv-1" currentBlock="maintenance" initialMessages={[]} />);
+
+    await userEvent.type(screen.getByLabelText("메시지"), LONG);
+    await userEvent.click(screen.getByRole("button", { name: "보내기" }));
+
+    await waitFor(() => expect(screen.getByLabelText("메시지")).toHaveValue(LONG));
+    // 말풍선으로도 남아 있으면 같은 글이 화면에 두 번 있게 된다.
+    // 되살아난 입력창(textarea) 자체는 세지 않는다 — 그건 되살리기의 결과다.
+    const bubbles = screen
+      .queryAllByText(LONG)
+      .filter((el) => el.tagName.toLowerCase() !== "textarea");
+    expect(bubbles).toHaveLength(0);
+  });
+
+  it("성공하면 입력창은 비운 채로 둔다 (되살리기가 정상 흐름을 건드리지 않는다)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(mockChatResponse({ type: "text", text: "네" }, { type: "done" })),
+    );
+
+    render(<ChatView conversationId="conv-1" currentBlock="maintenance" initialMessages={[]} />);
+
+    const box = screen.getByLabelText("메시지");
+    await userEvent.type(box, "짧은 요청");
+    await userEvent.click(screen.getByRole("button", { name: "보내기" }));
+
+    await waitFor(() => expect(screen.getByText("네")).toBeInTheDocument());
+    expect(box).toHaveValue("");
+  });
+});

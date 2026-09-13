@@ -68,3 +68,53 @@ describe("[BL-018] pickWithinBudget", () => {
     expect(result.omitted).toEqual(["only.html"]);
   });
 });
+
+/**
+ * [BL-021c] 파일을 하나씩 줄세워 내려받으면 스트림이 그만큼 늦게 열린다.
+ *
+ * 빵집 프로젝트(글파일 11개)로 실측했더니 **5.8초**(내려받기만 4.7초)였고,
+ * 이 시간은 전부 **첫 글자가 나오기 전에** 흘러간다. Vercel 함수와 Supabase
+ * 리전이 다르면 왕복이 길어져 더 나빠진다.
+ */
+describe("[BL-021c] 파일을 한꺼번에 내려받는다", () => {
+  function bucketWith(paths: string[], onDownload: (path: string) => void) {
+    return {
+      storage: {
+        from: () => ({
+          list: async (prefix: string) =>
+            prefix.includes("/")
+              ? { data: [], error: null }
+              : { data: paths.map((p) => ({ name: p, id: p })), error: null },
+          download: async (key: string) => {
+            onDownload(key);
+            // 일부러 늦게 끝낸다 — 줄세워 부르면 합계가 눈에 띄게 커진다.
+            await new Promise((r) => setTimeout(r, 20));
+            return { data: { text: async () => "내용" }, error: null };
+          },
+        }),
+      },
+    } as never;
+  }
+
+  it("11개를 순차가 아니라 동시에 부른다", async () => {
+    const { loadCurrentFiles } = await import("@/lib/artifacts/current");
+    const paths = Array.from({ length: 11 }, (_, i) => `f${i}.html`);
+
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const admin = bucketWith(paths, () => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      setTimeout(() => (inFlight -= 1), 20);
+    });
+
+    const started = Date.now();
+    const result = await loadCurrentFiles(admin, "project-1");
+    const elapsed = Date.now() - started;
+
+    expect(result.included).toHaveLength(11);
+    // 줄세우면 11 × 20ms = 220ms 이상 걸린다. 한꺼번에 부르면 그 근처도 안 간다.
+    expect(elapsed).toBeLessThan(200);
+    expect(maxInFlight).toBeGreaterThan(1);
+  });
+});
