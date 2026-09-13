@@ -3,6 +3,8 @@ import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { deleteProjectRow, getProjectById, renameProject } from "@/lib/projects/store";
 import { deleteArtifactFiles } from "@/lib/artifacts/storage";
 import { deleteAllVersions } from "@/lib/versions/store";
+import { findConversationsByProjects } from "@/lib/conversations/store";
+import { deleteConversationAttachments } from "@/lib/attachments/store";
 import { normalizeProjectName, MAX_NAME_LENGTH } from "@/lib/projects/name";
 
 /**
@@ -50,6 +52,21 @@ export async function DELETE(
     await deleteAllVersions(admin, project.id);
   } catch {
     // 조용히 넘긴다 — 사용자가 원한 것은 프로젝트 삭제다.
+  }
+
+  // [BL-015] 이 프로젝트를 만든 대화에 붙였던 첨부도 함께 지운다.
+  // `deleteConversationAttachments`는 [P7-8]부터 있었지만 대화 삭제 기능
+  // 자체가 없어 부를 자리가 없었다 — attachments 버킷이 계속 커지고 있었다.
+  // 프로젝트를 지울 때가 정리할 자연스러운 자리다. 여기도 실패해도 본편
+  // 삭제는 끝낸다 — 사용자가 원한 건 프로젝트 삭제다.
+  try {
+    const conversations = await findConversationsByProjects(admin, [project.id], user.id);
+    const conversationId = conversations[project.id];
+    if (conversationId) {
+      await deleteConversationAttachments(admin, user.id, conversationId);
+    }
+  } catch {
+    // 조용히 넘긴다 — 남은 첨부는 이미 낮은 우선순위(BL-015)로 접수돼 있었다.
   }
 
   const deleted = await deleteProjectRow(admin, project.id, user.id);

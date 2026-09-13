@@ -32,9 +32,6 @@ const KNOWN_DORMANT: Record<string, string> = {
   hasVerifiedMfa:
     "[P8-1] MFA 건너뛰기로 결정(2026-09-13). 관리자 1인 체제에서 2단계 인증을 켜면 " +
     "휴대폰을 잃는 순간 운영 콘솔에 아무도 못 들어간다. 복구 수단과 함께 다시 볼 것",
-  deleteConversationAttachments:
-    "[BL-015] 첨부 정리가 배선되지 않았다. 대화 삭제 기능 자체가 없어 부를 자리도 아직 없다. " +
-    "비공개 저장소가 계속 커진다. 접수됨",
   isBlockId:
     "블록 id 형식 검사. 지금은 DB CHECK와 타입이 막고 있어 부를 자리가 없다. " +
     "바깥에서 블록 id를 받는 입구가 생기면 그때 쓴다",

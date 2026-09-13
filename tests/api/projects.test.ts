@@ -11,6 +11,8 @@ const deleteProjectRow = vi.fn();
 const deleteArtifactFiles = vi.fn();
 const renameProject = vi.fn();
 const deleteAllVersions = vi.fn();
+const findConversationsByProjects = vi.fn();
+const deleteConversationAttachments = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({ auth: { getUser } }),
@@ -29,6 +31,14 @@ vi.mock("@/lib/artifacts/storage", () => ({
 
 vi.mock("@/lib/versions/store", () => ({
   deleteAllVersions: (...args: unknown[]) => deleteAllVersions(...args),
+}));
+
+vi.mock("@/lib/conversations/store", () => ({
+  findConversationsByProjects: (...args: unknown[]) => findConversationsByProjects(...args),
+}));
+
+vi.mock("@/lib/attachments/store", () => ({
+  deleteConversationAttachments: (...args: unknown[]) => deleteConversationAttachments(...args),
 }));
 
 const context = { params: Promise.resolve({ id: "proj-1" }) };
@@ -51,6 +61,9 @@ describe("[P4-3] DELETE /api/projects/[id]", () => {
     getProjectById.mockResolvedValue(PROJECT);
     deleteArtifactFiles.mockResolvedValue(3);
     deleteProjectRow.mockResolvedValue(true);
+    deleteAllVersions.mockResolvedValue(undefined);
+    findConversationsByProjects.mockResolvedValue({});
+    deleteConversationAttachments.mockResolvedValue(0);
   });
 
   it("로그인하지 않으면 401이고 아무것도 지우지 않는다", async () => {
@@ -203,6 +216,56 @@ describe("[P7-6c] 삭제할 때 버전 사본도", () => {
     const res = await DELETE(request(), context);
 
     expect(res.status).toBe(200);
+    expect(deleteProjectRow).toHaveBeenCalled();
+  });
+});
+
+/**
+ * [BL-015] 첨부 파일이 영영 지워지지 않는다.
+ *
+ * `deleteConversationAttachments`는 [P7-8]부터 있었지만 아무도 부르지
+ * 않았다 — 대화 삭제 기능 자체가 없어 부를 자리도 없었다. 그 대화로
+ * 만든 프로젝트를 지울 때가 첨부까지 함께 정리할 자연스러운 자리다.
+ */
+describe("[BL-015] DELETE /api/projects/[id] — 첨부도 함께 정리", () => {
+  it("이 프로젝트를 만든 대화의 첨부를 함께 지운다", async () => {
+    findConversationsByProjects.mockResolvedValue({ "proj-1": "conv-1" });
+
+    const { DELETE } = await import("@/app/api/projects/[id]/route");
+    const res = await DELETE(request(), context);
+
+    expect(res.status).toBe(200);
+    expect(findConversationsByProjects).toHaveBeenCalledWith(
+      expect.anything(),
+      ["proj-1"],
+      "user-1",
+    );
+    expect(deleteConversationAttachments).toHaveBeenCalledWith(
+      expect.anything(),
+      "user-1",
+      "conv-1",
+    );
+  });
+
+  it("이어가는 대화가 없으면(대화 없는 프로젝트) 조용히 넘어간다", async () => {
+    findConversationsByProjects.mockResolvedValue({});
+
+    const { DELETE } = await import("@/app/api/projects/[id]/route");
+    const res = await DELETE(request(), context);
+
+    expect(res.status).toBe(200);
+    expect(deleteConversationAttachments).not.toHaveBeenCalled();
+  });
+
+  it("첨부 정리가 실패해도 프로젝트 삭제 자체는 끝낸다 — 사용자가 원한 건 삭제다", async () => {
+    findConversationsByProjects.mockResolvedValue({ "proj-1": "conv-1" });
+    deleteConversationAttachments.mockRejectedValue(new Error("storage down"));
+
+    const { DELETE } = await import("@/app/api/projects/[id]/route");
+    const res = await DELETE(request(), context);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ deleted: true, fileCount: 3 });
     expect(deleteProjectRow).toHaveBeenCalled();
   });
 });
