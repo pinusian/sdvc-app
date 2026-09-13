@@ -625,6 +625,119 @@ describe("[P6-4] POST /api/chat — 체험·한도 차단", () => {
  * 프롬프트에 무엇을 넣어도 반응이 없었다. 구현을 마친 대화가 `done`이 되고
  * 이 라우트가 그것을 400으로 막고 있었기 때문이다.
  */
+/**
+ * [BL-014] 프로젝트 개수 한도가 집행되지 않았다.
+ *
+ * `canCreateProject`는 [P6-3]부터 있었지만 아무도 부르지 않았다 — 대시보드는
+ * "프로젝트 0 / 1개"라고 알리면서 실제로는 무제한으로 만들 수 있었다.
+ * 새 프로젝트를 **만들려는 순간**(구현 단계 + 아직 연결된 프로젝트 없음)에만
+ * 막는다 — 이미 만든 프로젝트를 고치는 turn까지 막으면 안 된다.
+ */
+describe("[BL-014] 프로젝트 개수 한도", () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.ANTHROPIC_API_KEY = "test-key";
+    happyPath();
+    getConversation.mockResolvedValue({ ...CONVERSATION, currentBlock: "implement" });
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  it("한도를 다 쓴 채 새 프로젝트를 만들려 하면 402로 막고 Claude를 부르지 않는다", async () => {
+    loadAccountState.mockResolvedValue({
+      grade: "trial",
+      subscriptionStatus: "none",
+      trialEndsAt: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
+      monthlyTokensUsed: 0,
+      projectCount: 1, // 체험 한도(1개)를 이미 채움
+    });
+
+    const { POST } = await import("@/app/api/chat/route");
+    const res = await POST(request(VALID));
+
+    expect(res.status).toBe(402);
+    const body = await res.json();
+    expect(body.reason).toBe("project_limit");
+    expect(body.error).toMatch(/1개/);
+    expect(createChatStream).not.toHaveBeenCalled();
+    // 막힌 요청은 메시지도 저장하지 않는다 — canStartChat과 같은 원칙
+    expect(appendMessage).not.toHaveBeenCalled();
+  });
+
+  it("이미 이 대화에 프로젝트가 연결돼 있으면(고치는 중) 한도를 다 썼어도 막지 않는다", async () => {
+    getConversation.mockResolvedValue({
+      ...CONVERSATION,
+      currentBlock: "implement",
+      projectId: "proj-existing",
+    });
+    loadAccountState.mockResolvedValue({
+      grade: "trial",
+      subscriptionStatus: "none",
+      trialEndsAt: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
+      monthlyTokensUsed: 0,
+      projectCount: 1,
+    });
+
+    const { POST } = await import("@/app/api/chat/route");
+    const res = await POST(request(VALID));
+
+    expect(res.status).toBe(200);
+    expect(createChatStream).toHaveBeenCalled();
+  });
+
+  it("구현 단계가 아니면(계획·작업분해 등) 한도를 다 썼어도 막지 않는다 — 아직 프로젝트를 만들지 않는다", async () => {
+    getConversation.mockResolvedValue({ ...CONVERSATION, currentBlock: "tasks" });
+    loadAccountState.mockResolvedValue({
+      grade: "trial",
+      subscriptionStatus: "none",
+      trialEndsAt: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
+      monthlyTokensUsed: 0,
+      projectCount: 1,
+    });
+
+    const { POST } = await import("@/app/api/chat/route");
+    const res = await POST(request(VALID));
+
+    expect(res.status).toBe(200);
+    expect(createChatStream).toHaveBeenCalled();
+  });
+
+  it("한도 안이면 그대로 진행한다", async () => {
+    loadAccountState.mockResolvedValue({
+      grade: "trial",
+      subscriptionStatus: "none",
+      trialEndsAt: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
+      monthlyTokensUsed: 0,
+      projectCount: 0,
+    });
+
+    const { POST } = await import("@/app/api/chat/route");
+    const res = await POST(request(VALID));
+
+    expect(res.status).toBe(200);
+    expect(createChatStream).toHaveBeenCalled();
+  });
+
+  it("한도를 넘겨도 업그레이드할 등급이 있으면 알려준다", async () => {
+    loadAccountState.mockResolvedValue({
+      grade: "trial",
+      subscriptionStatus: "none",
+      trialEndsAt: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
+      monthlyTokensUsed: 0,
+      projectCount: 1,
+    });
+
+    const { POST } = await import("@/app/api/chat/route");
+    const res = await POST(request(VALID));
+
+    expect((await res.json()).upgradeTo).toBe("basic");
+  });
+});
+
 describe("[P7-4b] 구현을 마친 대화도 계속 받는다", () => {
   const originalEnv = { ...process.env };
 

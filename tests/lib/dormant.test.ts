@@ -32,9 +32,6 @@ const KNOWN_DORMANT: Record<string, string> = {
   hasVerifiedMfa:
     "[P8-1] MFA 건너뛰기로 결정(2026-09-13). 관리자 1인 체제에서 2단계 인증을 켜면 " +
     "휴대폰을 잃는 순간 운영 콘솔에 아무도 못 들어간다. 복구 수단과 함께 다시 볼 것",
-  canCreateProject:
-    "[BL-014] 프로젝트 개수 한도가 실제로 집행되지 않는다. 대시보드는 '프로젝트 0 / 1개'라고 " +
-    "보여주는데 /api/chat은 canStartChat만 본다. 접수됨 — 고치면 이 줄을 지운다",
   deleteConversationAttachments:
     "[BL-015] 첨부 정리가 배선되지 않았다. 대화 삭제 기능 자체가 없어 부를 자리도 아직 없다. " +
     "비공개 저장소가 계속 커진다. 접수됨",

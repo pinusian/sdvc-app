@@ -29,7 +29,7 @@ import { NOTHING_WRITTEN, claimsChange } from "@/lib/artifacts/verify";
 import { loadCurrentFiles } from "@/lib/artifacts/current";
 import { recordUsage } from "@/lib/usage/store";
 import { loadAccountState } from "@/lib/billing/account";
-import { canStartChat } from "@/lib/billing/access";
+import { canCreateProject, canStartChat } from "@/lib/billing/access";
 import { suggestProjectName } from "@/lib/projects/name";
 import { AttachmentError, buildAttachmentBlocks } from "@/lib/attachments/message";
 
@@ -108,6 +108,10 @@ export async function POST(request: Request) {
     );
   }
 
+  // access.allowed가 참이 될 수 있는 유일한 경우는 account가 있을 때다
+  // (위 삼항의 다른 가지는 항상 allowed:false). 여기부터는 안전하게 단정한다.
+  const verifiedAccount = account!;
+
   // 단계 이동은 사용자가 명시적으로 승인했을 때만 일어난다.
   // (게이트가 없는 블록도 마찬가지 — 대본상 "예"라고 답해야 다음으로 간다.)
   // [P7-4b] 예전에 done으로 굳은 대화도 유지보수로 읽어 다시 열어준다 (FR-029).
@@ -119,6 +123,27 @@ export async function POST(request: Request) {
     if (advanced !== block) {
       await setCurrentBlock(admin, conversationId, user.id, advanced);
       block = advanced;
+    }
+  }
+
+  // [BL-014] `canCreateProject`는 [P6-3]부터 있었지만 아무도 부르지 않았다 —
+  // 대시보드는 "프로젝트 0 / 1개"라고 알리면서 실제로는 무제한으로 만들 수
+  // 있었다. **새 프로젝트를 만들려는 순간**(구현 단계 + 아직 연결된 프로젝트
+  // 없음)에만 본다 — 이미 만든 프로젝트를 고치는 turn까지 막으면 그 프로젝트
+  // 자체를 못 쓰게 되고, 계획·작업분해 같은 이전 블록에서 막으면 프로젝트를
+  // 만들지도 않았는데 거절하는 셈이다. canStartChat과 같은 이유로 Claude를
+  // 부르기 전에, 메시지를 저장하기 전에 확인한다.
+  if (block === "implement" && !conversation.projectId) {
+    const projectAccess = canCreateProject(verifiedAccount);
+    if (!projectAccess.allowed) {
+      return NextResponse.json(
+        {
+          error: projectAccess.message,
+          reason: projectAccess.reason,
+          ...(projectAccess.upgradeTo ? { upgradeTo: projectAccess.upgradeTo } : {}),
+        },
+        { status: 402 },
+      );
     }
   }
 
