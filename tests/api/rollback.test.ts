@@ -12,6 +12,8 @@ const getProjectById = vi.fn();
 const listVersions = vi.fn();
 const restoreVersion = vi.fn();
 const saveVersion = vi.fn();
+const findConversationsByProjects = vi.fn();
+const appendMessage = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({ auth: { getUser } }),
@@ -26,6 +28,11 @@ vi.mock("@/lib/versions/store", () => ({
   listVersions: (...args: unknown[]) => listVersions(...args),
   restoreVersion: (...args: unknown[]) => restoreVersion(...args),
   saveVersion: (...args: unknown[]) => saveVersion(...args),
+}));
+
+vi.mock("@/lib/conversations/store", () => ({
+  findConversationsByProjects: (...args: unknown[]) => findConversationsByProjects(...args),
+  appendMessage: (...args: unknown[]) => appendMessage(...args),
 }));
 
 const context = { params: Promise.resolve({ id: "proj-1" }) };
@@ -50,6 +57,8 @@ describe("[P7-6b] 되돌리기 API", () => {
     ]);
     restoreVersion.mockResolvedValue({ fileCount: 2, removedCount: 1 });
     saveVersion.mockResolvedValue("0003");
+    findConversationsByProjects.mockResolvedValue({ "proj-1": "conv-1" });
+    appendMessage.mockResolvedValue(undefined);
   });
 
   it("로그인하지 않으면 401", async () => {
@@ -124,5 +133,65 @@ describe("[P7-6b] 되돌리기 API", () => {
     const res = await POST(post({ version: "9999" }), context);
 
     expect(res.status).toBe(404);
+  });
+
+  /**
+   * [BL-019] 되돌린 뒤 다시 고치면 되돌리기 전 상태가 되살아났다 (FR-012 보강).
+   *
+   * 되돌리기 직후 실제 파일은 옳았다("오늘의 소금빵"). 그런데 이어서
+   * "제목 옆에 안내를 붙여주세요"라고만 요청하자, 모델이 **대화 기록에 남은
+   * 되돌리기 이전 이름("단팝빵 가게")**을 되살려 저장했다 — 여러 턴에 걸친
+   * 대화가 [BL-018]의 "지금 파일이 기록보다 정확하다"는 프롬프트 안내보다
+   * 모델에게 더 강하게 작용했다.
+   *
+   * 처방: 되돌리기 사실을 **시스템 프롬프트 각주가 아니라 대화 자체**에
+   * 남긴다. 모델이 방금 자기 입으로 한 말은 몇 턴 전의 자기 말보다 강하게
+   * 작용한다 — 사람이 "그건 없던 일로 하고" 라고 대화 중에 말하는 것과 같다.
+   */
+  it("이 프로젝트로 이어가는 대화가 있으면 되돌린 사실을 알리는 메시지를 남긴다", async () => {
+    const { POST } = await import("@/app/api/projects/[id]/rollback/route");
+    await POST(post({ version: "0001" }), context);
+
+    expect(findConversationsByProjects).toHaveBeenCalledWith(
+      expect.anything(),
+      ["proj-1"],
+      "user-1",
+    );
+    expect(appendMessage).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        conversationId: "conv-1",
+        role: "assistant",
+        content: expect.stringContaining("빵집 만들어줘"),
+      }),
+    );
+  });
+
+  it("이어지는 대화가 없으면 조용히 넘어간다 — 남길 곳이 없다", async () => {
+    findConversationsByProjects.mockResolvedValue({});
+
+    const { POST } = await import("@/app/api/projects/[id]/rollback/route");
+    const res = await POST(post({ version: "0001" }), context);
+
+    expect(res.status).toBe(200);
+    expect(appendMessage).not.toHaveBeenCalled();
+  });
+
+  it("메시지를 남기지 못해도 되돌리기 자체는 성공한다 — 사용자가 원한 건 되돌리기다", async () => {
+    appendMessage.mockRejectedValue(new Error("DB 오류"));
+
+    const { POST } = await import("@/app/api/projects/[id]/rollback/route");
+    const res = await POST(post({ version: "0001" }), context);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ version: "0001", fileCount: 2, removedCount: 1 });
+  });
+
+  it("이후 대화가 이 안내를 신뢰하도록, 이전 요청은 이제 적용되어 있지 않다고 분명히 말한다", async () => {
+    const { POST } = await import("@/app/api/projects/[id]/rollback/route");
+    await POST(post({ version: "0001" }), context);
+
+    const call = appendMessage.mock.calls[0][1] as { content: string };
+    expect(call.content).toMatch(/되돌|이전|더 이상/);
   });
 });
