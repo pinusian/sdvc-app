@@ -39,6 +39,35 @@ export interface SdvcBlock {
   instruction: string;
 }
 
+/**
+ * [P7-13] PWA(설치형 웹앱)로 만들어 달라는 요청이 있을 때의 안내.
+ * 구현(5)·유지보수(6) 두 블록에서 똑같이 쓰므로 한 곳에 둔다 — 파일 형식
+ * 절처럼 두 곳에 따로 두면 말이 갈라진다.
+ *
+ * 요청 없이 먼저 만들지 않는다 — 소개 페이지 대부분은 필요 없고, 매니페스트·
+ * 서비스 워커가 매번 붙으면 유지보수 프롬프트 토큰만 늘어난다.
+ *
+ * 아이콘은 SVG로만 안내한다 — 모델은 PNG 같은 그림 파일을 직접 만들 수
+ * 없다. 이 한계를 감추지 않고 사용자에게 그대로 알리게 한다([P7-12]와
+ * 같은 원칙: 안 되는 것은 조용히 넘기지 않는다).
+ */
+const PWA_GUIDANCE_LINES: string[] = [
+  "**앱처럼 설치되게 해달라는 요청이 있을 때(PWA)**: \"휴대폰에 앱처럼 설치되게\",",
+  "\"오프라인에서도 열리게\" 같은 요청이 있을 때만 아래 파일을 추가로 낸다 —",
+  "요청 없이 먼저 만들지 않는다. 소개 페이지 대부분은 필요 없다.",
+  "```file:manifest.webmanifest",
+  '{"name":"...","short_name":"...","start_url":".","display":"standalone","background_color":"#ffffff","theme_color":"#111111","icons":[{"src":"icon.svg","sizes":"any","type":"image/svg+xml"}]}',
+  "```",
+  '- `index.html`의 `<head>`에 `<link rel="manifest" href="manifest.webmanifest">`를 추가한다.',
+  "- `sw.js`(서비스 워커)를 만들어 핵심 파일(`index.html`·css)을 설치 시 캐시해 두고,",
+  "  `index.html`에 등록 스크립트 한 줄을 심는다:",
+  "  `if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');`",
+  "- 아이콘은 **SVG로만** 만든다(그림 파일을 직접 만들 수 없다). 일부 기기에서는",
+  "  설치 아이콘이 기본 모양으로 보일 수 있다는 점을 사용자에게 그대로 알린다.",
+  "- 이것으로 **네이티브 앱(앱스토어에 올라가는 앱)이 되는 것은 아니다** — 홈 화면에",
+  "  추가되고 오프라인에서도 열리는 웹페이지일 뿐이라고 정확히 안내한다.",
+];
+
 export const SDVC_BLOCKS: SdvcBlock[] = [
   {
     id: "constitution_specify",
@@ -133,6 +162,8 @@ export const SDVC_BLOCKS: SdvcBlock[] = [
       "코드는 이 표시 없이 평범한 코드블록으로 쓴다. 첫 화면은 반드시 `index.html`이다.",
       "경로는 소문자 영문·숫자·`-`·`_`·`/`만 쓰고(`../` 금지), 확장자는",
       "html·css·js·json·svg·md·txt만 쓴다.",
+      "",
+      ...PWA_GUIDANCE_LINES,
     ].join("\n"),
   },
   {
@@ -164,6 +195,8 @@ export const SDVC_BLOCKS: SdvcBlock[] = [
       "아무리 잘 고쳐도 **저장되지 않는다.** 설명하려고 보여주는 코드는 이 표시 없이 쓴다.",
       "경로는 소문자 영문·숫자·`-`·`_`·`/`만 쓰고(`../` 금지), 확장자는",
       "html·css·js·json·svg·md·txt만 쓴다.",
+      "",
+      ...PWA_GUIDANCE_LINES,
     ].join("\n"),
   },
 ];
