@@ -124,3 +124,34 @@ describe("[P7-4b] 유지보수 블록", () => {
     expect(advanceBlock("done", { approved: true })).toBe<BlockId>("maintenance");
   });
 });
+
+/**
+ * [P7-13] PWA(설치형 웹앱) 안내 — 구현(5)·유지보수(6) 공통.
+ *
+ * 산출물은 정적 파일뿐이라 "네이티브 앱"은 만들 수 없지만, 매니페스트와
+ * 서비스 워커는 이미 허용된 확장자(webmanifest·js)만으로 만들 수 있다.
+ * 요청 없이 먼저 만들면 안 된다 — 소개 페이지 대부분은 필요 없다.
+ */
+describe("[P7-13] PWA 안내", () => {
+  it("구현 블록 지시에 PWA 파일 형식과 '요청했을 때만'이 담긴다", () => {
+    const instruction = getBlock("implement").instruction;
+    expect(instruction).toContain("manifest.webmanifest");
+    expect(instruction).toContain("sw.js");
+    expect(instruction).toContain("요청이 있을 때만");
+  });
+
+  it("유지보수 블록 지시에도 같은 안내가 담긴다 (이미 만든 프로젝트에도 나중에 추가 요청 가능)", () => {
+    const instruction = getBlock("maintenance").instruction;
+    expect(instruction).toContain("manifest.webmanifest");
+    expect(instruction).toContain("sw.js");
+  });
+
+  it("네이티브 앱이 되는 것은 아니라는 사실을 정확히 안내한다", () => {
+    expect(getBlock("implement").instruction).toContain("네이티브 앱");
+    expect(getBlock("maintenance").instruction).toContain("네이티브 앱");
+  });
+
+  it("아이콘은 SVG로만 만들 수 있다는 한계를 밝힌다 (PNG 등 그림 파일을 직접 만들 수 없다)", () => {
+    expect(getBlock("implement").instruction).toContain("SVG로만");
+  });
+});
