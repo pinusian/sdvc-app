@@ -111,17 +111,28 @@ export async function loadCurrentFiles(
     const files: CurrentFile[] = [];
     const unreadable: string[] = [];
 
+    // [BL-021c] **한꺼번에 내려받는다.** 하나씩 줄세우면 그 시간이 전부
+    // 첫 글자가 나오기 전에 흘러간다 — 파일 11개짜리 프로젝트에서 5.8초를
+    // 실측했고, 함수와 저장소의 리전이 다르면 더 벌어진다.
+    const textPaths: string[] = [];
     for (const path of paths) {
-      if (!isText(path)) {
-        unreadable.push(path);
-        continue;
-      }
-      const { data, error } = await bucket.download(`${projectId}/${path}`);
-      if (error || !data) {
-        unreadable.push(path);
-        continue;
-      }
-      files.push({ path, content: await data.text() });
+      if (isText(path)) textPaths.push(path);
+      else unreadable.push(path);
+    }
+
+    const downloaded = await Promise.all(
+      textPaths.map(async (path) => {
+        const { data, error } = await bucket.download(`${projectId}/${path}`);
+        if (error || !data) return { path, content: null };
+        return { path, content: await data.text() };
+      }),
+    );
+
+    // 순서는 내려받은 순서가 아니라 **요청한 순서**로 되돌린다 —
+    // 프롬프트에 실리는 차례가 실행마다 달라지면 원인을 쫓기 어려워진다.
+    for (const { path, content } of downloaded) {
+      if (content === null) unreadable.push(path);
+      else files.push({ path, content });
     }
 
     const picked = pickWithinBudget(files);

@@ -50,7 +50,43 @@ interface ChatRequestBody {
   attachmentIds?: unknown;
 }
 
+/**
+ * [BL-021b] 실행 시간 한도를 우리가 정한다.
+ *
+ * 복잡한 요청(회원가입+운영자화면+게시판)을 프로덕션에 보냈더니 첫 글자가
+ * 나오기까지 **85초를 사고(thinking)만 했다**(실측). 플랫폼 기본값에
+ * 맡겨두면 그 한도에서 조용히 끊기고, 사용자는 이유 없는 500만 본다.
+ *
+ * 요금제가 허용하는 상한을 넘겨 적으면 배포가 거부되므로 보수적으로 잡는다.
+ */
+export const maxDuration = 60;
+
+/**
+ * [BL-021a] 예상 못 한 오류를 사용자가 읽을 수 있는 말로 바꾼다.
+ *
+ * 예외를 그대로 터뜨리면 플랫폼이 JSON 없는 맨 500을 내보내고, 화면은
+ * "요청에 실패했습니다. (상태 500)"만 띄운다 — 무슨 일인지도 모르고,
+ * 사용자가 공들여 쓴 글까지 사라진다(실제로 그랬다).
+ *
+ * 속사정(연결 문자열·스택)은 내보내지 않는다. 서버 로그에만 남긴다.
+ */
 export async function POST(request: Request) {
+  try {
+    return await handleChat(request);
+  } catch (error) {
+    console.error("[api/chat] 처리되지 않은 오류", error);
+    return NextResponse.json(
+      {
+        error:
+          "요청을 처리하지 못했습니다. 잠시 뒤 다시 보내주세요. " +
+          "계속 같은 문제가 생기면 신고 화면으로 알려주세요.",
+      },
+      { status: 500 },
+    );
+  }
+}
+
+async function handleChat(request: Request) {
   const supabase = await createClient();
   const {
     data: { user },

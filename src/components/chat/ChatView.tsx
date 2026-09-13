@@ -114,6 +114,9 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
     setBlocked(false);
     setMessages((prev) => [...prev, { role: "user", content: message }]);
 
+    // 답변이 시작됐는지. 시작된 뒤의 실패는 "중간에 끊긴 것"이라 되살리지 않는다.
+    let startedAnswering = false;
+
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -138,6 +141,7 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
       await readEvents(res.body, {
         onText: (text) => {
           setThinking(false);
+          startedAnswering = true;
           setMessages((prev) => appendToAssistant(prev, text));
           // scrollIntoView는 없는 환경(테스트 등)이 있으므로 있을 때만 부른다.
           endRef.current?.scrollIntoView?.({ behavior: "smooth" });
@@ -151,6 +155,18 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "알 수 없는 오류가 발생했습니다.");
+
+      // [BL-021a] **쓴 글을 돌려준다.** 입력창은 보내기 직전에 이미 비워졌으므로,
+      // 여기서 되살리지 않으면 5개 항목짜리 긴 요청이 통째로 사라진다(실제로 그랬다).
+      // 답변이 한 글자라도 시작됐으면 그건 실패가 아니라 중간에 끊긴 것이므로
+      // 대화에 남겨둔다 — 되살리는 것은 **시작도 못 한 요청**뿐이다.
+      if (!startedAnswering) {
+        setMessages((prev) => dropLastUserMessage(prev, message));
+        if (!options?.message) {
+          setDraft((current) => (current.trim() ? current : message));
+          setAttachments(sending);
+        }
+      }
     } finally {
       setThinking(false);
       setStreaming(false);
@@ -401,6 +417,18 @@ function appendToAssistant(messages: ChatMessage[], text: string): ChatMessage[]
     return [...messages.slice(0, -1), { ...last, content: textOf(last.content) + text }];
   }
   return [...messages, { role: "assistant", content: text }];
+}
+
+/**
+ * [BL-021a] 보내자마자 실패했을 때, 낙관적으로 붙여둔 사용자 말풍선을 거둔다.
+ *
+ * 입력창에 글을 되살리면서 말풍선도 남겨두면 같은 글이 화면에 두 번 보인다.
+ * 맨 끝이 그 글일 때만 거둔다 — 그 사이에 다른 것이 들어왔다면 남의 것이다.
+ */
+function dropLastUserMessage(messages: ChatMessage[], content: string): ChatMessage[] {
+  const last = messages[messages.length - 1];
+  if (last?.role === "user" && textOf(last.content) === content) return messages.slice(0, -1);
+  return messages;
 }
 
 function gateLabel(block: BlockId): string {
