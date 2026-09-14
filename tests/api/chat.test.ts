@@ -1135,10 +1135,11 @@ describe("[BL-021] 예상 못 한 오류를 삼키지 않고 알린다", () => {
     expect(body.error).not.toContain("10.0.0.1");
   });
 
-  it("[BL-021b] 실행 시간 한도를 명시한다 (플랫폼 기본값에 맡기지 않는다)", async () => {
+  it("[BL-022] 실행 시간 한도는 요금제 상한(300초)이다 — 기본값보다 줄이지 않는다", async () => {
     const route = await import("@/app/api/chat/route");
-    // 복잡한 요청은 글자가 나오기까지 85초를 사고만 한 적이 있다(실측).
-    expect(typeof route.maxDuration).toBe("number");
-    expect(route.maxDuration).toBeGreaterThanOrEqual(60);
+    // [BL-021b]에서 60으로 적었는데 Hobby 기본값이 이미 300초였다 — 한도를
+    // 늘린 게 아니라 **줄였고**, 계획·작업분해·구현 답변이 전부 60초에
+    // 끊겨 저장되지 않았다(2026-09-14 실사용자 대화에서 확인).
+    expect(route.maxDuration).toBe(300);
   });
 });
