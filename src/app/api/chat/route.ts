@@ -156,7 +156,15 @@ async function handleChat(request: Request) {
   // 여기서 막으면 "이어서 수정"이 통째로 죽는다 — 실제로 그랬다(BL-001).
   // `done`은 여기서 걷어내므로 이 아래로는 실재하는 블록만 흐른다.
   let block: LiveBlockId = resolveBlock(conversation.currentBlock);
-  if (body.approved === true) {
+
+  // [BL-022] 승인은 **지금 블록의 답을 보고** 하는 것이다. 마지막 메시지가 답이
+  // 아니면(답이 도중에 끊겨 저장되지 않았으면) 승인할 대상이 없다 — 넘기지 않고
+  // 지금 블록의 일을 다시 하게 한다. 예전에는 끊긴 뒤 "다음 단계로"를 누를
+  // 때마다 넘어가, 계획서도 작업분해도 없이 구현에 도착했다(2026-09-14).
+  const history = await listMessages(admin, conversationId);
+  const hasAnswerToApprove = history[history.length - 1]?.role === "assistant";
+
+  if (body.approved === true && hasAnswerToApprove) {
     const advanced = resolveBlock(advanceBlock(block, { approved: true }));
     if (advanced !== block) {
       await setCurrentBlock(admin, conversationId, user.id, advanced);
@@ -216,7 +224,6 @@ async function handleChat(request: Request) {
     }
   }
 
-  const history = await listMessages(admin, conversationId);
   await appendMessage(admin, { conversationId, role: "user", content: message });
 
   const title = conversation.title ?? undefined;
@@ -362,6 +369,9 @@ function captureAndFilter(
       return;
     }
 
+    // [BL-022] done은 여기서 넘기지 않는다 — Claude가 끝난 것일 뿐 저장은 아직이다.
+    if (event.type === "done") return;
+
     if (event.type !== "text") {
       emit(controller, event);
       return;
@@ -468,6 +478,10 @@ function captureAndFilter(
           });
         }
       }
+
+      // [BL-022] 저장·발행까지 **다 끝났다**는 신호. 화면은 이것을 못 받으면
+      // 도중에 끊긴 것으로 안다 — 서버가 시간 한도로 강제 종료되면 여기까지 오지 못한다.
+      emit(controller, { type: "done" });
     },
   });
 }

@@ -116,6 +116,9 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
 
     // 답변이 시작됐는지. 시작된 뒤의 실패는 "중간에 끊긴 것"이라 되살리지 않는다.
     let startedAnswering = false;
+    // [BL-022] 서버가 "저장까지 끝났다"고 알렸는지, 대신 오류를 알렸는지
+    let completed = false;
+    let sawError = false;
 
     try {
       const res = await fetch("/api/chat", {
@@ -147,12 +150,26 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
           endRef.current?.scrollIntoView?.({ behavior: "smooth" });
         },
         onThinking: () => setThinking(true),
-        onError: (message) => setError(message),
+        onError: (message) => {
+          sawError = true;
+          setError(message);
+        },
+        onDone: () => {
+          completed = true;
+        },
         onGate: (gateBlock) => setGate(gateBlock),
         onBlock: (nextBlock) => setBlock(nextBlock),
         onArtifact: (published) => setArtifact(published),
         onTruncated: () => setTruncated(true),
       });
+
+      // [BL-022] done 없이 닫혔으면 서버가 도중에 끊긴 것이다(시간 한도 등).
+      // 예전에는 화면이 조용히 멈춰, 사용자가 영문도 모른 채 "다음 단계로"를 눌렀다.
+      if (!completed && !sawError) {
+        setError(
+          "응답이 도중에 끊겼습니다. 이 답변은 저장되지 않았을 수 있습니다 — 같은 요청을 한 번 더 보내주세요.",
+        );
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "알 수 없는 오류가 발생했습니다.");
 
@@ -437,6 +454,7 @@ function gateLabel(block: BlockId): string {
 
 interface EventHandlers {
   onText: (text: string) => void;
+  onDone: () => void;
   onThinking: () => void;
   onError: (message: string) => void;
   onGate: (block: BlockId) => void;
@@ -479,6 +497,7 @@ async function readEvents(body: ReadableStream<Uint8Array>, handlers: EventHandl
       });
     else if (event.type === "truncated") handlers.onTruncated();
     else if (event.type === "error") handlers.onError(event.message ?? "오류가 발생했습니다.");
+    else if (event.type === "done") handlers.onDone();
   };
 
   for (;;) {
