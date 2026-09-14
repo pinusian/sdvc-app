@@ -155,3 +155,37 @@ describe("[P7-13] PWA 안내", () => {
     expect(getBlock("implement").instruction).toContain("SVG로만");
   });
 });
+
+/**
+ * [BL-023] 실행할 수 없는 환경에서 실행 결과를 지어내지 않게 한다.
+ *
+ * 2026-09-14 실사용자 대화: 구현 답변에 "$ node --test … tests 7 pass 7" 같은
+ * 터미널 출력이 적혀 있었다. 이 서비스의 서버에는 코드를 실행하는 수단이
+ * 없다 — 모델은 파일을 낼 뿐이다. 그런데 지시문이 "실행한 명령과 그 출력을
+ * 함께 제시한다"고 요구해서, 모델이 출력을 **지어냈다.** 사용자는 검증된
+ * 줄 알았다.
+ */
+describe("[BL-023] 실행 결과를 지어내지 않는다", () => {
+  it("구현 지시문은 이 환경에서 코드를 실행할 수 없다고 못 박는다", () => {
+    const instruction = getBlock("implement").instruction;
+    expect(instruction).toContain("실행할 수 없");
+    expect(instruction).toContain("지어내지");
+  });
+
+  it("구현 지시문은 더 이상 '실행한 명령과 그 출력'을 요구하지 않는다 — 그 요구가 지어내기를 불렀다", () => {
+    expect(getBlock("implement").instruction).not.toContain("실행한 명령과 그 출력");
+  });
+
+  it("검사는 사용자가 브라우저로 직접 열어 결과를 보는 tests.html로 낸다", () => {
+    const instruction = getBlock("implement").instruction;
+    expect(instruction).toContain("tests.html");
+    // 결과는 사용자가 연 화면이 근거다 — 모델이 추측해 적지 않는다
+    expect(instruction).toContain("사용자");
+  });
+
+  it("유지보수 지시문도 같은 원칙을 담는다 (고친 뒤 확인도 지어내지 않는다)", () => {
+    const instruction = getBlock("maintenance").instruction;
+    expect(instruction).toContain("실행할 수 없");
+    expect(instruction).toContain("지어내지");
+  });
+});

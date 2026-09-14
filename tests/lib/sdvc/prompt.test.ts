@@ -242,3 +242,26 @@ describe("[BL-018] 지금 배포된 파일 알려주기", () => {
     expect(prompt).toMatch(/참고용|저장 지시가 아니|그대로 쓰지/);
   });
 });
+
+/**
+ * [BL-023] 관통 규칙: 실행 결과를 흉내 내지 않는다.
+ *
+ * 구현 블록만의 문제가 아니다 — 계획·작업분해 단계에서도 "테스트를 돌렸더니"
+ * 같은 말을 지어낼 수 있다. 모든 블록의 프롬프트에 같은 규칙이 실려야 한다.
+ */
+describe("[BL-023] 실행 결과를 지어내지 않는다는 관통 규칙", () => {
+  it("모든 블록의 프롬프트가 이 환경에서는 코드를 실행할 수 없다고 알린다", () => {
+    for (const block of [
+      "constitution_specify",
+      "clarify",
+      "plan",
+      "tasks",
+      "implement",
+      "maintenance",
+    ] as const) {
+      const prompt = buildSystemPrompt({ block });
+      expect(prompt, `${block}: 실행 불가 고지`).toContain("코드를 실행할 수 없");
+      expect(prompt, `${block}: 터미널 출력 흉내 금지`).toContain("터미널 출력");
+    }
+  });
+});
