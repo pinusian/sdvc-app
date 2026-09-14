@@ -318,6 +318,10 @@ describe("[P3-4] POST /api/chat — 대화 상태 저장", () => {
 
   it("승인하면 다음 블록으로 옮기고 그 블록의 대본으로 진행한다", async () => {
     getConversation.mockResolvedValue({ ...CONVERSATION, currentBlock: "plan" });
+    listMessages.mockResolvedValue([
+      { role: "user", content: "계획 세워줘" },
+      { role: "assistant", content: "이 계획대로 진행할까요?" },
+    ]);
 
     const { POST } = await import("@/app/api/chat/route");
     await POST(request({ ...VALID, approved: true, message: "예, 이대로 진행" }));
@@ -334,6 +338,10 @@ describe("[P3-4] POST /api/chat — 대화 상태 저장", () => {
 
   it("[P3-6] 단계가 넘어갔으면 스트림 맨 앞에서 새 블록을 알려준다", async () => {
     getConversation.mockResolvedValue({ ...CONVERSATION, currentBlock: "plan" });
+    listMessages.mockResolvedValue([
+      { role: "user", content: "계획 세워줘" },
+      { role: "assistant", content: "이 계획대로 진행할까요?" },
+    ]);
 
     const { POST } = await import("@/app/api/chat/route");
     const res = await POST(request({ ...VALID, approved: true, message: "예" }));
@@ -776,6 +784,10 @@ describe("[P7-4b] 구현을 마친 대화도 계속 받는다", () => {
 
   it("구현 단계에서 승인하면 done이 아니라 유지보수로 저장한다", async () => {
     getConversation.mockResolvedValue({ ...CONVERSATION, currentBlock: "implement" });
+    listMessages.mockResolvedValue([
+      { role: "user", content: "계획 세워줘" },
+      { role: "assistant", content: "이 계획대로 진행할까요?" },
+    ]);
 
     const { POST } = await import("@/app/api/chat/route");
     await POST(
@@ -1098,8 +1110,18 @@ describe("[P7-10] 산출물 이미지 알림", () => {
  * 것이 증거였다 — 라우트가 예외를 그대로 터뜨리고 있었다.
  */
 describe("[BL-021] 예상 못 한 오류를 삼키지 않고 알린다", () => {
+  const originalEnv = { ...process.env };
+
   beforeEach(() => {
+    vi.clearAllMocks();
+    // 다른 describe와 같이 키를 넣는다. 빠뜨리면 라우트가 키 확인에서 500으로
+    // 조기 반환해, 보려던 동작까지 가지도 않고 테스트가 헛통과한다(실제로 그랬다).
+    process.env.ANTHROPIC_API_KEY = "sk-ant-test";
     happyPath();
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
   });
 
   it("대화를 읽다 예외가 나도 맨 500이 아니라 JSON으로 알린다", async () => {
@@ -1120,6 +1142,8 @@ describe("[BL-021] 예상 못 한 오류를 삼키지 않고 알린다", () => {
     const { POST } = await import("@/app/api/chat/route");
     const res = await POST(request(VALID));
 
+    // 키 확인 같은 앞단에서 500이 난 게 아니라 **저장에서** 터진 것이어야 한다
+    expect(appendMessage).toHaveBeenCalled();
     expect(res.status).toBe(500);
     expect((await res.json() as { error?: string }).error).toBeTruthy();
   });
@@ -1141,5 +1165,81 @@ describe("[BL-021] 예상 못 한 오류를 삼키지 않고 알린다", () => {
     // 늘린 게 아니라 **줄였고**, 계획·작업분해·구현 답변이 전부 60초에
     // 끊겨 저장되지 않았다(2026-09-14 실사용자 대화에서 확인).
     expect(route.maxDuration).toBe(300);
+  });
+});
+
+/**
+ * [BL-022] 답이 끊긴 채 단계가 넘어가지 않게 한다.
+ *
+ * 2026-09-14 실사용자 대화: 계획 답변이 60초에 끊겨 저장되지 않았는데,
+ * 화면이 아무 말도 없어 사용자가 "다음 단계로"를 눌렀고 **누를 때마다 단계가
+ * 넘어갔다** — 계획서도 작업분해도 없이 구현 단계에 도착했다.
+ */
+describe("[BL-022] 끊긴 답변과 단계 이동", () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // 다른 describe와 같이 키를 넣는다. 빠뜨리면 라우트가 키 확인에서 500으로
+    // 조기 반환해, 보려던 동작까지 가지도 않고 테스트가 헛통과한다(실제로 그랬다).
+    process.env.ANTHROPIC_API_KEY = "sk-ant-test";
+    happyPath();
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  it("직전 블록의 답변이 없으면 승인해도 단계를 넘기지 않는다", async () => {
+    getConversation.mockResolvedValue({ ...CONVERSATION, currentBlock: "plan" });
+    // 계획을 요청했는데 답이 저장되지 않아 마지막이 사용자 메시지인 상태
+    listMessages.mockResolvedValue([
+      { role: "assistant", content: "명확화가 끝났습니다." },
+      { role: "user", content: "예, 이대로 진행해주세요." },
+    ]);
+
+    const { POST } = await import("@/app/api/chat/route");
+    await POST(request({ ...VALID, approved: true, message: "예, 다음 단계로 진행해주세요." }));
+
+    expect(setCurrentBlock).not.toHaveBeenCalled();
+    // 넘기는 대신 지금 블록(계획)의 일을 다시 하게 한다 — 그게 빠진 산출물을 채운다
+    const { system } = createChatStream.mock.calls[0][0] as { system: string };
+    expect(system).toContain("현재 블록: 블록 3");
+  });
+
+  it("대화가 비어 있으면 승인해도 첫 블록에 머문다", async () => {
+    getConversation.mockResolvedValue({ ...CONVERSATION, currentBlock: "constitution_specify" });
+    listMessages.mockResolvedValue([]);
+
+    const { POST } = await import("@/app/api/chat/route");
+    await POST(request({ ...VALID, approved: true, message: "예, 다음 단계로 진행해주세요." }));
+
+    expect(setCurrentBlock).not.toHaveBeenCalled();
+  });
+
+  it("done 신호는 답변 저장·발행이 끝난 뒤 맨 마지막에 보낸다", async () => {
+    // 예전에는 Claude가 끝나자마자 done을 넘기고 그 뒤에 저장했다. 저장 중에
+    // 끊기면 화면은 '다 됐다'고 믿는데 DB에는 답이 없었다.
+    getConversation.mockResolvedValue({ ...CONVERSATION, currentBlock: "implement" });
+    publishArtifact.mockResolvedValue({
+      project: { slug: "my-site" },
+      fileCount: 1,
+      imageCount: 0,
+      warnings: [],
+    });
+    createChatStream.mockResolvedValue(
+      streamOf(
+        { type: "text", text: ["```file:index.html", "<h1>x</h1>", "```"].join("\n") },
+        { type: "done" },
+      ),
+    );
+
+    const { POST } = await import("@/app/api/chat/route");
+    const events = await eventsOf(await POST(request({ ...VALID, message: "만들어줘" })));
+
+    const types = events.map((e) => e.type);
+    expect(types.filter((t) => t === "done")).toHaveLength(1);
+    expect(types[types.length - 1]).toBe("done");
+    expect(types.indexOf("artifact")).toBeLessThan(types.indexOf("done"));
   });
 });

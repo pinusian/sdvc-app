@@ -665,3 +665,42 @@ describe("[BL-021a] 요청이 실패하면 입력을 되살린다", () => {
     expect(box).toHaveValue("");
   });
 });
+
+/**
+ * [BL-022] 답이 도중에 끊기면 **끊겼다고 말한다.**
+ *
+ * 서버가 시간 한도에 걸려 강제 종료되면 스트림은 done 없이 그냥 닫힌다.
+ * 예전에는 화면이 조용히 멈췄고, 사용자는 무슨 일인지 모른 채 "다음 단계로"를
+ * 눌러 산출물 없이 단계를 넘겨버렸다(2026-09-14 실사용자).
+ */
+describe("[BL-022] 끊긴 응답 알림", () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("done 없이 스트림이 닫히면 끊겼다고 알린다", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(mockChatResponse({ type: "text", text: "계획을 세워보면" })),
+    );
+
+    render(<ChatView conversationId="conv-1" currentBlock="plan" initialMessages={[]} />);
+    await userEvent.type(screen.getByLabelText("메시지"), "계획 세워줘");
+    await userEvent.click(screen.getByRole("button", { name: "보내기" }));
+
+    await waitFor(() => expect(screen.getByText(/도중에 끊겼/)).toBeInTheDocument());
+  });
+
+  it("done까지 오면 끊겼다는 말은 없다", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(mockChatResponse({ type: "text", text: "완성" }, { type: "done" })),
+    );
+
+    render(<ChatView conversationId="conv-1" currentBlock="plan" initialMessages={[]} />);
+    await userEvent.type(screen.getByLabelText("메시지"), "계획 세워줘");
+    await userEvent.click(screen.getByRole("button", { name: "보내기" }));
+
+    await waitFor(() => expect(screen.getByText("완성")).toBeInTheDocument());
+    expect(screen.queryByText(/도중에 끊겼/)).not.toBeInTheDocument();
+  });
+});
