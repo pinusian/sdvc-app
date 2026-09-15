@@ -55,6 +55,25 @@ const NO_EXECUTION_LINES: string[] = [
 ];
 
 /**
+ * [BL-024] 서버가 없어 **브라우저가 Claude API를 직접 불러야 하는** 프로젝트일 때의
+ * 모델 이름 안내 — 구현(5)·유지보수(6) 공통.
+ *
+ * 명세 단계에서 "AI가 글을 정리해 준다"처럼 서버가 있어야 자연스러운 기능을
+ * 요청받으면, 이 환경은 정적 파일만 만들 수 있으므로 브라우저가 사용자의
+ * API 키로 Claude를 직접 부르는 우회로를 제안하게 된다(실제로 그런 사례가
+ * 있었다). 그 코드에 넣을 모델 이름을 **훈련 때 알던 날짜 박힌 스냅샷**으로
+ * 적으면, 그 스냅샷은 Anthropic이 시간이 지나 서비스에서 내려가는 순간
+ * `not_found_error(404)`로 죽는다 — 실제로 `claude-3-5-sonnet-20241022`를
+ * 적은 프로젝트가 그렇게 멈췄다(2026-09-15).
+ */
+const BROWSER_CLAUDE_CALL_LINES: string[] = [
+  "**브라우저가 Claude API를 직접 불러야 할 때(서버가 없어 그렇게 우회하는 경우)**:",
+  "모델 이름은 `claude-sonnet-5`를 쓴다. **날짜가 박힌 옛 스냅샷 이름을 기억나는 대로",
+  "적지 않는다** — 그런 이름은 Anthropic이 시간이 지나면 서비스에서 내려간다. 세대",
+  "이름(`claude-sonnet-5`처럼 날짜 없는 이름)은 계속 그 세대의 최신 모델을 가리킨다.",
+];
+
+/**
  * [P7-13] PWA(설치형 웹앱)로 만들어 달라는 요청이 있을 때의 안내.
  * 구현(5)·유지보수(6) 두 블록에서 똑같이 쓰므로 한 곳에 둔다 — 파일 형식
  * 절처럼 두 곳에 따로 두면 말이 갈라진다.
@@ -185,6 +204,8 @@ export const SDVC_BLOCKS: SdvcBlock[] = [
       "html·css·js·json·svg·md·txt만 쓴다.",
       "",
       ...PWA_GUIDANCE_LINES,
+      "",
+      ...BROWSER_CLAUDE_CALL_LINES,
     ].join("\n"),
   },
   {
@@ -220,6 +241,8 @@ export const SDVC_BLOCKS: SdvcBlock[] = [
       "html·css·js·json·svg·md·txt만 쓴다.",
       "",
       ...PWA_GUIDANCE_LINES,
+      "",
+      ...BROWSER_CLAUDE_CALL_LINES,
     ].join("\n"),
   },
 ];
