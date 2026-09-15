@@ -189,3 +189,32 @@ describe("[BL-023] 실행 결과를 지어내지 않는다", () => {
     expect(instruction).toContain("지어내지");
   });
 });
+
+/**
+ * [BL-024] 브라우저가 Claude API를 직접 불러야 하는 프로젝트(서버를 둘 수
+ * 없어 그렇게 우회한 경우)에서, 모델 ID를 훈련 시점의 옛 스냅샷으로
+ * 지어내지 않게 한다.
+ *
+ * 실사용자 프로젝트("Story-Doing_독서활동")가 정확히 이 경로로 만들어졌고,
+ * `claude-3-5-sonnet-20241022`를 하드코딩해 넣었다. 그 스냅샷은 그 사이
+ * Anthropic이 서비스에서 내려 404(not_found_error)가 났다. 이 서버 자신은
+ * `claude-sonnet-5`(세대 이름, 날짜 없음)를 쓰고 있고 — 지금 이 대화도
+ * 그것으로 되고 있으니 확실히 살아있는 값이다.
+ */
+describe("[BL-024] 브라우저 직접 호출 시 모델 ID를 지어내지 않는다", () => {
+  it("구현 지시문은 날짜 박힌 스냅샷을 적지 말라고 못 박는다", () => {
+    const instruction = getBlock("implement").instruction;
+    expect(instruction).toContain("claude-sonnet-5");
+    expect(instruction).toContain("날짜가 박힌");
+  });
+
+  it("유지보수 지시문에도 같은 안내가 있다 — 나중에 이 방식으로 바꾸는 요청도 있을 수 있다", () => {
+    const instruction = getBlock("maintenance").instruction;
+    expect(instruction).toContain("claude-sonnet-5");
+    expect(instruction).toContain("날짜가 박힌");
+  });
+
+  it("왜 위험한지(스냅샷은 나중에 서비스에서 내려간다)를 설명한다", () => {
+    expect(getBlock("implement").instruction).toContain("내려간다");
+  });
+});
