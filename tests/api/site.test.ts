@@ -146,9 +146,20 @@ describe("[P5-1] GET /site/[slug]", () => {
     expect(res.headers.get("content-type")).toContain("text/html");
   });
 
-  it("[P5-1] 공개된 페이지는 우리 로그인 정보에 접근하지 못하게 가둔다", async () => {
-    // 남이 만든 산출물을 로그인한 다른 개발자가 열어볼 수 있으므로,
-    // 그 스크립트가 같은 출처의 쿠키에 손대지 못하게 가둔다.
+  it("[BL-025] 공개된 페이지도 같은 출처로 열려 방문자 로그인·기록 API를 쓸 수 있다", async () => {
+    // [P5-1]에서는 allow-same-origin을 일부러 뺐다 — 공개 산출물의 스크립트가
+    // 그 페이지를 보는 다른 개발자의 SDVC 로그인 세션에 손대지 못하게 하려는
+    // 것이었다. 그런데 Phase 11(방문자 계정·기록·AI 프록시)가 필요로 하는
+    // fetch·쿠키·localStorage를 전부 같이 막아버렸다 — 실사용자 프로젝트
+    // "Story-Doing_독서활동"에서 회원가입이 전부 "origin 'null'" CORS
+    // 오류로 실패했다(2026-09-18).
+    //
+    // [P5-1]이 막으려던 위험(공개 산출물의 스크립트가 다른 개발자의 세션으로
+    // 같은 출처 요청을 보내는 것)은 여전히 남지만, **비공개 프로젝트는
+    // 이미 이 위험을 감수하고 있다**("비공개는 주인 본인만 보는 자기 코드라
+    // 남의 세션이 걸릴 일이 없다"는 이유로 sandbox 자체를 안 건다) — 노출
+    // 범위(누가 그 페이지를 보다가 걸릴 수 있는지)만 넓어질 뿐, 새로운
+    // 종류의 위험은 아니다. 사용자 확인 후 허용하기로 결정했다.
     for (const visibility of ["link", "public"] as const) {
       getProjectBySlug.mockResolvedValue({ ...PROJECT, visibility });
 
@@ -156,8 +167,7 @@ describe("[P5-1] GET /site/[slug]", () => {
       const csp = (await GET(request(), context())).headers.get("content-security-policy") ?? "";
 
       expect(csp, visibility).toContain("sandbox");
-      // allow-same-origin을 주면 가두는 의미가 없다.
-      expect(csp, visibility).not.toContain("allow-same-origin");
+      expect(csp, visibility).toContain("allow-same-origin");
     }
   });
 

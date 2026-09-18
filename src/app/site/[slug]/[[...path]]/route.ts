@@ -153,15 +153,23 @@ function responseHeaders(
   };
 
   // 공개된 산출물은 로그인한 다른 개발자도 열어볼 수 있다. 그 페이지의
-  // 스크립트가 같은 출처의 로그인 쿠키에 손대지 못하도록 sandbox로 가둔다
-  // (allow-same-origin은 절대 주지 않는다).
+  // 스크립트가 같은 출처의 로그인 쿠키에 손대지 못하도록 sandbox로 가둔다.
   //
   // **비공개는 가두지 않는다.** 가둬두면 그 문서의 요청이 쿠키 없이 나가서
   // 로그인 확인을 할 수 없고, CSS·JS가 전부 404가 된다(프로덕션에서 겪음).
   // 비공개는 주인 본인만 보는 자기 코드라 남의 세션이 걸릴 일이 없다.
+  //
+  // [BL-025] allow-same-origin은 한동안 뺐었지만, Phase 11(방문자 계정·
+  // 기록·AI 프록시)에 필요한 fetch·쿠키·localStorage까지 함께 막아버려
+  // 실사용자 프로젝트에서 회원가입이 전부 "origin 'null'" CORS 오류로
+  // 실패했다(2026-09-18). sandbox가 막으려던 위험(공개 산출물의 스크립트가
+  // 다른 개발자의 세션으로 같은 출처 요청을 보내는 것)은 남지만, 비공개는
+  // 이미 그 위험을 감수하고 있다 — 노출 범위만 넓어질 뿐 새 위험은 아니라고
+  // 판단해 사용자 확인 후 허용했다.
   // 근본 해결은 산출물을 **별도 도메인**에서 서빙하는 것 — Phase 6 이후 과제.
   if (visibility === "link" || visibility === "public") {
-    headers["content-security-policy"] = "sandbox allow-scripts allow-forms allow-popups";
+    headers["content-security-policy"] =
+      "sandbox allow-scripts allow-forms allow-popups allow-same-origin";
   }
 
   // **공용 캐시(CDN)에는 어떤 경우에도 남기지 않는다.**
