@@ -22,6 +22,8 @@ export interface Project {
   status: ProjectStatus;
   /** [P8-6] 비상 차단 시각. null이면 정상 (FR-016) */
   blockedAt?: string | null;
+  /** [P11-2] 이 프로젝트의 사용자(방문자) 로그인 기능 전체 스위치. 기본 켜짐 */
+  siteLoginEnabled?: boolean;
 }
 
 interface ProjectRow {
@@ -32,9 +34,11 @@ interface ProjectRow {
   visibility: Visibility;
   status: ProjectStatus;
   blocked_at?: string | null;
+  site_login_enabled?: boolean | null;
 }
 
-const COLUMNS = "id, owner_id, name, slug, visibility, status, blocked_at";
+const COLUMNS =
+  "id, owner_id, name, slug, visibility, status, blocked_at, site_login_enabled";
 
 function toProject(row: ProjectRow): Project {
   return {
@@ -45,6 +49,9 @@ function toProject(row: ProjectRow): Project {
     visibility: row.visibility,
     status: row.status,
     blockedAt: row.blocked_at ?? null,
+    // 마이그레이션 전에 만들어진 행은 이 컬럼이 없을 수 있다 — 없으면 켜짐으로
+    // 본다(컬럼이 생겼다는 이유만으로 이미 배포된 프로젝트의 로그인이 막히면 안 된다).
+    siteLoginEnabled: row.site_login_enabled ?? true,
   };
 }
 
