@@ -201,6 +201,23 @@ export async function getSiteUserApiKey(client: Client, siteUserId: string): Pro
   return encrypted ? decryptApiKey(encrypted) : null;
 }
 
+/**
+ * [P11-4] 화면에 "등록됨"만 보여줄 때 쓴다 — `getSiteUserApiKey`처럼
+ * 복호화하지 않는다. 값 자체가 필요 없는 곳에서 굳이 복호화할 이유가 없다.
+ */
+export async function hasSiteUserApiKey(client: Client, siteUserId: string): Promise<boolean> {
+  const { data, error } = await client
+    .from("site_users")
+    .select("anthropic_api_key_encrypted")
+    .eq("id", siteUserId)
+    .single();
+
+  assertNoError(error, "API 키 등록 여부 조회");
+  return Boolean(
+    (data as { anthropic_api_key_encrypted: string | null } | null)?.anthropic_api_key_encrypted,
+  );
+}
+
 export interface SiteRecord {
   id: string;
   projectId: string;
