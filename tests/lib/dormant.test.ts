@@ -40,11 +40,6 @@ const KNOWN_DORMANT: Record<string, string> = {
     "이 함수가 필요 없다. 스트리밍이 아닌 경로가 생기면 쓴다",
   toSeoulDateInput:
     "[P8-7c] 저장된 순간을 날짜 입력칸으로 되돌린다. 아직 '고치기' 화면이 없어 쓰는 곳이 없다",
-  // [P11-1] 사용자(방문자) 계정·기록 저장소 — 슬라이스 4(API 키·AI 프록시)까지
-  // 끝났다. 개발자(교수) 관리 화면(슬라이스 6)만 남았다. 그게 끝나면 이 줄들도 지운다.
-  suspendSiteUser: "[P11-6] 개발자(교수) 관리 화면에서 부른다. 아직 그 화면이 없다",
-  unsuspendSiteUser: "[P11-6] 개발자(교수) 관리 화면에서 부른다. 아직 그 화면이 없다",
-  listSiteUsersByProject: "[P11-6] 개발자(교수) 관리 화면에서 부른다. 아직 그 화면이 없다",
 };
 
 function walk(dir: string, out: string[] = []): string[] {

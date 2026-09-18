@@ -121,6 +121,21 @@ export async function getSiteUserById(client: Client, siteUserId: string): Promi
   return data ? toSiteUser(data as SiteUserRow) : null;
 }
 
+/**
+ * [P11-6] 개발자 관리 화면이 특정 사용자 한 명을 다룰 때(정지·기록 열람) 쓴다.
+ * `getSiteUserById`만 쓰면 다른 프로젝트의 사용자 id를 알아내 정지시키거나
+ * 기록을 훔쳐볼 수 있으므로, **그 프로젝트 소속인지**까지 여기서 확인한다.
+ * 아니면 존재 자체를 숨기고 null(호출부는 404로 응답, [FR-016]과 같은 원칙).
+ */
+export async function getOwnedSiteUser(
+  client: Client,
+  { projectId, siteUserId }: { projectId: string; siteUserId: string },
+): Promise<SiteUser | null> {
+  const siteUser = await getSiteUserById(client, siteUserId);
+  if (!siteUser || siteUser.projectId !== projectId) return null;
+  return siteUser;
+}
+
 /** [P11-6] 개발자(교수) 관리 화면 — 그 프로젝트의 사용자 전체. */
 export async function listSiteUsersByProject(
   client: Client,

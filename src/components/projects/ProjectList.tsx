@@ -20,6 +20,23 @@ interface VersionChoice {
   request: string;
 }
 
+/** [P11-6] 개발자 관리 화면에 보이는 방문자 한 명 */
+interface SiteUserItem {
+  id: string;
+  email: string;
+  displayName: string | null;
+  suspendedAt: string | null;
+  suspendedReason: string | null;
+}
+
+/** [P11-6] 그 방문자가 남긴 기록 한 건 */
+interface SiteRecordItem {
+  id: string;
+  title: string;
+  author: string | null;
+  note: string | null;
+}
+
 type ListItem = Pick<Project, "id" | "name" | "slug" | "status" | "visibility"> & {
   /** [P5-4b] 이 프로젝트를 만든 대화. 있으면 "이어서 수정"으로 들어간다 */
   conversationId?: string | null;
@@ -54,6 +71,18 @@ export function ProjectList({ projects }: { projects: ListItem[] }) {
     confirming: string | null;
   } | null>(null);
   const [restored, setRestored] = useState<string | null>(null);
+  /** [P11-6] 방문자 관리 패널 — 어느 프로젝트의 방문자 목록을 펼쳤는가 */
+  const [siteUsers, setSiteUsers] = useState<{ projectId: string; users: SiteUserItem[] | null } | null>(
+    null,
+  );
+  /** 지금 정지 사유를 입력받는 중인 방문자 */
+  const [suspending, setSuspending] = useState<{ siteUserId: string; reason: string } | null>(null);
+  /** 지금 기록을 펼쳐 보고 있는 방문자 */
+  const [viewingRecords, setViewingRecords] = useState<{
+    siteUserId: string;
+    records: SiteRecordItem[] | null;
+  } | null>(null);
+  const [siteUserBusy, setSiteUserBusy] = useState<string | null>(null);
 
   /**
    * [P5-3] 공개범위 변경 (FR-007).
@@ -169,6 +198,76 @@ export function ProjectList({ projects }: { projects: ListItem[] }) {
       setError(e instanceof Error ? e.message : "되돌리지 못했습니다.");
     } finally {
       setBusy(null);
+    }
+  }
+
+  /** [P11-6] 방문자 목록을 불러온다. */
+  async function openSiteUsers(id: string) {
+    setError(null);
+    setViewingRecords(null);
+    setSuspending(null);
+    setSiteUsers({ projectId: id, users: null });
+    try {
+      const res = await fetch(`/api/projects/${id}/site-users`);
+      const data = (await res.json()) as { users?: SiteUserItem[]; error?: string };
+      if (!res.ok || !data.users) throw new Error(data.error ?? "방문자 목록을 불러오지 못했습니다.");
+      setSiteUsers({ projectId: id, users: data.users });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "방문자 목록을 불러오지 못했습니다.");
+      setSiteUsers(null);
+    }
+  }
+
+  /** 정지·정지 해제 — 화면은 성공한 뒤에만 바꾼다(삭제와 달리 되돌릴 수 있는 조작이라 낙관적으로 먼저 바꾸지 않아도 된다). */
+  async function toggleSuspend(projectId: string, siteUserId: string, suspend: boolean, reason?: string) {
+    setSiteUserBusy(siteUserId);
+    setError(null);
+    try {
+      const path = suspend ? "suspend" : "unsuspend";
+      const res = await fetch(`/api/projects/${projectId}/site-users/${siteUserId}/${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: suspend ? JSON.stringify({ reason }) : undefined,
+      });
+      const data = (await res.json()) as { suspended?: boolean; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "처리하지 못했습니다.");
+
+      setSiteUsers((prev) =>
+        prev && prev.projectId === projectId
+          ? {
+              ...prev,
+              users: (prev.users ?? []).map((item) =>
+                item.id === siteUserId
+                  ? {
+                      ...item,
+                      suspendedAt: suspend ? new Date().toISOString() : null,
+                      suspendedReason: suspend ? (reason ?? null) : null,
+                    }
+                  : item,
+              ),
+            }
+          : prev,
+      );
+      setSuspending(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "처리하지 못했습니다.");
+    } finally {
+      setSiteUserBusy(null);
+    }
+  }
+
+  /** 이 방문자가 남긴 기록을 펼쳐 본다. */
+  async function openRecords(projectId: string, siteUserId: string) {
+    setError(null);
+    setViewingRecords({ siteUserId, records: null });
+    try {
+      const res = await fetch(`/api/projects/${projectId}/site-users/${siteUserId}/records`);
+      const data = (await res.json()) as { records?: SiteRecordItem[]; error?: string };
+      if (!res.ok || !data.records) throw new Error(data.error ?? "기록을 불러오지 못했습니다.");
+      setViewingRecords({ siteUserId, records: data.records });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "기록을 불러오지 못했습니다.");
+      setViewingRecords(null);
     }
   }
 
@@ -363,6 +462,134 @@ export function ProjectList({ projects }: { projects: ListItem[] }) {
             </div>
           )}
 
+          {/* [P11-6] 방문자 관리 패널 — 사용자 목록·기록 열람·정지 */}
+          {siteUsers?.projectId === project.id && (
+            <div className="w-full rounded-lg border border-border bg-surface-muted p-3">
+              {siteUsers.users === null ? (
+                <p className="text-xs text-ink-muted">불러오는 중…</p>
+              ) : siteUsers.users.length === 0 ? (
+                <p className="text-xs text-ink-muted">아직 가입한 방문자가 없어요.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {siteUsers.users.map((siteUser) => (
+                    <li key={siteUser.id} className="rounded-sm border border-border bg-surface p-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate text-xs text-ink">
+                          {siteUser.displayName ? `${siteUser.displayName} · ` : ""}
+                          {siteUser.email}
+                        </span>
+                        {siteUser.suspendedAt ? (
+                          <span className="rounded-pill bg-red-100 px-2 py-0.5 text-xs text-red-700">
+                            정지됨{siteUser.suspendedReason ? ` — ${siteUser.suspendedReason}` : ""}
+                          </span>
+                        ) : (
+                          <span className="rounded-pill bg-surface-muted px-2 py-0.5 text-xs text-ink-muted">
+                            이용 중
+                          </span>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            viewingRecords?.siteUserId === siteUser.id
+                              ? setViewingRecords(null)
+                              : void openRecords(project.id, siteUser.id)
+                          }
+                          className="rounded-sm border border-border px-2 py-0.5 text-xs text-ink-muted hover:border-accent hover:text-accent-ink"
+                        >
+                          {viewingRecords?.siteUserId === siteUser.id ? "기록 닫기" : "기록 보기"}
+                        </button>
+
+                        {siteUser.suspendedAt ? (
+                          <Button
+                            variant="secondary"
+                            className="!px-2.5 !py-1 text-xs"
+                            disabled={siteUserBusy === siteUser.id}
+                            onClick={() => void toggleSuspend(project.id, siteUser.id, false)}
+                          >
+                            정지 해제
+                          </Button>
+                        ) : suspending?.siteUserId === siteUser.id ? (
+                          <span className="flex w-full items-center gap-1.5">
+                            <label className="sr-only" htmlFor={`suspend-reason-${siteUser.id}`}>
+                              정지 사유
+                            </label>
+                            <input
+                              id={`suspend-reason-${siteUser.id}`}
+                              autoFocus
+                              placeholder="정지 사유 (예: 도배성 기록 작성)"
+                              value={suspending.reason}
+                              onChange={(event) =>
+                                setSuspending({ siteUserId: siteUser.id, reason: event.target.value })
+                              }
+                              className="min-w-0 flex-1 rounded-sm border border-border bg-surface px-2 py-1 text-xs text-ink focus:border-accent focus:outline-none"
+                            />
+                            <Button
+                              variant="accent"
+                              className="!px-2.5 !py-1 text-xs"
+                              disabled={!suspending.reason.trim() || siteUserBusy === siteUser.id}
+                              onClick={() =>
+                                void toggleSuspend(project.id, siteUser.id, true, suspending.reason)
+                              }
+                            >
+                              정지
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              className="!px-2.5 !py-1 text-xs"
+                              onClick={() => setSuspending(null)}
+                            >
+                              취소
+                            </Button>
+                          </span>
+                        ) : (
+                          <Button
+                            variant="secondary"
+                            className="!px-2.5 !py-1 text-xs"
+                            onClick={() => setSuspending({ siteUserId: siteUser.id, reason: "" })}
+                          >
+                            정지
+                          </Button>
+                        )}
+                      </div>
+
+                      {viewingRecords?.siteUserId === siteUser.id && (
+                        <div className="mt-2 border-t border-border pt-2">
+                          {viewingRecords.records === null ? (
+                            <p className="text-xs text-ink-muted">불러오는 중…</p>
+                          ) : viewingRecords.records.length === 0 ? (
+                            <p className="text-xs text-ink-muted">아직 남긴 기록이 없어요.</p>
+                          ) : (
+                            <ul className="space-y-1">
+                              {viewingRecords.records.map((record) => (
+                                <li key={record.id} className="text-xs text-ink-muted">
+                                  <span className="text-ink">{record.title}</span>
+                                  {record.author ? ` · ${record.author}` : ""}
+                                  {record.note ? ` — ${record.note}` : ""}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setSiteUsers(null);
+                  setViewingRecords(null);
+                  setSuspending(null);
+                }}
+                className="mt-2 text-xs text-ink-faint hover:text-ink"
+              >
+                닫기
+              </button>
+            </div>
+          )}
+
           <div className="flex shrink-0 items-center gap-2">
             {/* [P5-4b] 버그 수정·기능 추가는 그 프로젝트를 만든 대화에서 이어서 한다 (FR-025) */}
             {project.conversationId && (
@@ -382,6 +609,18 @@ export function ProjectList({ projects }: { projects: ListItem[] }) {
                 className="inline-flex items-center rounded-sm border border-border px-3 py-1.5 text-xs font-semibold text-ink hover:border-accent hover:text-accent-ink"
               >
                 되돌리기
+              </button>
+            )}
+
+            {/* [P11-6] 방문자 계정을 쓰는 프로젝트에만 뜻이 있지만, 로그인을 꺼둔 프로젝트도
+                이미 가입한 방문자가 있을 수 있어 배포된 프로젝트 전체에 보여준다 */}
+            {project.status === "deployed" && (
+              <button
+                type="button"
+                onClick={() => void openSiteUsers(project.id)}
+                className="inline-flex items-center rounded-sm border border-border px-3 py-1.5 text-xs font-semibold text-ink hover:border-accent hover:text-accent-ink"
+              >
+                방문자 관리
               </button>
             )}
 
