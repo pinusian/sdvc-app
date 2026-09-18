@@ -67,10 +67,62 @@ const NO_EXECUTION_LINES: string[] = [
  * 적은 프로젝트가 그렇게 멈췄다(2026-09-15).
  */
 const BROWSER_CLAUDE_CALL_LINES: string[] = [
-  "**브라우저가 Claude API를 직접 불러야 할 때(서버가 없어 그렇게 우회하는 경우)**:",
+  "**브라우저가 Claude API를 직접 불러야 할 때(서버가 없어 그렇게 우회하는 경우, 계정 시스템이 없는",
+  "프로젝트에서만 — 방문자 로그인이 있는 프로젝트는 위 AI 프록시(`ai/summarize`)를 쓴다)**:",
   "모델 이름은 `claude-sonnet-5`를 쓴다. **날짜가 박힌 옛 스냅샷 이름을 기억나는 대로",
   "적지 않는다** — 그런 이름은 Anthropic이 시간이 지나면 서비스에서 내려간다. 세대",
   "이름(`claude-sonnet-5`처럼 날짜 없는 이름)은 계속 그 세대의 최신 모델을 가리킨다.",
+];
+
+/**
+ * [P11-5] 방문자(사용자)가 각자 로그인해 자기 기록만 보는 기능 요청이 있을 때 —
+ * 구현(5)·유지보수(6) 공통.
+ *
+ * P11-1~4에서 이 플랫폼 자신이 실제로 `/api/site/[slug]/...`에 가입·로그인·
+ * 기록·API 키·AI 요약 라우트를 만들어 두었다. 이 안내가 없으면 산출물을 만드는
+ * AI가 "서버를 못 둔다"고 여겨 Story-Doing이 했던 실수로 되돌아간다 — 계정을
+ * localStorage로 흉내 내거나(BL-024 이전 상태), 사용자의 API 키를 브라우저가
+ * 직접 들고 Claude를 불러 개발자도구에 그대로 노출시킨다.
+ *
+ * PWA와 같은 원칙으로 **요청이 있을 때만** 낸다 — 대부분의 산출물(소개 페이지,
+ * 1인용 도구)은 로그인이 필요 없다.
+ *
+ * slug를 프롬프트에 박아 넣지 않고 `location.pathname`에서 읽게 한다 — 생성
+ * 시점의 AI는 배포될 최종 주소(slug)를 모르고, 슬러그가 바뀌어도 코드를 다시
+ * 낼 필요가 없어진다.
+ */
+const SITE_ACCOUNTS_GUIDANCE_LINES: string[] = [
+  "**방문자(사용자)가 각자 로그인해서 자기 것만 보는 기능이 필요할 때(회원가입·로그인·",
+  '"내 기록" 같은 요청이 있을 때만 — 요청 없이 먼저 만들지 않는다)**: 이 환경이 서버·DB를',
+  "직접 못 만든다고 해서 localStorage로 계정을 흉내 내지 않는다 — 이 플랫폼이 실제로 동작하는",
+  "계정 시스템을 이미 제공한다. 아래 API를 그대로 호출하는 화면을 만든다.",
+  "",
+  "이 프로젝트 자신의 주소(slug)는 코드에 직접 적지 않는다 — 지금 열린 주소에서 읽는다:",
+  "```js",
+  'const SITE_SLUG = location.pathname.split("/")[2];',
+  "const siteApi = (path) => `/api/site/${SITE_SLUG}${path}`;",
+  "```",
+  "- 가입: `POST` `siteApi(\"/auth/signup\")` body `{email, password}`(8자 이상)",
+  "  → 성공 시 `{email, displayName}`과 함께 로그인 상태가 된다(로그인 쿠키는 서버가 심는다).",
+  '- 로그인: `POST` `siteApi("/auth/login")` body `{email, password}` → 위와 같은 응답.',
+  '  실패는 항상 `{error: "이메일 또는 비밀번호가 올바르지 않습니다."}`로 온다 — "이메일이',
+  "  없다\"/\"비밀번호가 틀렸다\"를 구분해 보여주지 않는다(계정 존재 여부를 숨기기 위함).",
+  '- 기록 목록: `GET` `siteApi("/records")` → `{records: [{id, title, author, note, ...}]}`',
+  "  (로그인한 본인 것만 온다).",
+  '- 기록 작성: `POST` `siteApi("/records")` body `{title, author?, note?}` → `{record: {...}}`.',
+  '- 모든 요청은 `fetch(url, {method, headers: {"content-type":"application/json"},',
+  "  body: JSON.stringify(...)})`로 보낸다. 로그인 쿠키는 같은 사이트 요청이라 브라우저가",
+  "  자동으로 실어 보낸다 — 따로 토큰을 저장하거나 들고 다닐 필요가 없다.",
+  '- 로그인하지 않은 상태에서 `/records`를 부르면 401이 온다 — 그 상태를 "로그인해주세요"로 안내한다.',
+  "",
+  "**그리고 이 프로젝트 성격상 AI 기능(요약·추천 등)도 필요하면**: 사용자 본인의",
+  "Anthropic API 키로 이 서버가 대신 호출해준다 — 브라우저가 직접 Claude를 부르지 않는다",
+  "(방문자 계정이 없는 프로젝트에서만 아래 '브라우저 직접 호출' 안내를 쓴다).",
+  '- 키 등록 여부 확인(설정 화면에서): `GET` `siteApi("/settings/api-key")` → `{hasApiKey: boolean}`.',
+  '- 키 등록: `POST` `siteApi("/settings/api-key")` body `{apiKey}` — `sk-ant-`로 시작하는',
+  "  값을 **사용자가 직접 붙여넣게** 만든다(당신이 값을 지어내거나 미리 채워 넣지 않는다).",
+  '- AI 호출: `POST` `siteApi("/ai/summarize")` body `{prompt}` → `{summary: "..."}`.',
+  "  키를 등록 안 했으면 `{error}`로 안내가 오니 그 문구를 화면에 그대로 보여준다.",
 ];
 
 /**
@@ -205,6 +257,8 @@ export const SDVC_BLOCKS: SdvcBlock[] = [
       "",
       ...PWA_GUIDANCE_LINES,
       "",
+      ...SITE_ACCOUNTS_GUIDANCE_LINES,
+      "",
       ...BROWSER_CLAUDE_CALL_LINES,
     ].join("\n"),
   },
@@ -241,6 +295,8 @@ export const SDVC_BLOCKS: SdvcBlock[] = [
       "html·css·js·json·svg·md·txt만 쓴다.",
       "",
       ...PWA_GUIDANCE_LINES,
+      "",
+      ...SITE_ACCOUNTS_GUIDANCE_LINES,
       "",
       ...BROWSER_CLAUDE_CALL_LINES,
     ].join("\n"),
