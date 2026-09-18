@@ -10,6 +10,7 @@ import {
   listSiteRecordsByUser,
   listSiteUsersByProject,
   getSiteUserById,
+  hasSiteUserApiKey,
 } from "@/lib/site-accounts/store";
 
 /**
@@ -161,6 +162,26 @@ describe("[P11-4] setSiteUserApiKey / getSiteUserApiKey", () => {
       error: null,
     });
     expect(await getSiteUserApiKey(client, "su-2")).toBeNull();
+  });
+});
+
+describe("[P11-4] hasSiteUserApiKey — 화면에 '등록됨'만 보여줄 때 (복호화 없이)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("등록돼 있으면 true", async () => {
+    const { client } = fakeSupabase({
+      data: { anthropic_api_key_encrypted: "iv:tag:cipher" },
+      error: null,
+    });
+    expect(await hasSiteUserApiKey(client, "su-1")).toBe(true);
+  });
+
+  it("등록 안 돼 있으면 false", async () => {
+    const { client } = fakeSupabase({
+      data: { anthropic_api_key_encrypted: null },
+      error: null,
+    });
+    expect(await hasSiteUserApiKey(client, "su-1")).toBe(false);
   });
 });
 
