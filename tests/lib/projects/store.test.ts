@@ -6,6 +6,7 @@ import {
   listProjects,
   setProjectStatus,
   setProjectVisibility,
+  setProjectSiteLoginEnabled,
   deleteProjectRow,
   isSlugTaken,
 } from "@/lib/projects/store";
@@ -176,6 +177,27 @@ describe("[P5-3] 공개범위 변경", () => {
 
     await expect(
       setProjectVisibility(client, "proj-1", "user-1", "link"),
+    ).rejects.toThrow(/check constraint/);
+  });
+});
+
+describe("[P11-7] 방문자 로그인 켜기/끄기", () => {
+  it("소유자 조건을 걸고 바꾼다", async () => {
+    const { client, calls } = fakeSupabase({ data: { ...ROW, site_login_enabled: false }, error: null });
+
+    await setProjectSiteLoginEnabled(client, "proj-1", "user-1", false);
+
+    expect(calls.from).toContain("projects");
+    expect(calls.update[0]).toMatchObject({ site_login_enabled: false });
+    expect(calls.eq).toContainEqual(["id", "proj-1"]);
+    expect(calls.eq).toContainEqual(["owner_id", "user-1"]);
+  });
+
+  it("DB가 거부하면 알린다", async () => {
+    const { client } = fakeSupabase({ data: null, error: { message: "violates check constraint" } });
+
+    await expect(
+      setProjectSiteLoginEnabled(client, "proj-1", "user-1", true),
     ).rejects.toThrow(/check constraint/);
   });
 });
