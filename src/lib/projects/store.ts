@@ -169,6 +169,24 @@ export async function setProjectVisibility(
   assertNoError(error, "공개범위 변경");
 }
 
+/** [P11-7] 방문자 로그인을 켜거나 끈다. 끄면 `gateSiteProject`가 403으로 막는다. */
+export async function setProjectSiteLoginEnabled(
+  client: SupabaseClient,
+  projectId: string,
+  ownerId: string,
+  enabled: boolean,
+): Promise<void> {
+  const { error } = await client
+    .from("projects")
+    .update({ site_login_enabled: enabled })
+    .eq("id", projectId)
+    .eq("owner_id", ownerId)
+    .select("id")
+    .single();
+
+  assertNoError(error, "방문자 로그인 설정 변경");
+}
+
 /** [P7-1b] 이름을 바꾼다 (FR-030). 소유자 조건은 여기서 직접 건다. */
 export async function renameProject(
   client: SupabaseClient,

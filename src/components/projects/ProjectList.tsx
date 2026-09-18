@@ -37,7 +37,10 @@ interface SiteRecordItem {
   note: string | null;
 }
 
-type ListItem = Pick<Project, "id" | "name" | "slug" | "status" | "visibility"> & {
+type ListItem = Pick<
+  Project,
+  "id" | "name" | "slug" | "status" | "visibility" | "siteLoginEnabled"
+> & {
   /** [P5-4b] 이 프로젝트를 만든 대화. 있으면 "이어서 수정"으로 들어간다 */
   conversationId?: string | null;
 };
@@ -111,6 +114,34 @@ export function ProjectList({ projects }: { projects: ListItem[] }) {
           prev.map((item) => (item.id === id ? { ...item, visibility: previous } : item)),
         );
       }
+    }
+  }
+
+  /**
+   * [P11-7] 방문자 로그인 켜기/끄기. 공개범위와 같은 방식으로 먼저 화면을
+   * 바꾸고 실패하면 되돌린다 — 꺼졌다고 표시됐는데 실제로는 켜져 있으면
+   * 개발자가 안심하고 있다가 방문자가 계속 로그인할 수 있는 상태가 된다.
+   */
+  async function toggleSiteLogin(id: string, next: boolean) {
+    const previous = items.find((item) => item.id === id)?.siteLoginEnabled;
+    setError(null);
+    setItems((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, siteLoginEnabled: next } : item)),
+    );
+
+    try {
+      const res = await fetch(`/api/projects/${id}/site-login`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ enabled: next }),
+      });
+      const data = (await res.json()) as { enabled?: boolean; error?: string };
+      if (!res.ok || data.enabled === undefined) throw new Error(data.error ?? "바꾸지 못했습니다.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "바꾸지 못했습니다.");
+      setItems((prev) =>
+        prev.map((item) => (item.id === id ? { ...item, siteLoginEnabled: previous ?? true } : item)),
+      );
     }
   }
 
@@ -395,6 +426,20 @@ export function ProjectList({ projects }: { projects: ListItem[] }) {
                 >
                   {copied === project.slug ? "복사됐어요" : "주소 복사"}
                 </button>
+              )}
+
+              {/* [P11-7] 방문자 로그인 켜기/끄기 — 꺼져 있어도 이미 가입한 계정·기록은
+                  그대로 남고, 다시 켜면 돌아온다(지우는 것이 아니라 문만 잠근다) */}
+              {project.status === "deployed" && (
+                <label className="flex items-center gap-1.5 text-xs text-ink-muted">
+                  <input
+                    type="checkbox"
+                    checked={project.siteLoginEnabled ?? true}
+                    onChange={(event) => void toggleSiteLogin(project.id, event.target.checked)}
+                    className="h-3.5 w-3.5 accent-accent"
+                  />
+                  방문자 로그인
+                </label>
               )}
             </div>
           </div>
