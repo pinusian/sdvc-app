@@ -9,6 +9,7 @@ import {
   createSiteRecord,
   listSiteRecordsByUser,
   listSiteUsersByProject,
+  getSiteUserById,
 } from "@/lib/site-accounts/store";
 
 /**
@@ -199,6 +200,45 @@ describe("[P11-1] site_records — 기록 CRUD", () => {
     const columns = eqCalls.map((c) => (Array.isArray(c) ? c[0] : c));
     expect(columns).toContain("project_id");
     expect(columns).toContain("site_user_id");
+  });
+});
+
+describe("[P11-3] getSiteUserById — 요청마다 본인 확인·정지 여부 검사용", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("id로 찾을 때 eq 조건을 건다", async () => {
+    const { client, calls } = fakeSupabase({
+      data: { id: "su-1", project_id: "proj-1", email: "a@b.com", display_name: null },
+      error: null,
+    });
+
+    const user = await getSiteUserById(client, "su-1");
+
+    expect(calls.eq).toContainEqual(["id", "su-1"]);
+    expect(user?.id).toBe("su-1");
+  });
+
+  it("없는 id는 null을 준다", async () => {
+    const { client } = fakeSupabase({ data: null, error: null });
+    expect(await getSiteUserById(client, "no-such-id")).toBeNull();
+  });
+
+  it("정지 여부·사유를 함께 돌려준다 — 요청마다 이걸로 막는다", async () => {
+    const { client } = fakeSupabase({
+      data: {
+        id: "su-1",
+        project_id: "proj-1",
+        email: "a@b.com",
+        display_name: null,
+        suspended_at: "2026-09-01T00:00:00Z",
+        suspended_reason: "도배성 기록 작성",
+      },
+      error: null,
+    });
+
+    const user = await getSiteUserById(client, "su-1");
+    expect(user?.suspendedAt).toBe("2026-09-01T00:00:00Z");
+    expect(user?.suspendedReason).toBe("도배성 기록 작성");
   });
 });
 

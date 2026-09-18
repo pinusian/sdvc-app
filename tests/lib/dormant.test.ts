@@ -40,12 +40,9 @@ const KNOWN_DORMANT: Record<string, string> = {
     "이 함수가 필요 없다. 스트리밍이 아닌 경로가 생기면 쓴다",
   toSeoulDateInput:
     "[P8-7c] 저장된 순간을 날짜 입력칸으로 되돌린다. 아직 '고치기' 화면이 없어 쓰는 곳이 없다",
-  // [P11-1] 사용자(방문자) 계정·기록 저장소 — 슬라이스 2(가입·로그인)까지 끝났다.
-  // 기록 API(슬라이스 3)와 API 키 등록·AI 프록시(슬라이스 4)가 남은 함수를
+  // [P11-1] 사용자(방문자) 계정·기록 저장소 — 슬라이스 3(기록 CRUD)까지 끝났다.
+  // API 키 등록·AI 프록시(슬라이스 4)와 관리 화면(슬라이스 6)이 남은 함수를
   // 부른다. 그 슬라이스들이 끝나면 이 줄들부터 지운다.
-  listSiteRecordsByUser: "[P11-3] 기록 목록 API에서 부른다. 아직 그 API가 없다",
-  verifySiteSession: "[P11-3] 기록 API가 요청마다 이 쿠키를 검증해 본인 확인을 한다. 아직 그 API가 없다",
-  createSiteRecord: "[P11-3] 기록 작성 API에서 부른다. 아직 그 API가 없다",
   setSiteUserApiKey: "[P11-4] API 키 등록 화면에서 부른다. 아직 그 API가 없다",
   getSiteUserApiKey: "[P11-4] AI 프록시 라우트에서 부른다. 아직 그 라우트가 없다",
   suspendSiteUser: "[P11-6] 개발자(교수) 관리 화면에서 부른다. 아직 그 화면이 없다",
