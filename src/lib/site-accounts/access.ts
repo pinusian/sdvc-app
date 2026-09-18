@@ -1,5 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getProjectBySlug, type Project } from "@/lib/projects/store";
+import { getSiteUserById } from "@/lib/site-accounts/store";
+import { verifySiteSession } from "@/lib/site-accounts/session";
+import { readSiteSessionCookie } from "@/lib/site-accounts/cookie";
 
 /**
  * [P11-2] 사용자(방문자) API가 공통으로 거치는 문 — 가입·로그인·기록 API 전부
@@ -28,4 +31,48 @@ export async function gateSiteProject(
   }
 
   return { ok: true, project };
+}
+
+export type SiteAuthResult =
+  | { ok: true; project: Project; siteUserId: string }
+  | { ok: false; status: 401 | 403 | 404; error: string };
+
+/**
+ * [P11-3] 기록 API(읽기·쓰기 전부)가 요청마다 거치는 관문. `gateSiteProject`로
+ * 프로젝트 자체를 먼저 확인하고, 그다음 쿠키 → 서명 → 실제 계정(정지 여부
+ * 포함) 순서로 "지금 이 사람이 맞는지"를 끝까지 확인한다.
+ *
+ * 세션이 유효해도 그 사이 계정이 정지될 수 있으므로([P11-6]), 토큰만
+ * 믿지 않고 매번 `getSiteUserById`로 지금 상태를 다시 읽는다.
+ */
+export async function requireSiteUser(
+  admin: SupabaseClient,
+  slug: string,
+  request: Request,
+): Promise<SiteAuthResult> {
+  const gate = await gateSiteProject(admin, slug);
+  if (!gate.ok) return gate;
+
+  const token = readSiteSessionCookie(request);
+  if (!token) return { ok: false, status: 401, error: "로그인이 필요합니다." };
+
+  const payload = verifySiteSession(token);
+  if (!payload || payload.projectId !== gate.project.id) {
+    return { ok: false, status: 401, error: "로그인이 필요합니다." };
+  }
+
+  const siteUser = await getSiteUserById(admin, payload.siteUserId);
+  if (!siteUser || siteUser.projectId !== gate.project.id) {
+    return { ok: false, status: 401, error: "로그인이 필요합니다." };
+  }
+
+  if (siteUser.suspendedAt) {
+    return {
+      ok: false,
+      status: 403,
+      error: `이 계정은 이용이 제한되었습니다: ${siteUser.suspendedReason ?? "사유 미기재"}`,
+    };
+  }
+
+  return { ok: true, project: gate.project, siteUserId: siteUser.id };
 }

@@ -11,6 +11,26 @@ export const SITE_SESSION_COOKIE = "sdvc_site_session";
 
 const MAX_AGE_SECONDS = 30 * 24 * 60 * 60; // session.ts의 30일과 맞춘다
 
+/**
+ * [P11-3] 기록 API가 요청마다 이걸로 세션 토큰을 꺼낸다. `next/headers`의
+ * `cookies()`를 목(mock)하는 대신 `Request`의 `Cookie` 헤더를 직접 읽는다 —
+ * 테스트도 실제 요청도 같은 경로를 탄다.
+ */
+export function readSiteSessionCookie(request: Request): string | null {
+  const header = request.headers.get("cookie");
+  if (!header) return null;
+
+  for (const part of header.split(";")) {
+    const eq = part.indexOf("=");
+    if (eq === -1) continue;
+    const name = part.slice(0, eq).trim();
+    if (name === SITE_SESSION_COOKIE) {
+      return decodeURIComponent(part.slice(eq + 1).trim());
+    }
+  }
+  return null;
+}
+
 export function siteSessionCookieOptions(slug: string) {
   return {
     httpOnly: true,

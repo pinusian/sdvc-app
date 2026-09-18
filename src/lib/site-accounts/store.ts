@@ -105,6 +105,22 @@ export async function findSiteUserByEmail(
   return { ...toSiteUser(row), passwordHash: row.password_hash };
 }
 
+/**
+ * [P11-3] 요청마다 본인 확인·정지 여부를 검사할 때 쓴다(`requireSiteUser`).
+ * 세션 토큰에는 id만 들어 있으므로, 매 요청 지금 상태(특히 정지 여부)를
+ * 다시 읽어야 한다 — 세션이 살아있어도 정지되면 즉시 막혀야 하기 때문이다.
+ */
+export async function getSiteUserById(client: Client, siteUserId: string): Promise<SiteUser | null> {
+  const { data, error } = await client
+    .from("site_users")
+    .select(SITE_USER_COLUMNS)
+    .eq("id", siteUserId)
+    .maybeSingle();
+
+  assertNoError(error, "사용자 계정 조회");
+  return data ? toSiteUser(data as SiteUserRow) : null;
+}
+
 /** [P11-6] 개발자(교수) 관리 화면 — 그 프로젝트의 사용자 전체. */
 export async function listSiteUsersByProject(
   client: Client,
