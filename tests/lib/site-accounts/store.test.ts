@@ -10,6 +10,7 @@ import {
   listSiteRecordsByUser,
   listSiteUsersByProject,
   getSiteUserById,
+  getOwnedSiteUser,
   hasSiteUserApiKey,
 } from "@/lib/site-accounts/store";
 
@@ -260,6 +261,34 @@ describe("[P11-3] getSiteUserById — 요청마다 본인 확인·정지 여부 
     const user = await getSiteUserById(client, "su-1");
     expect(user?.suspendedAt).toBe("2026-09-01T00:00:00Z");
     expect(user?.suspendedReason).toBe("도배성 기록 작성");
+  });
+});
+
+describe("[P11-6] getOwnedSiteUser — 그 프로젝트 소속인지 확인하고서만 돌려준다", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("프로젝트가 일치하면 사용자를 돌려준다", async () => {
+    const { client } = fakeSupabase({
+      data: { id: "su-1", project_id: "proj-1", email: "a@b.com", display_name: null },
+      error: null,
+    });
+
+    const user = await getOwnedSiteUser(client, { projectId: "proj-1", siteUserId: "su-1" });
+    expect(user?.id).toBe("su-1");
+  });
+
+  it("다른 프로젝트 소속이면 null (id만 알아내 정지·기록 열람을 막는다)", async () => {
+    const { client } = fakeSupabase({
+      data: { id: "su-1", project_id: "proj-2", email: "a@b.com", display_name: null },
+      error: null,
+    });
+
+    expect(await getOwnedSiteUser(client, { projectId: "proj-1", siteUserId: "su-1" })).toBeNull();
+  });
+
+  it("사용자 자체가 없으면 null", async () => {
+    const { client } = fakeSupabase({ data: null, error: null });
+    expect(await getOwnedSiteUser(client, { projectId: "proj-1", siteUserId: "no-such-id" })).toBeNull();
   });
 });
 
