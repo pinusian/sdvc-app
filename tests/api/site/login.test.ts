@@ -127,7 +127,10 @@ describe("[P11-2] POST /api/site/[slug]/auth/login", () => {
 
     const setCookie = res.headers.get("set-cookie") ?? "";
     expect(setCookie).toContain("signed-token");
-    expect(setCookie).toContain("Path=/site/reading-activity");
+    // [BL-026] 쿠키를 실제로 읽는 곳은 /site/{slug}(페이지)가 아니라
+    // /api/site/{slug}/...(기록·API 키·AI 요약)다 — 그쪽으로 한정해야
+    // 브라우저가 실제로 이 쿠키를 실어 보낸다.
+    expect(setCookie).toContain("Path=/api/site/reading-activity");
   });
 
   it("다른 프로젝트의 같은 이메일 계정과는 섞이지 않는다 — project_id로 찾는다", async () => {

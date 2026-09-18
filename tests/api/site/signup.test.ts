@@ -163,7 +163,10 @@ describe("[P11-2] POST /api/site/[slug]/auth/signup", () => {
     expect(setCookie).toContain("signed-token");
     expect(setCookie).toContain("HttpOnly");
     // 이 프로젝트의 경로에만 쿠키가 걸려야 다른 산출물 세션과 안 섞인다.
-    expect(setCookie).toContain("Path=/site/reading-activity");
+    // [BL-026] /site/{slug}(페이지)가 아니라 /api/site/{slug}/...(이
+    // 쿠키를 실제로 읽는 기록·API 키·AI 요약 라우트)로 한정해야 브라우저가
+    // 실제로 이 쿠키를 실어 보낸다.
+    expect(setCookie).toContain("Path=/api/site/reading-activity");
 
     const body = (await res.json()) as { error?: string };
     expect(body.error).toBeUndefined();

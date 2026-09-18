@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { SITE_SESSION_COOKIE, readSiteSessionCookie } from "@/lib/site-accounts/cookie";
+import {
+  SITE_SESSION_COOKIE,
+  readSiteSessionCookie,
+  siteSessionCookieOptions,
+} from "@/lib/site-accounts/cookie";
 
 /**
  * [P11-3] 기록 API가 요청마다 이 쿠키를 읽어야 한다. Route Handler에서
@@ -36,5 +40,37 @@ describe("[P11-3] readSiteSessionCookie", () => {
   it("URL 인코딩된 값은 복원해서 돌려준다", () => {
     const req = requestWithCookie(`${SITE_SESSION_COOKIE}=abc%2Edef`);
     expect(readSiteSessionCookie(req)).toBe("abc.def");
+  });
+});
+
+/**
+ * [BL-026] 쿠키의 `path`가 실제로 이 쿠키를 읽는 라우트와 어긋나 있었다.
+ *
+ * 가입·로그인 응답은 쿠키를 `/site/{slug}`로 한정해 심었는데, 이 쿠키를
+ * 실제로 읽는 곳은 전부 `/api/site/{slug}/...`(기록·API 키·AI 요약)다.
+ * 브라우저는 쿠키의 Path가 요청 URL의 **접두사**일 때만 그 쿠키를 실어
+ * 보내는데, `/site/{slug}`는 `/api/site/{slug}/...`의 접두사가 아니다 —
+ * 그래서 실제 브라우저에서는 로그인 직후를 빼고는 이 쿠키가 단 한 번도
+ * 전송되지 않았다. 실사용자가 로그인 후 API 키 저장에서 "로그인이
+ * 필요합니다"를 그대로 겪었다(2026-09-18) — 로그인 화면이 바뀐 건 응답
+ * 본문(email 등)으로 낙관적으로 전환됐을 뿐, 그 뒤 어떤 요청도 실제로는
+ * 인증되지 않고 있었다.
+ *
+ * 이 어긋남을 잡을 수 있었던 유일한 검사가 바로 이 값인데, 지금까지 아무
+ * 테스트도 `siteSessionCookieOptions`의 `path`를 확인하지 않았다 —
+ * `readSiteSessionCookie`는 `Cookie` 헤더를 직접 파싱해 테스트하므로
+ * (브라우저의 Path 매칭을 거치지 않는다), 값만 맞으면 그 어긋남이
+ * 드러나지 않았다.
+ */
+describe("[BL-026] siteSessionCookieOptions — path가 실제로 쿠키를 읽는 라우트와 맞아야 한다", () => {
+  it("path는 /site/{slug}가 아니라 /api/site/{slug}다 (그 쿠키를 읽는 라우트가 거기 있다)", () => {
+    expect(siteSessionCookieOptions("story-doing").path).toBe("/api/site/story-doing");
+  });
+
+  it("httpOnly·sameSite=lax·30일 만료는 그대로다", () => {
+    const opts = siteSessionCookieOptions("story-doing");
+    expect(opts.httpOnly).toBe(true);
+    expect(opts.sameSite).toBe("lax");
+    expect(opts.maxAge).toBe(30 * 24 * 60 * 60);
   });
 });
