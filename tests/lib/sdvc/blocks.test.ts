@@ -267,3 +267,18 @@ describe("[P11-5] 방문자 계정·AI 프록시 API 안내", () => {
     expect(instruction).toContain("계정 시스템이 없는");
   });
 });
+
+/**
+ * [BL-027] 로그아웃 API 안내 — Story-Doing이 이 안내를 따라 만들어졌는데도
+ * "로그아웃 기능은 아직 제공되지 않습니다"라고 적혀 있었다. [P11-5] 안내
+ * 자체에 로그아웃 API가 빠져 있었던 것 — 실제로 서버에도 없었다(고쳤다).
+ */
+describe("[BL-027] 로그아웃 API 안내", () => {
+  it("구현 지시문에 로그아웃 경로가 담긴다", () => {
+    expect(getBlock("implement").instruction).toContain("auth/logout");
+  });
+
+  it("유지보수 지시문에도 담긴다", () => {
+    expect(getBlock("maintenance").instruction).toContain("auth/logout");
+  });
+});
