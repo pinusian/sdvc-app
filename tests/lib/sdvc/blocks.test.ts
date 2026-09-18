@@ -218,3 +218,52 @@ describe("[BL-024] 브라우저 직접 호출 시 모델 ID를 지어내지 않�
     expect(getBlock("implement").instruction).toContain("내려간다");
   });
 });
+
+/**
+ * [P11-5] 방문자(사용자) 계정·기록·AI 프록시 API 호출 안내 — 구현(5)·유지보수(6) 공통.
+ *
+ * P11-1~4에서 실제로 만든 `/api/site/[slug]/...` 라우트(가입·로그인·기록·API 키·
+ * AI 요약)를, 산출물을 만드는 AI가 실제로 그대로 불러 쓰게 한다. 이 안내가 없으면
+ * Story-Doing이 그랬듯(BL-024) localStorage 흉내나 브라우저 직접 키 노출로
+ * 되돌아갈 위험이 있다 — 이 플랫폼이 이미 안전한 서버 프록시를 제공한다는 것을
+ * 못 박는다.
+ */
+describe("[P11-5] 방문자 계정·AI 프록시 API 안내", () => {
+  it("구현 지시문에 다섯 API 경로가 모두 담긴다", () => {
+    const instruction = getBlock("implement").instruction;
+    expect(instruction).toContain("/api/site/");
+    expect(instruction).toContain("auth/signup");
+    expect(instruction).toContain("auth/login");
+    expect(instruction).toContain("/records");
+    expect(instruction).toContain("settings/api-key");
+    expect(instruction).toContain("ai/summarize");
+  });
+
+  it("유지보수 지시문에도 같은 안내가 담긴다", () => {
+    const instruction = getBlock("maintenance").instruction;
+    expect(instruction).toContain("auth/signup");
+    expect(instruction).toContain("ai/summarize");
+  });
+
+  it("localStorage로 흉내 내지 말라고 못 박는다 (Story-Doing과 같은 실수 반복 방지)", () => {
+    expect(getBlock("implement").instruction).toContain("localStorage");
+  });
+
+  it("이 프로젝트 자신의 주소(slug)는 코드에 박아 넣지 말고 location에서 읽으라고 안내한다", () => {
+    const instruction = getBlock("implement").instruction;
+    expect(instruction).toContain("location.pathname");
+  });
+
+  it("로그인/가입 요청이 있을 때만 만들라고 안내한다 (PWA와 같은 요청 시에만 원칙)", () => {
+    expect(getBlock("implement").instruction).toContain("로그인");
+  });
+
+  it("AI 기능이 필요할 때는 브라우저 직접 호출이 아니라 이 프록시를 쓰라고 연결한다", () => {
+    const instruction = getBlock("implement").instruction;
+    const proxyIdx = instruction.indexOf("ai/summarize");
+    const directCallIdx = instruction.indexOf("브라우저가 Claude API를 직접 불러야 할 때");
+    expect(proxyIdx).toBeGreaterThan(-1);
+    expect(directCallIdx).toBeGreaterThan(-1);
+    expect(instruction).toContain("계정 시스템이 없는");
+  });
+});
