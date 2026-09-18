@@ -77,6 +77,8 @@ describe("[P4-3] projects 저장소", () => {
       status: "draft",
       // [P8-6]에서 늘어난 값 — 차단된 적이 없으면 null
       blockedAt: null,
+      // [P11-2]에서 늘어난 값 — 컬럼이 없으면 켜짐으로 본다
+      siteLoginEnabled: true,
     });
   });
 
@@ -97,6 +99,14 @@ describe("[P4-3] projects 저장소", () => {
     expect(calls.eq).toContainEqual(["slug", "my-homepage"]);
     expect(calls.eq.flat()).not.toContain("owner_id");
     expect(project?.slug).toBe("my-homepage");
+  });
+
+  it("[P11-2] 주소로 찾을 때 site_login_enabled도 함께 온다 (기본은 켜짐)", async () => {
+    const { client } = fakeSupabase({ data: ROW, error: null });
+    const project = await getProjectBySlug(client, "my-homepage");
+    // ROW에는 컬럼이 없는 옛 데이터 흉내 — 없으면 켜짐으로 본다(이미 배포된
+    // 프로젝트가 이 컬럼이 생겼다고 갑자기 로그인이 막히면 안 된다).
+    expect(project?.siteLoginEnabled).toBe(true);
   });
 
   it("없는 프로젝트는 null을 준다", async () => {
