@@ -15,6 +15,8 @@ export async function GET() {
     anthropicKeyConfigured: boolean;
     /** [BL-008] 서버관리자 자동 승격이 가능한 설정인지 — 값은 노출하지 않는다 */
     adminEmailConfigured: boolean;
+    /** [P11-1] 사용자(방문자) API 키 암호화 열쇠가 설정됐는지 — 값은 노출하지 않는다 */
+    siteApiKeyEncryptionSecretConfigured: boolean;
     /**
      * [P8-12] 지금 돌고 있는 배포의 커밋(짧게). 로컬에서는 null.
      *
@@ -29,6 +31,7 @@ export async function GET() {
     supabaseReachable: null,
     anthropicKeyConfigured: Boolean(process.env.ANTHROPIC_API_KEY),
     adminEmailConfigured: Boolean(process.env.ADMIN_EMAIL),
+    siteApiKeyEncryptionSecretConfigured: Boolean(process.env.SITE_API_KEY_ENCRYPTION_SECRET),
     commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? null,
   };
 
