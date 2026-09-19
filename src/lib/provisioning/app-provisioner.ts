@@ -62,8 +62,102 @@ export interface AppProvisioningResult {
 }
 
 export async function provisionTrialApplication(
-  _request: AppProvisioningRequest,
-  _dependencies: AppProvisioningDependencies,
+  request: AppProvisioningRequest,
+  dependencies: AppProvisioningDependencies,
 ): Promise<AppProvisioningResult> {
-  throw new Error("T010 application provisioning contract is not implemented");
+  const [supabaseToken, vercelToken] = await Promise.all([
+    dependencies.loadCredential(request.supabaseCredentialId),
+    dependencies.loadCredential(request.vercelCredentialId),
+  ]);
+  if (!supabaseToken || !vercelToken) {
+    return { status: "unverified", reason: "credential_missing" };
+  }
+
+  const database = await dependencies.supabase.createProject({
+    token: supabaseToken,
+    name: request.appName,
+    idempotencyKey: `${request.runId}:supabase`,
+  });
+  const readyDatabase = await pollUntil(
+    database,
+    (project) => project.status === "ACTIVE_HEALTHY",
+    () => dependencies.supabase.getProject({ token: supabaseToken, ref: database.ref }),
+    dependencies.maxPollAttempts,
+  );
+  if (readyDatabase.status !== "ACTIVE_HEALTHY") {
+    return {
+      status: "unverified",
+      reason: "database_not_ready",
+      supabaseProjectRef: database.ref,
+    };
+  }
+
+  const project = await dependencies.vercel.createProject({
+    token: vercelToken,
+    name: request.appName,
+    idempotencyKey: `${request.runId}:vercel-project`,
+  });
+  const deployment = await dependencies.vercel.createDeployment({
+    token: vercelToken,
+    projectId: project.id,
+    sourceRevision: request.sourceRevision,
+    idempotencyKey: `${request.runId}:deployment`,
+  });
+  const readyDeployment = await pollUntil(
+    deployment,
+    (item) => item.readyState === "READY" || item.readyState === "ERROR",
+    () => dependencies.vercel.getDeployment({ token: vercelToken, deploymentId: deployment.id }),
+    dependencies.maxPollAttempts,
+  );
+  if (readyDeployment.readyState !== "READY" || !isHttpsUrl(readyDeployment.url)) {
+    return {
+      status: "unverified",
+      reason: readyDeployment.readyState === "READY" ? "url_unreachable" : "deployment_not_ready",
+      supabaseProjectRef: database.ref,
+      vercelProjectId: project.id,
+      deploymentId: deployment.id,
+    };
+  }
+
+  const probe = await dependencies.probeUrl(readyDeployment.url);
+  if (!probe.ok) {
+    return {
+      status: "unverified",
+      reason: "url_unreachable",
+      supabaseProjectRef: database.ref,
+      vercelProjectId: project.id,
+      deploymentId: deployment.id,
+      url: readyDeployment.url,
+    };
+  }
+
+  return {
+    status: "ready",
+    supabaseProjectRef: database.ref,
+    vercelProjectId: project.id,
+    deploymentId: deployment.id,
+    url: readyDeployment.url,
+  };
+}
+
+async function pollUntil<T>(
+  initial: T,
+  done: (value: T) => boolean,
+  poll: () => Promise<T>,
+  maxPollAttempts: number,
+): Promise<T> {
+  let current = initial;
+  for (let attempt = 0; !done(current) && attempt < maxPollAttempts; attempt += 1) {
+    current = await poll();
+  }
+  return current;
+}
+
+function isHttpsUrl(value: string | undefined): value is string {
+  if (!value) return false;
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
 }
