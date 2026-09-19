@@ -1,6 +1,6 @@
 # 진행 상황
 
-> 마지막 업데이트: 2026-09-19 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 2 준비 · 세션 상태: 독립 clone 전환, T005 준비
+> 마지막 업데이트: 2026-09-19 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 2 준비 · 세션 상태: 환경 정리 완료, T005 준비
 
 ## 1. 지금 어디까지 왔나
 - 기존 저장소 복제 및 핵심 소스 읽기 완료.
@@ -36,6 +36,8 @@
 - 설치된 Next.js 16.3.4 문서의 `LayoutProps` 생성 계약을 확인하고 `next typegen` 전 실패, 생성 후 성공을 재현함.
 - Vite의 `net use` 호출만 우회하는 임시 preload shim으로 Vitest 전체 86개 파일/872개 테스트를 실행한 뒤 shim 파일을 제거함.
 - 연결 worktree의 Git 메타데이터 쓰기 제한을 피하기 위해 `C:\Codex작업용폴더\projects\sdvc-app-codex`에 기존 Git 데이터와 최신 working tree를 보존한 독립 clone을 구성하고 `codex/sdvc-openai-codex` 브랜치에 연결함.
+- 독립 clone에서 Phase 1 문서를 커밋함: `ece17e6 docs: Codex 전환 계획과 Phase 1 기준선 확정 (T001-T004)`.
+- `npm run typecheck`가 `next typegen` 후 `tsc --noEmit`을 실행하도록 고정하고, Codex Windows 샌드박스용 `npm run test:codex`를 추가함.
 
 ## 3. 검증 증거
 실행 명령: git ls-remote https://github.com/pinusian/sdvc-app.git HEAD
@@ -58,6 +60,10 @@
 - `tsc --noEmit` (typegen 후) → 종료 코드 0, 출력 없음.
 - `vitest run` (우회 없음) → 종료 코드 1, Vite `optimizeSafeRealPathSync`의 `exec("net use")`에서 `spawn EPERM`.
 - 임시 preload shim + `vitest run --pool=threads --maxWorkers=4 --reporter=dot` → 종료 코드 0, `86 passed`, `872 passed`, 96.92초. 테스트가 의도적으로 기록한 stderr 3건 외 실패 없음.
+- 독립 clone `npm ci --ignore-scripts` → 종료 코드 0, `added 459 packages`, `found 0 vulnerabilities`.
+- `npm run typecheck` → 종료 코드 0, `Types generated successfully`, TypeScript 오류 없음.
+- `npm run lint` → 종료 코드 0, 출력 오류 없음.
+- ESM shim 최종본 `npm run test:codex -- --reporter=dot` → 종료 코드 0, `86 passed`, `872 passed`, 105.87초.
 문서 검사: git diff --cached --check에서 오류 출력 없음.
 커밋 시도: 작성자 설정이 없어 'Author identity unknown'으로 실패. 문서 파일은 작성 및 stage 완료했으며 커밋은 아직 없음.
 SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
@@ -75,7 +81,7 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 ## 4. 다음 할 일
 - [x] plan.md에 대한 명시적 사용자 승인을 확인하고 조건을 관련 문서에 반영한다.
 - [x] `SDVC 작동`에서 체크포인트 무결성과 현재 파일 차이를 검사한다.
-- [ ] 독립 clone에서 현재 문서를 검증·커밋한다. 작성자는 `홍길동 <hong@example.com>`으로 설정됨.
+- [x] 독립 clone에서 현재 문서를 검증·커밋한다. 작성자는 `홍길동 <hong@example.com>`으로 설정됨.
 - [x] SDVC references/04-tdd-vertical-slice.md를 읽고 tasks.md를 작성한다.
 - [x] tasks.md의 완료 기준·RED/GREEN/REFACTOR 커밋 및 기술 검증 순서에 대한 승인을 받는다.
 - [x] 읽기 전용 Analyze를 수행하고 발견된 역할·재개 범위 문제의 보완 승인을 받는다.
@@ -89,7 +95,7 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 
 ## 5. 막힌 것 / 사용자 결정 대기
 - Plan·Tasks·Analyze 보완 승인 완료. 사용자 결정 대기 없음.
-- 연결 worktree의 `.git/worktrees/sdvc-app-codex/index.lock` 쓰기 제한은 독립 clone 전환으로 우회했다. 독립 clone의 Git 쓰기 검증과 첫 문서 커밋은 아직 수행 전이다.
+- 없음. 연결 worktree의 Git 쓰기 제한은 독립 clone 전환으로 우회했고 첫 문서 커밋까지 검증했다.
 - 실제 공급자 계정 설정·비용 상한·별도 운영 배포 대상은 아직 없음. 별도 비용 승인 전 외부 리소스 생성 없음.
 - Codex의 키 중계 및 격리 테스트 실행 조합은 기술 검증이 필요하며 현재 미검증.
 - API 비밀키는 채팅으로 받거나 파일에 임의로 채우지 않는다.

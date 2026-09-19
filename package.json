@@ -8,7 +8,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
+    "test:codex": "node --import ./scripts/vitest-windows-sandbox-shim.mjs ./node_modules/vitest/vitest.mjs run --pool=threads --maxWorkers=4",
     "test:watch": "vitest",
     "test:e2e": "playwright test"
   },
