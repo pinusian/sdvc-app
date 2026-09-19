@@ -269,6 +269,74 @@ describe("[P11-5] 방문자 계정·AI 프록시 API 안내", () => {
 });
 
 /**
+ * [BL-028] 명세 충돌 감지 + 범위 고정 — Story-Doing 사고(2026-09-18).
+ *
+ * 명세에 "누가 사용하나요? — **혼자 쓰는 개인용 웹앱**"이라고 적혀 있었고 그
+ * 문답이 같은 대화 기록 안에 있었는데도, "로그인 기능 추가" 요청이 아무 경고
+ * 없이 실행돼 다중 사용자 앱이 됐다. 게다가 로그인과 무관한 AI 기능 5개의
+ * 호출 방식·저장 위치까지 함께 바뀌었다.
+ *
+ * 유지보수 지시문의 "고쳐달라는 말이 곧 승인이다"가 이 사고를 거들었다 —
+ * 그 문장에 예외를 달지 않으면 명세를 거스르는 요청도 자동 승인으로 읽힌다.
+ */
+describe("[BL-028] 명세 충돌 감지 + 범위 고정", () => {
+  it("유지보수 지시문은 명세와 어긋나면 멈추고 되묻게 한다", () => {
+    const instruction = getBlock("maintenance").instruction;
+    expect(instruction).toContain("명세");
+    expect(instruction).toContain("멈춘다");
+    expect(instruction).toContain("어긋나");
+  });
+
+  it("유지보수 지시문은 요청받지 않은 것을 함께 바꾸지 말라고 못 박는다", () => {
+    const instruction = getBlock("maintenance").instruction;
+    expect(instruction).toContain("요청받지 않은");
+  });
+
+  it("'고쳐달라는 말이 곧 승인'에 예외가 달려 있다 — 이 문장이 사고를 거들었다", () => {
+    const instruction = getBlock("maintenance").instruction;
+    const idx = instruction.indexOf("고쳐달라는 말이 곧 승인이다");
+    expect(idx).toBeGreaterThan(-1);
+    // 그 문장 바로 뒤에 예외가 붙어야 한다(멀리 떨어뜨리면 같이 읽히지 않는다).
+    expect(instruction.slice(idx, idx + 200)).toContain("다만");
+  });
+
+  it("구현 지시문에도 같은 범위 고정 규칙이 있다", () => {
+    expect(getBlock("implement").instruction).toContain("요청받지 않은");
+  });
+});
+
+/**
+ * [BL-029] 데이터 이주 규칙 — Story-Doing 사고(2026-09-18).
+ *
+ * 기록이 `localStorage.reading_records_v1` → 서버로, AI 산출물이 `*_v1` →
+ * `*_v2`로 조용히 옮겨졌다. 데이터는 지워지지 않았지만 앱이 그 자리를 더
+ * 이상 읽지 않아 전부 화면에서 사라졌다 — 삭제보다 나쁘다(원인 파악조차
+ * 어렵다).
+ */
+describe("[BL-029] 데이터 이주 규칙", () => {
+  it("유지보수 지시문은 저장 위치를 바꿀 때 옮기는 코드를 함께 내게 한다", () => {
+    const instruction = getBlock("maintenance").instruction;
+    expect(instruction).toContain("저장 위치");
+    expect(instruction).toContain("옮기는 코드");
+  });
+
+  it("못 옮기면 반드시 먼저 경고하게 한다 — 조용히 넘어가지 않는다", () => {
+    const instruction = getBlock("maintenance").instruction;
+    expect(instruction).toContain("보이지 않게 됩니다");
+  });
+
+  it("키 이름 버전 접미사(_v2 등) 변경을 특히 경계하게 한다", () => {
+    expect(getBlock("maintenance").instruction).toContain("_v2");
+  });
+
+  it("구현 지시문에도 같은 규칙이 있다", () => {
+    const instruction = getBlock("implement").instruction;
+    expect(instruction).toContain("저장 위치");
+    expect(instruction).toContain("옮기는 코드");
+  });
+});
+
+/**
  * [BL-027] 로그아웃 API 안내 — Story-Doing이 이 안내를 따라 만들어졌는데도
  * "로그아웃 기능은 아직 제공되지 않습니다"라고 적혀 있었다. [P11-5] 안내
  * 자체에 로그아웃 API가 빠져 있었던 것 — 실제로 서버에도 없었다(고쳤다).
