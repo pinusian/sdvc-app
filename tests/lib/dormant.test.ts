@@ -29,6 +29,9 @@ const ROOT = process.cwd();
  * 이유를 못 적겠으면 그건 지울 코드라는 뜻이다.
  */
 const KNOWN_DORMANT: Record<string, string> = {
+  runTddVerification:
+    "[T009] Sandbox 실행 제어 기술검증 어댑터. T034에서 Workflow 작업 실행 경로에 " +
+    "배선한 뒤 이 휴면 예외를 제거한다",
   hasVerifiedMfa:
     "[P8-1] MFA 건너뛰기로 결정(2026-09-13). 관리자 1인 체제에서 2단계 인증을 켜면 " +
     "휴대폰을 잃는 순간 운영 콘솔에 아무도 못 들어간다. 복구 수단과 함께 다시 볼 것",
