@@ -1,6 +1,6 @@
 # 진행 상황
 
-> 마지막 업데이트: 2026-09-20 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 3 · 세션 상태: T014 시험 DB 적용 완료, T015 준비
+> 마지막 업데이트: 2026-09-20 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 3 · 세션 상태: T015 GREEN 완료, T016 준비
 
 ## 1. 지금 어디까지 왔나
 - 기존 저장소 복제 및 핵심 소스 읽기 완료.
@@ -58,6 +58,8 @@
 - T013에서 비로그인·타 사용자·비활성·차단·기존 세션·직접 API 우회를 매 요청 재검사하는 수강생 공통 가드 계약을 RED 테스트로 고정했다.
 - T014 로컬 마이그레이션은 `is_active`, `suspended_by`, 상태 변경 시각과 감사 이전/이후 상태를 기존 스키마에 멱등 추가하며 RLS를 넓히지 않도록 작성했다.
 - 사용자 승인 후 `AI-VC` Free 시험 DB에 빈 DB 의존성을 포함한 최소 체인 `0001`→`0002`→`0003`→`0004`→`0008`→`0012`를 하나의 트랜잭션으로 적용하고 실제 컬럼·정책·RLS를 확인했다.
+- T015에서 인증 사용자만 보는 것으로 끝내지 않고, 매 요청마다 `profiles`의 역할·활성·차단 상태를 다시 읽는 공통 서버 가드를 구현했다.
+- 첨부·결제·채팅·대화·프로젝트 변경·되돌리기·방문자 관리·신고 등 수강생 보호 Route Handler 15개에 같은 가드를 연결했다. 관리자 API·웹훅·크론·생성 앱 방문자 API는 각각의 별도 인증 경계를 유지했다.
 
 ## 3. 검증 증거
 실행 명령: git ls-remote https://github.com/pinusian/sdvc-app.git HEAD
@@ -107,6 +109,8 @@
 - T013 타입 검사 → 종료 코드 0, `Types generated successfully`; 대상 lint → 종료 코드 0.
 - T014 마이그레이션 계약 테스트 → 종료 코드 0, `1 file`, `4 passed`, 1.81초; 이후 전체 typecheck도 종료 코드 0.
 - Supabase SQL Editor 트랜잭션 실행 → 오류 없이 결과 표 반환. 검증 쿼리 `15 rows`: T014 컬럼 9개, `profiles_select_own` 정책 1개, `profiles`·`conversations`·`messages`·`projects`·`admin_audit_logs` RLS 활성 5개.
+- T015 대상 검증 → 수강생 순수 가드, Next.js 어댑터, 보호 API 배선, 채팅·대화 회귀 `4 files`, `89 tests passed`; `npm run typecheck`와 `npm run lint -- --quiet` 종료 코드 0.
+- T015 전체 회귀 `npm run test:codex -- --reporter=dot` → 종료 코드 0, `92 files passed`, `924 tests passed`, 88.45초. 의도된 예외 응답 검증 stderr 3건 외 실패 없음.
 문서 검사: git diff --cached --check에서 오류 출력 없음.
 독립 clone의 저장소 전용 작성자 `홍길동 <hong@example.com>`으로 Phase 1과 T005~T007 커밋을 완료함.
 SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
@@ -148,7 +152,8 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - [x] T012 최고위험 기술 검증 결과를 검증/미검증/안전장치로 구분해 기록한다.
 - [x] T013 인증되지 않은 접근, 타 사용자 접근, 차단 사용자 기존 세션·직접 API 우회 RED 테스트를 작성한다.
 - [x] T014 로컬 계정 제한 마이그레이션을 `AI-VC` 시험 DB에 적용하고 컬럼·RLS 상태를 검증한다.
-- [ ] T015 모든 보호 API와 작업 시작·재개에 공통 서버 가드를 적용하고 T013 RED 테스트를 GREEN으로 만든다.
+- [x] T015 모든 보호 API와 작업 시작·재개에 공통 서버 가드를 적용하고 T013 RED 테스트를 GREEN으로 만든다.
+- [ ] T016 로그인·로그아웃·차단 안내 화면을 공통 가드와 연결하고 차단 사유 노출 범위를 검증한다.
 
 ## 5. 막힌 것 / 사용자 결정 대기
 - Plan·Tasks·Analyze 보완 승인은 완료됐다. 외부 리소스 범위도 Supabase `AI-VC` Free와 Vercel `SDVC` Hobby로 승인됐다.
