@@ -1,6 +1,6 @@
 # 진행 상황
 
-> 마지막 업데이트: 2026-09-19 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 2 · 세션 상태: T005~T010 완료, T011 비용·계정 승인 대기
+> 마지막 업데이트: 2026-09-20 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 2 · 세션 상태: T011 로컬 GREEN·Supabase Healthy 확인, Vercel 무료 배포 검증 진행 중
 
 ## 1. 지금 어디까지 왔나
 - 기존 저장소 복제 및 핵심 소스 읽기 완료.
@@ -15,6 +15,8 @@
 - Phase 2 첫 버티컬 슬라이스 T005~T007 완료: 사용자 키를 영속 작업 입력·로그·응답에 노출하지 않는 서버 측 Codex 중계 계약을 RED→GREEN→REFACTOR로 구현했다.
 - Phase 2 T008~T009 완료: 의미 있는 RED와 동일 테스트 묶음의 GREEN을 판정하고 명령·시각·종료 코드·해시·로그를 수집하는 격리 실행 제어 계약을 구현했다.
 - Phase 2 T010 RED 완료: Supabase 프로젝트 준비, Vercel 배포 `READY`, HTTPS URL 확인과 멱등성·관리 토큰 비영속 계약을 테스트로 고정했다.
+- Phase 2 T011 로컬 GREEN 완료: Supabase 준비 상태와 Vercel 배포 상태를 폴링하고 HTTPS URL을 확인하는 주입형 프로비저닝 어댑터를 구현했다. 실제 외부 생성·배포 검증은 아직 완료하지 않았다.
+- 사용자가 비용 발생 금지를 조건으로 Supabase `AI-VC`, Vercel `SDVC` 사용을 승인했다. 대시보드에서 각각 Free/Hobby 범위와 현재 사용량을 확인했다.
 
 ## 2. 방금 세션에서 한 일
 - pinusian/sdvc-app을 현재 작업 폴더의 sdvc-app-codex에 별도 복제.
@@ -48,6 +50,9 @@
 - T009 GREEN 커밋 `732ca85e4db8c887ad2f74922d51bda518af527b`: 네트워크와 환경변수를 차단한 Sandbox 포트, 단계 판정, 취소, 증거 수집 최소 구현을 작성함.
 - T009 회귀 보완 커밋 `4b4d7089b4058411cfe7246ee76757bfd83b4dfc`: 실제 Workflow 배선 전 기술검증 어댑터임을 휴면 코드 안전장치에 기록하고 T034에서 제거하도록 고정함.
 - T010 RED 커밋 `078be8bb0539500c81270532fcbceab401a753c1`: 공식 Management/REST API의 생성·상태 조회 분리를 반영한 앱 리소스 준비·배포 계약을 작성함.
+- T011 GREEN 커밋 `bca77581fa5bc6ce84e7ec118e24407e1b09d969`: 자격 증명 참조 로더와 공급자 포트를 주입받아 Supabase `ACTIVE_HEALTHY`, Vercel `READY`, HTTPS URL probe, 오류·멱등성·토큰 비영속 계약을 구현함.
+- Supabase `AI-VC` Free 조직에 프로젝트 `sdvc-codex-trial-20260919`가 생성됐다. 프로젝트 참조는 `nkxzkzzxebxwxwgrfxue`이며 대시보드에서 `STATUS Healthy`, Compute `NANO`, 프로젝트 URL의 HTTPS 제공을 확인했다. 비밀번호와 API 키는 읽거나 기록하지 않았다.
+- Vercel `SDVC` 팀이 Hobby 플랜이며 현재 한도 내임을 대시보드에서 확인했다. Vercel 프로젝트·배포 검증은 아직 남아 있다.
 
 ## 3. 검증 증거
 실행 명령: git ls-remote https://github.com/pinusian/sdvc-app.git HEAD
@@ -84,6 +89,10 @@
 - 휴면 경계 기록 후 대상 회귀 → 종료 코드 0, `2 files`, `10 tests passed`, 4.24초; typecheck와 lint도 종료 코드 0.
 - T009 최종 전체 회귀 → 종료 코드 0, `88 files passed`, `887 tests passed`, 122.79초.
 - T010 RED 대상 테스트 → 종료 코드 1, 테스트 수집 성공 후 `1 file`, `6 failed / 1 passed`, 2.95초. 실패 6건은 모두 `T010 application provisioning contract is not implemented`였음.
+- T011 GREEN 대상 테스트 → 종료 코드 0, `1 file`, `7 passed`, 35.05초.
+- T011 GREEN과 휴면 경계 회귀 → 종료 코드 0, `2 files`, `10 tests passed`, 8.25초.
+- T011 구현 후 `npm run typecheck` → 종료 코드 0, `Types generated successfully`; `npm run lint` → 종료 코드 0, 오류 출력 없음.
+- T011 전체 회귀 `node --import ./scripts/vitest-windows-sandbox-shim.mjs ./node_modules/vitest/vitest.mjs run --pool=threads --maxWorkers=4 --reporter=dot` → 종료 코드 0, `89 files passed`, `894 tests passed`, 117.36초. 기존 예외 응답 검증이 의도적으로 기록한 stderr 3건 외 실패 없음.
 문서 검사: git diff --cached --check에서 오류 출력 없음.
 독립 clone의 저장소 전용 작성자 `홍길동 <hong@example.com>`으로 Phase 1과 T005~T007 커밋을 완료함.
 SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
@@ -117,16 +126,18 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - [x] T008 Sandbox에서 샘플 저장소의 의미 있는 실패·성공 테스트 실행 계약을 RED로 작성한다.
 - [x] T009 실행 제어 어댑터와 증거 수집 최소 구현을 작성하고 전체 회귀검사를 통과시킨다.
 - [x] T010 시험 Supabase/Vercel 어댑터의 리소스 준비·배포·READY·URL 확인 계약을 RED로 작성한다.
-- [ ] T011 실제 시험 리소스 생성·배포 비용과 사용할 계정/프로젝트 범위를 사용자에게 승인받는다.
-- [ ] 승인 시 T011 시험 환경의 DB 준비·Vercel 배포·READY·URL 확인을 실증하고 결과를 기록한다.
+- [x] T011 실제 시험 리소스의 비용·계정 범위를 승인받는다: 비용 발생 금지, Supabase `AI-VC`, Vercel `SDVC`.
+- [x] T011 로컬 프로비저닝 어댑터를 구현하고 대상·전체 회귀검사를 통과시킨다.
+- [x] Supabase `AI-VC` Free 프로젝트 `sdvc-codex-trial-20260919`의 생성과 `Healthy` 상태, HTTPS 프로젝트 URL을 확인한다.
+- [ ] 무료 범위에서 Vercel `SDVC` 배포·`READY`·HTTPS URL을 실증하고 결과를 기록한다.
 
 ## 5. 막힌 것 / 사용자 결정 대기
-- Plan·Tasks·Analyze 보완 승인 완료. 사용자 결정 대기 없음.
-- 없음. 연결 worktree의 Git 쓰기 제한은 독립 clone 전환으로 우회했고 첫 문서 커밋까지 검증했다.
-- 실제 공급자 계정 설정·비용 상한·별도 운영 배포 대상은 아직 없음. 별도 비용 승인 전 외부 리소스 생성 없음.
-- T011은 Supabase/Vercel 실제 시험 리소스와 관리 자격이 필요하다. 비용 발생 가능성과 생성 대상을 사용자가 명시적으로 승인하기 전에는 실행하지 않는다.
+- Plan·Tasks·Analyze 보완 승인은 완료됐다. 외부 리소스 범위도 Supabase `AI-VC` Free와 Vercel `SDVC` Hobby로 승인됐다.
+- 연결 worktree의 Git 쓰기 제한은 독립 clone 전환으로 우회했고 T011 GREEN 커밋까지 검증했다.
+- 현재 외부 막힘 없음. 다음 단계는 현재 Git 브랜치를 원격에 보존하고 Vercel `SDVC` Hobby에서 시험 배포를 확인하는 것이다.
+- 비용이 발생하는 업그레이드·추가 구매·유료 리소스는 실행하지 않는다. 무료 범위를 벗어나는 징후가 보이면 즉시 중단한다.
 - Codex 키 중계의 주입형 계약과 비밀값 경계는 검증했다. 실제 외부 Codex SDK/API 호출은 사용자 키·비용 승인 없이 수행하지 않았으므로 아직 미검증이다.
-- Sandbox 격리 실행·증거 수집의 주입형 제어 계약은 검증했다. 실제 Vercel Sandbox 연결과 Workflow 배선은 각각 T011·T034 전까지 미검증이다.
+- Sandbox 격리 실행·증거 수집의 주입형 제어 계약은 검증했다. 실제 Vercel Sandbox 연결과 Workflow 배선은 T034 전까지 미검증이다.
 - API 비밀키는 채팅으로 받거나 파일에 임의로 채우지 않는다.
 
 ## 6. 알아둘 함정
