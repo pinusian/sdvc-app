@@ -13,12 +13,14 @@ import { describe, expect, it, vi } from "vitest";
 
 interface Profile {
   role: string;
+  isActive: boolean;
   suspendedAt: string | null;
   suspendedReason: string | null;
 }
 
 const activeLearner: Profile = {
   role: "developer",
+  isActive: true,
   suspendedAt: null,
   suspendedReason: null,
 };
@@ -89,6 +91,19 @@ describe("[T013] 수강생 공통 접근 경계 - RED", () => {
       ok: false,
       status: 403,
       code: "account_suspended",
+    });
+  });
+
+  it("비활성 계정은 세션이 유효해도 보호 API를 사용할 수 없다", async () => {
+    const deps = dependencies({ profile: { ...activeLearner, isActive: false } });
+    const guard = await createGuard(deps);
+
+    const result = await guard.requireAccess({ ownerId: "learner-1" });
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: 403,
+      code: "account_inactive",
     });
   });
 

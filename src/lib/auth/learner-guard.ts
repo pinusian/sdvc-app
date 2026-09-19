@@ -11,6 +11,7 @@ export interface LearnerIdentity {
 
 export interface LearnerProfile {
   role: string;
+  isActive: boolean;
   suspendedAt: string | null;
   suspendedReason: string | null;
 }
@@ -29,7 +30,12 @@ export type LearnerAccessResult =
   | {
       ok: false;
       status: 401 | 403 | 404;
-      code: "unauthenticated" | "account_suspended" | "account_unavailable" | "not_found";
+      code:
+        | "unauthenticated"
+        | "account_inactive"
+        | "account_suspended"
+        | "account_unavailable"
+        | "not_found";
       message: string;
     };
 
