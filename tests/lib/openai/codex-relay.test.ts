@@ -25,19 +25,21 @@ async function collect(stream: AsyncIterable<CodexRelayEvent>): Promise<CodexRel
 
 function dependencies(
   stream: CodexRelayDependencies["sdk"]["stream"],
-): CodexRelayDependencies & {
-  loadApiKey: ReturnType<typeof vi.fn>;
-  audit: ReturnType<typeof vi.fn>;
-} {
+ ) {
+  const loadApiKey = vi
+    .fn<CodexRelayDependencies["loadApiKey"]>()
+    .mockResolvedValue(SECRET);
+  const audit = vi.fn<CodexRelayDependencies["audit"]>();
+
   return {
-    loadApiKey: vi.fn().mockResolvedValue(SECRET),
+    loadApiKey,
     sdk: { stream },
-    audit: vi.fn(),
+    audit,
     policy: {
       allowedModels: ["gpt-5.6-terra"],
       maxPromptChars: 1_000,
     },
-  };
+  } satisfies CodexRelayDependencies;
 }
 
 describe("[T005] Codex 사용자 키 중계 계약", () => {
