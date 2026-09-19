@@ -1,6 +1,6 @@
 # 진행 상황
 
-> 마지막 업데이트: 2026-09-19 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 2 준비 · 세션 상태: 환경 정리 완료, T005 준비
+> 마지막 업데이트: 2026-09-19 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 2 · 세션 상태: T005~T007 완료, T008 준비
 
 ## 1. 지금 어디까지 왔나
 - 기존 저장소 복제 및 핵심 소스 읽기 완료.
@@ -12,6 +12,7 @@
 - Phase 1 T001~T004 완료: 기존 구현 감사, Next.js 16.3.4 로컬 규칙, 실제 검증 기준선, 환경변수·비밀값 경계를 문서화.
 - `package-lock.json` 기준 `npm ci --ignore-scripts` 재현 설치와 Next.js 타입 생성 순서를 확인했다.
 - Vitest `spawn EPERM`은 Vite가 Windows 경로 최적화를 위해 실행하는 `exec("net use")`가 Codex 샌드박스에서 차단되는 환경 문제로 분리했다. 임시 preload shim과 thread pool로 전체 기존 테스트를 실행했다.
+- Phase 2 첫 버티컬 슬라이스 T005~T007 완료: 사용자 키를 영속 작업 입력·로그·응답에 노출하지 않는 서버 측 Codex 중계 계약을 RED→GREEN→REFACTOR로 구현했다.
 
 ## 2. 방금 세션에서 한 일
 - pinusian/sdvc-app을 현재 작업 폴더의 sdvc-app-codex에 별도 복제.
@@ -38,6 +39,9 @@
 - 연결 worktree의 Git 메타데이터 쓰기 제한을 피하기 위해 `C:\Codex작업용폴더\projects\sdvc-app-codex`에 기존 Git 데이터와 최신 working tree를 보존한 독립 clone을 구성하고 `codex/sdvc-openai-codex` 브랜치에 연결함.
 - 독립 clone에서 Phase 1 문서를 커밋함: `ece17e6 docs: Codex 전환 계획과 Phase 1 기준선 확정 (T001-T004)`.
 - `npm run typecheck`가 `next typegen` 후 `tsc --noEmit`을 실행하도록 고정하고, Codex Windows 샌드박스용 `npm run test:codex`를 추가함.
+- T005 RED 커밋 `e5b2228c479946da1c4e31a945e5ee8a9352421c`: 원본 키 비노출, 범위 초과 선차단, 스트리밍·취소·오류 정제 계약을 테스트로 고정함.
+- T006 GREEN 커밋 `9e46c2ede3dd6bc7aaea313093f50e2a09afe0a0`: 키 로더와 SDK 포트를 주입받는 최소 서버 측 중계 어댑터를 구현함.
+- T007 REFACTOR 커밋 `3aeb9e8f481607094ff3a1cf7e57c3182d7d8ea5`: 오류·감사 매핑을 정리하고 영속 입력·감사 로그 비노출 및 AbortError 취소 계약을 보강함.
 
 ## 3. 검증 증거
 실행 명령: git ls-remote https://github.com/pinusian/sdvc-app.git HEAD
@@ -64,8 +68,12 @@
 - `npm run typecheck` → 종료 코드 0, `Types generated successfully`, TypeScript 오류 없음.
 - `npm run lint` → 종료 코드 0, 출력 오류 없음.
 - ESM shim 최종본 `npm run test:codex -- --reporter=dot` → 종료 코드 0, `86 passed`, `872 passed`, 105.87초.
+- T005 RED `npm run test:codex -- tests/lib/openai/codex-relay.test.ts --reporter=verbose` → 종료 코드 1, 테스트 수집 성공 후 `1 file`, `6 failed`, 2.65초. 모든 실패가 미구현 중계 경계의 의도된 오류였음.
+- T006 GREEN 동일 대상 테스트 → 종료 코드 0, `1 file`, `6 passed`; `npm run typecheck`와 `npm run lint`도 종료 코드 0.
+- T007 REFACTOR 동일 대상 테스트 → 종료 코드 0, `1 file`, `8 passed`, 4.41초; `npm run typecheck`와 `npm run lint`도 종료 코드 0.
+- T007 전체 회귀 `npm run test:codex -- --reporter=dot` → 종료 코드 0, `87 files passed`, `880 tests passed`, 110.55초.
 문서 검사: git diff --cached --check에서 오류 출력 없음.
-커밋 시도: 작성자 설정이 없어 'Author identity unknown'으로 실패. 문서 파일은 작성 및 stage 완료했으며 커밋은 아직 없음.
+독립 clone의 저장소 전용 작성자 `홍길동 <hong@example.com>`으로 Phase 1과 T005~T007 커밋을 완료함.
 SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - PowerShell 구문 검사: `POWERSHELL_PARSE_OK`
 - 저장 후 재검사: `CHECKPOINT_OK files=2`
@@ -91,13 +99,17 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - [x] T004 환경변수와 비밀값 경계를 기록한다.
 - [x] 임시 pnpm 산출물 부재를 확인하고 npm 기반 설치 재현 경로를 확정한다.
 - [x] `LayoutProps` 타입 오류와 Vitest `spawn EPERM` 환경 오류를 Phase 2 기능 RED 전에 분리 진단·검증한다.
-- [ ] T005 OpenAI 사용자 키 중계와 Codex SDK 호출 계약의 RED 테스트를 작성한다.
+- [x] T005 OpenAI 사용자 키 중계와 Codex SDK 호출 계약의 RED 테스트를 작성한다.
+- [x] T006 서버 측 OpenAI/Codex 어댑터 최소 구현으로 계약 테스트를 통과시킨다.
+- [x] T007 키 중계와 공급자 오류 매핑을 정리하고 전체 회귀검사를 통과시킨다.
+- [ ] T008 Sandbox에서 샘플 저장소의 의미 있는 실패·성공 테스트 실행 계약을 RED로 작성한다.
 
 ## 5. 막힌 것 / 사용자 결정 대기
 - Plan·Tasks·Analyze 보완 승인 완료. 사용자 결정 대기 없음.
 - 없음. 연결 worktree의 Git 쓰기 제한은 독립 clone 전환으로 우회했고 첫 문서 커밋까지 검증했다.
 - 실제 공급자 계정 설정·비용 상한·별도 운영 배포 대상은 아직 없음. 별도 비용 승인 전 외부 리소스 생성 없음.
-- Codex의 키 중계 및 격리 테스트 실행 조합은 기술 검증이 필요하며 현재 미검증.
+- Codex 키 중계의 주입형 계약과 비밀값 경계는 검증했다. 실제 외부 Codex SDK/API 호출은 사용자 키·비용 승인 없이 수행하지 않았으므로 아직 미검증이다.
+- Sandbox 격리 실행·증거 수집 조합은 T008~T009에서 검증해야 한다.
 - API 비밀키는 채팅으로 받거나 파일에 임의로 채우지 않는다.
 
 ## 6. 알아둘 함정
