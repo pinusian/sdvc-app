@@ -1,6 +1,6 @@
 # 진행 상황
 
-> 마지막 업데이트: 2026-09-20 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 3 · 세션 상태: T015 GREEN 완료, T016 준비
+> 마지막 업데이트: 2026-09-20 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 3 · 세션 상태: T016 GREEN 완료, T017 준비
 
 ## 1. 지금 어디까지 왔나
 - 기존 저장소 복제 및 핵심 소스 읽기 완료.
@@ -111,6 +111,9 @@
 - Supabase SQL Editor 트랜잭션 실행 → 오류 없이 결과 표 반환. 검증 쿼리 `15 rows`: T014 컬럼 9개, `profiles_select_own` 정책 1개, `profiles`·`conversations`·`messages`·`projects`·`admin_audit_logs` RLS 활성 5개.
 - T015 대상 검증 → 수강생 순수 가드, Next.js 어댑터, 보호 API 배선, 채팅·대화 회귀 `4 files`, `89 tests passed`; `npm run typecheck`와 `npm run lint -- --quiet` 종료 코드 0.
 - T015 전체 회귀 `npm run test:codex -- --reporter=dot` → 종료 코드 0, `92 files passed`, `924 tests passed`, 88.45초. 의도된 예외 응답 검증 stderr 3건 외 실패 없음.
+- T016 UI GREEN → 보호 Server Component 공통 가드, 본인 전용 계정 제한 안내, 로그인 문구 및 로그아웃 경로를 연결했다. 비로그인/정지 분기와 사유 비노출 조건 대상 검증 `2 files`, `9 tests passed`.
+- T016 정적·전체 회귀 → `npm run typecheck`, `npm run lint` 종료 코드 0; `npm run test:codex -- --reporter=dot` 종료 코드 0, `94 files passed`, `933 tests passed`, 97.87초. 의도된 예외 응답 검증 stderr 3건 외 실패 없음.
+- T016 프로덕션 빌드 → 애플리케이션 컴파일 전 `next/font`가 Google Fonts(Fraunces, Noto Sans KR)를 현재 제한 네트워크에서 가져오지 못해 종료 코드 1. 타입·lint·테스트 실패와는 분리했으며 T017 브라우저 회귀와 함께 재확인한다.
 문서 검사: git diff --cached --check에서 오류 출력 없음.
 독립 clone의 저장소 전용 작성자 `홍길동 <hong@example.com>`으로 Phase 1과 T005~T007 커밋을 완료함.
 SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
@@ -153,7 +156,8 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - [x] T013 인증되지 않은 접근, 타 사용자 접근, 차단 사용자 기존 세션·직접 API 우회 RED 테스트를 작성한다.
 - [x] T014 로컬 계정 제한 마이그레이션을 `AI-VC` 시험 DB에 적용하고 컬럼·RLS 상태를 검증한다.
 - [x] T015 모든 보호 API와 작업 시작·재개에 공통 서버 가드를 적용하고 T013 RED 테스트를 GREEN으로 만든다.
-- [ ] T016 로그인·로그아웃·차단 안내 화면을 공통 가드와 연결하고 차단 사유 노출 범위를 검증한다.
+- [x] T016 로그인·로그아웃·차단 안내 화면을 공통 가드와 연결하고 차단 사유 노출 범위를 검증한다.
+- [ ] T017 인증·차단 가드를 정리하고 단위·통합·브라우저 회귀검사를 실행한다.
 
 ## 5. 막힌 것 / 사용자 결정 대기
 - Plan·Tasks·Analyze 보완 승인은 완료됐다. 외부 리소스 범위도 Supabase `AI-VC` Free와 Vercel `SDVC` Hobby로 승인됐다.
