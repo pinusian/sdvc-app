@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireLearnerAccess } from "@/lib/auth/learner-route-guard";
 import { createCheckoutSession } from "@/lib/billing/stripe";
 
 /**
@@ -16,14 +16,9 @@ const PLAN_PRICE_ENV: Record<string, string> = {
 };
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
-  }
+  const access = await requireLearnerAccess();
+  if (!access.ok) return access.response;
+  const { user } = access;
 
   let plan: unknown;
   try {

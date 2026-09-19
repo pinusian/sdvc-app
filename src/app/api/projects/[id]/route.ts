@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/server";
+import { requireLearnerAccess } from "@/lib/auth/learner-route-guard";
 import { deleteProjectRow, getProjectById, renameProject } from "@/lib/projects/store";
 import { deleteArtifactFiles } from "@/lib/artifacts/storage";
 import { deleteAllVersions } from "@/lib/versions/store";
@@ -17,14 +18,9 @@ export async function DELETE(
   _request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
-  }
+  const access = await requireLearnerAccess();
+  if (!access.ok) return access.response;
+  const { user } = access;
 
   const { id } = await context.params;
   const admin = createAdminClient();
@@ -83,14 +79,9 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
-  }
+  const access = await requireLearnerAccess();
+  if (!access.ok) return access.response;
+  const { user } = access;
 
   const { id } = await context.params;
   const admin = createAdminClient();

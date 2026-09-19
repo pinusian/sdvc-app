@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/server";
+import { requireLearnerAccess } from "@/lib/auth/learner-route-guard";
 import { canSubmitReport, validateReport, type ReportCategory } from "@/lib/reports/policy";
 import { countOpenReports, createReport } from "@/lib/reports/store";
 
@@ -10,14 +11,9 @@ import { countOpenReports, createReport } from "@/lib/reports/store";
  * 화면에서도 같은 함수로 막으므로 규칙이 두 벌이 되지 않는다.
  */
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
-  }
+  const access = await requireLearnerAccess();
+  if (!access.ok) return access.response;
+  const { user } = access;
 
   let payload: { category?: string; body?: string; targetUrl?: string | null };
   try {

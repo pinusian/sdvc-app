@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/server";
+import { requireLearnerAccess } from "@/lib/auth/learner-route-guard";
 import { getProjectById } from "@/lib/projects/store";
 import { listVersions, restoreVersion, saveVersion } from "@/lib/versions/store";
 import { appendMessage, findConversationsByProjects } from "@/lib/conversations/store";
@@ -18,14 +19,9 @@ import { appendMessage, findConversationsByProjects } from "@/lib/conversations/
 const VERSION_PATTERN = /^\d{4}$/;
 
 async function requireProject(id: string) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { error: NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 }) };
-  }
+  const access = await requireLearnerAccess();
+  if (!access.ok) return { error: access.response };
+  const { user } = access;
 
   const admin = createAdminClient();
   const project = await getProjectById(admin, id, user.id);
