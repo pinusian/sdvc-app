@@ -25,7 +25,7 @@ async function collect(stream: AsyncIterable<CodexRelayEvent>): Promise<CodexRel
 
 function dependencies(
   stream: CodexRelayDependencies["sdk"]["stream"],
- ) {
+) {
   const loadApiKey = vi
     .fn<CodexRelayDependencies["loadApiKey"]>()
     .mockResolvedValue(SECRET);
@@ -137,5 +137,36 @@ describe("[T005] Codex 사용자 키 중계 계약", () => {
       { type: "text", text: "작업 중" },
       { type: "done" },
     ]);
+    expect(deps.audit.mock.calls).toEqual([
+      [{ runId: "run-1", model: "gpt-5.6-terra", status: "started" }],
+      [{ runId: "run-1", model: "gpt-5.6-terra", status: "completed" }],
+    ]);
+    expect(JSON.stringify(deps.audit.mock.calls)).not.toContain(SECRET);
+  });
+
+  it("영속 작업 입력에는 키 값이나 apiKey 필드가 없다", () => {
+    expect(REQUEST).not.toHaveProperty("apiKey");
+    expect(JSON.stringify(REQUEST)).not.toContain(SECRET);
+  });
+
+  it("AbortError를 취소 이벤트로 매핑하고 오류 원문은 감사 로그에 남기지 않는다", async () => {
+    const controller = new AbortController();
+    const deps = dependencies(async function* () {
+      controller.abort();
+      const error = new Error(`cancelled while using ${SECRET}`);
+      error.name = "AbortError";
+      throw error;
+    });
+
+    const events = await collect(
+      streamCodexRun({ ...REQUEST, signal: controller.signal }, deps),
+    );
+
+    expect(events).toContainEqual(expect.objectContaining({ type: "error", code: "cancelled" }));
+    expect(JSON.stringify(events)).not.toContain(SECRET);
+    expect(deps.audit).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: "cancelled", message: "Codex 실행이 취소됐습니다." }),
+    );
+    expect(JSON.stringify(deps.audit.mock.calls)).not.toContain(SECRET);
   });
 });

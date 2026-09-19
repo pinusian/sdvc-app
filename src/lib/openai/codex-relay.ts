@@ -17,9 +17,15 @@ export type CodexRelayEvent =
   | CodexSdkEvent
   | {
       type: "error";
-      code: "credential_missing" | "scope_denied" | "provider_error" | "cancelled";
+      code: CodexRelayErrorCode;
       message: string;
     };
+
+export type CodexRelayErrorCode =
+  | "credential_missing"
+  | "scope_denied"
+  | "provider_error"
+  | "cancelled";
 
 export interface CodexSdkPort {
   stream(input: {
@@ -52,48 +58,24 @@ export async function* streamCodexRun(
   request: CodexRelayRequest,
   dependencies: CodexRelayDependencies,
 ): AsyncIterable<CodexRelayEvent> {
-  const { policy } = dependencies;
-  if (
-    !policy.allowedModels.includes(request.model) ||
-    request.prompt.length > policy.maxPromptChars
-  ) {
-    yield {
-      type: "error",
-      code: "scope_denied",
-      message: "허용된 Codex 실행 범위를 벗어났습니다.",
-    };
+  if (isScopeDenied(request, dependencies.policy)) {
+    yield relayError("scope_denied");
     return;
   }
 
   if (request.signal?.aborted) {
-    await dependencies.audit({
-      runId: request.runId,
-      model: request.model,
-      status: "cancelled",
-    });
-    yield {
-      type: "error",
-      code: "cancelled",
-      message: "Codex 실행이 취소됐습니다.",
-    };
+    await auditStatus(dependencies, request, "cancelled");
+    yield relayError("cancelled");
     return;
   }
 
   const apiKey = await dependencies.loadApiKey(request.credentialId);
   if (!apiKey) {
-    yield {
-      type: "error",
-      code: "credential_missing",
-      message: "등록된 OpenAI API 키가 없습니다.",
-    };
+    yield relayError("credential_missing");
     return;
   }
 
-  await dependencies.audit({
-    runId: request.runId,
-    model: request.model,
-    status: "started",
-  });
+  await auditStatus(dependencies, request, "started");
 
   try {
     const stream = dependencies.sdk.stream({
@@ -108,25 +90,48 @@ export async function* streamCodexRun(
       yield redactEvent(event, apiKey);
     }
 
-    await dependencies.audit({
-      runId: request.runId,
-      model: request.model,
-      status: "completed",
-    });
+    await auditStatus(dependencies, request, "completed");
   } catch (error) {
     const cancelled = request.signal?.aborted || isAbortError(error);
-    await dependencies.audit({
-      runId: request.runId,
-      model: request.model,
-      status: cancelled ? "cancelled" : "failed",
-      message: cancelled ? "Codex 실행이 취소됐습니다." : "Codex SDK 호출에 실패했습니다.",
-    });
-    yield {
-      type: "error",
-      code: cancelled ? "cancelled" : "provider_error",
-      message: cancelled ? "Codex 실행이 취소됐습니다." : "Codex 실행에 실패했습니다.",
-    };
+    const code = cancelled ? "cancelled" : "provider_error";
+    await auditStatus(dependencies, request, cancelled ? "cancelled" : "failed", code);
+    yield relayError(code);
   }
+}
+
+const ERROR_MESSAGES: Record<CodexRelayErrorCode, string> = {
+  credential_missing: "등록된 OpenAI API 키가 없습니다.",
+  scope_denied: "허용된 Codex 실행 범위를 벗어났습니다.",
+  provider_error: "Codex 실행에 실패했습니다.",
+  cancelled: "Codex 실행이 취소됐습니다.",
+};
+
+function relayError(code: CodexRelayErrorCode): CodexRelayEvent {
+  return { type: "error", code, message: ERROR_MESSAGES[code] };
+}
+
+function isScopeDenied(
+  request: CodexRelayRequest,
+  policy: CodexRelayDependencies["policy"],
+): boolean {
+  return (
+    !policy.allowedModels.includes(request.model) ||
+    request.prompt.length > policy.maxPromptChars
+  );
+}
+
+async function auditStatus(
+  dependencies: CodexRelayDependencies,
+  request: CodexRelayRequest,
+  status: CodexRelayAuditEvent["status"],
+  errorCode?: CodexRelayErrorCode,
+): Promise<void> {
+  await dependencies.audit({
+    runId: request.runId,
+    model: request.model,
+    status,
+    ...(errorCode ? { message: ERROR_MESSAGES[errorCode] } : {}),
+  });
 }
 
 function redactEvent(event: CodexSdkEvent, apiKey: string): CodexSdkEvent {
