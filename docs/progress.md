@@ -1,6 +1,6 @@
 # 진행 상황
 
-> 마지막 업데이트: 2026-09-20 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 3 · 세션 상태: T013 RED 완료, T014 시험 DB 적용 승인 대기
+> 마지막 업데이트: 2026-09-20 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 3 · 세션 상태: T014 시험 DB 적용 완료, T015 준비
 
 ## 1. 지금 어디까지 왔나
 - 기존 저장소 복제 및 핵심 소스 읽기 완료.
@@ -56,7 +56,8 @@
 - 현재 브랜치 commit `54d2f16`의 Vercel Preview 배포가 21초 만에 `Ready`가 됐고 HTTPS `/login` 화면을 확인해 T011을 완료했다.
 - T012에서 검증·미검증·안전장치와 후속 작업을 `docs/technology-validation.md`로 정리했다. 핵심 가정 실패가 없어 Plan 재승인은 필요하지 않다.
 - T013에서 비로그인·타 사용자·비활성·차단·기존 세션·직접 API 우회를 매 요청 재검사하는 수강생 공통 가드 계약을 RED 테스트로 고정했다.
-- T014 로컬 마이그레이션은 `is_active`, `suspended_by`, 상태 변경 시각과 감사 이전/이후 상태를 기존 스키마에 멱등 추가하며 RLS를 넓히지 않도록 작성했다. 실제 `AI-VC` 시험 DB 적용은 권한 변경 확인 대기 중이다.
+- T014 로컬 마이그레이션은 `is_active`, `suspended_by`, 상태 변경 시각과 감사 이전/이후 상태를 기존 스키마에 멱등 추가하며 RLS를 넓히지 않도록 작성했다.
+- 사용자 승인 후 `AI-VC` Free 시험 DB에 빈 DB 의존성을 포함한 최소 체인 `0001`→`0002`→`0003`→`0004`→`0008`→`0012`를 하나의 트랜잭션으로 적용하고 실제 컬럼·정책·RLS를 확인했다.
 
 ## 3. 검증 증거
 실행 명령: git ls-remote https://github.com/pinusian/sdvc-app.git HEAD
@@ -105,6 +106,7 @@
 - T013 RED 대상 테스트 → 종료 코드 1, `1 file`, `8 failed`, 1.72초. 8건 모두 `T013 learner access guard is not implemented`로 의미 있게 실패함.
 - T013 타입 검사 → 종료 코드 0, `Types generated successfully`; 대상 lint → 종료 코드 0.
 - T014 마이그레이션 계약 테스트 → 종료 코드 0, `1 file`, `4 passed`, 1.81초; 이후 전체 typecheck도 종료 코드 0.
+- Supabase SQL Editor 트랜잭션 실행 → 오류 없이 결과 표 반환. 검증 쿼리 `15 rows`: T014 컬럼 9개, `profiles_select_own` 정책 1개, `profiles`·`conversations`·`messages`·`projects`·`admin_audit_logs` RLS 활성 5개.
 문서 검사: git diff --cached --check에서 오류 출력 없음.
 독립 clone의 저장소 전용 작성자 `홍길동 <hong@example.com>`으로 Phase 1과 T005~T007 커밋을 완료함.
 SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
@@ -145,12 +147,13 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - [x] 현재 `codex/sdvc-openai-codex` 브랜치를 GitHub에 push한 뒤 이 브랜치의 Vercel 시험 배포 `Ready`·HTTPS URL을 확인한다.
 - [x] T012 최고위험 기술 검증 결과를 검증/미검증/안전장치로 구분해 기록한다.
 - [x] T013 인증되지 않은 접근, 타 사용자 접근, 차단 사용자 기존 세션·직접 API 우회 RED 테스트를 작성한다.
-- [ ] T014 로컬 계정 제한 마이그레이션을 `AI-VC` 시험 DB에 적용하고 컬럼·RLS 상태를 검증한다.
+- [x] T014 로컬 계정 제한 마이그레이션을 `AI-VC` 시험 DB에 적용하고 컬럼·RLS 상태를 검증한다.
+- [ ] T015 모든 보호 API와 작업 시작·재개에 공통 서버 가드를 적용하고 T013 RED 테스트를 GREEN으로 만든다.
 
 ## 5. 막힌 것 / 사용자 결정 대기
 - Plan·Tasks·Analyze 보완 승인은 완료됐다. 외부 리소스 범위도 Supabase `AI-VC` Free와 Vercel `SDVC` Hobby로 승인됐다.
 - 연결 worktree의 Git 쓰기 제한은 독립 clone 전환으로 우회했고 T011 GREEN 커밋까지 검증했다.
-- 사용자 결정 대기: 비어 있는 Supabase 시험 DB에 선행 `0001`, `0002`, `0008`과 신규 `0012`를 적용해 테이블과 RLS를 생성·강화해도 되는지 확인이 필요하다. 데이터 삭제와 유료 작업은 없다.
+- 사용자 결정 대기 없음. T014 시험 DB 적용 승인을 받아 완료했다.
 - 비용이 발생하는 업그레이드·추가 구매·유료 리소스는 실행하지 않는다. 무료 범위를 벗어나는 징후가 보이면 즉시 중단한다.
 - Codex 키 중계의 주입형 계약과 비밀값 경계는 검증했다. 실제 외부 Codex SDK/API 호출은 사용자 키·비용 승인 없이 수행하지 않았으므로 아직 미검증이다.
 - Sandbox 격리 실행·증거 수집의 주입형 제어 계약은 검증했다. 실제 Vercel Sandbox 연결과 Workflow 배선은 T034 전까지 미검증이다.
