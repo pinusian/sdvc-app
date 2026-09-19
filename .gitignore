@@ -6,6 +6,7 @@
 
 # --- node / Next.js ---
 node_modules/
+.pnpm-store/
 .next/
 out/
 dist/
@@ -28,6 +29,10 @@ desktop.ini
 
 # --- claude local ---
 .claude/settings.local.json
+
+# --- SDVC local session checkpoint (작업휴식 재개용, 로컬에만 유지) ---
+/.sdvc/session-checkpoint/
+/.sdvc/session-checkpoint-next/
 
 # --- Playwright ---
 /test-results/
