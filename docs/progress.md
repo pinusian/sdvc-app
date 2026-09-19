@@ -1,6 +1,6 @@
 # 진행 상황
 
-> 마지막 업데이트: 2026-09-19 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 2 · 세션 상태: T005~T007 완료, T008 준비
+> 마지막 업데이트: 2026-09-19 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 2 · 세션 상태: T005~T009 완료, T010 준비
 
 ## 1. 지금 어디까지 왔나
 - 기존 저장소 복제 및 핵심 소스 읽기 완료.
@@ -13,6 +13,7 @@
 - `package-lock.json` 기준 `npm ci --ignore-scripts` 재현 설치와 Next.js 타입 생성 순서를 확인했다.
 - Vitest `spawn EPERM`은 Vite가 Windows 경로 최적화를 위해 실행하는 `exec("net use")`가 Codex 샌드박스에서 차단되는 환경 문제로 분리했다. 임시 preload shim과 thread pool로 전체 기존 테스트를 실행했다.
 - Phase 2 첫 버티컬 슬라이스 T005~T007 완료: 사용자 키를 영속 작업 입력·로그·응답에 노출하지 않는 서버 측 Codex 중계 계약을 RED→GREEN→REFACTOR로 구현했다.
+- Phase 2 T008~T009 완료: 의미 있는 RED와 동일 테스트 묶음의 GREEN을 판정하고 명령·시각·종료 코드·해시·로그를 수집하는 격리 실행 제어 계약을 구현했다.
 
 ## 2. 방금 세션에서 한 일
 - pinusian/sdvc-app을 현재 작업 폴더의 sdvc-app-codex에 별도 복제.
@@ -42,6 +43,9 @@
 - T005 RED 커밋 `e5b2228c479946da1c4e31a945e5ee8a9352421c`: 원본 키 비노출, 범위 초과 선차단, 스트리밍·취소·오류 정제 계약을 테스트로 고정함.
 - T006 GREEN 커밋 `9e46c2ede3dd6bc7aaea313093f50e2a09afe0a0`: 키 로더와 SDK 포트를 주입받는 최소 서버 측 중계 어댑터를 구현함.
 - T007 REFACTOR 커밋 `3aeb9e8f481607094ff3a1cf7e57c3182d7d8ea5`: 오류·감사 매핑을 정리하고 영속 입력·감사 로그 비노출 및 AbortError 취소 계약을 보강함.
+- T008 RED 커밋 `133861d1a4810e9ad384d19cef36ed159ec8a082`: 테스트 0개·인프라 오류를 RED로 인정하지 않고 동일 명령·테스트 해시를 요구하는 계약을 작성함.
+- T009 GREEN 커밋 `732ca85e4db8c887ad2f74922d51bda518af527b`: 네트워크와 환경변수를 차단한 Sandbox 포트, 단계 판정, 취소, 증거 수집 최소 구현을 작성함.
+- T009 회귀 보완 커밋 `4b4d7089b4058411cfe7246ee76757bfd83b4dfc`: 실제 Workflow 배선 전 기술검증 어댑터임을 휴면 코드 안전장치에 기록하고 T034에서 제거하도록 고정함.
 
 ## 3. 검증 증거
 실행 명령: git ls-remote https://github.com/pinusian/sdvc-app.git HEAD
@@ -72,6 +76,11 @@
 - T006 GREEN 동일 대상 테스트 → 종료 코드 0, `1 file`, `6 passed`; `npm run typecheck`와 `npm run lint`도 종료 코드 0.
 - T007 REFACTOR 동일 대상 테스트 → 종료 코드 0, `1 file`, `8 passed`, 4.41초; `npm run typecheck`와 `npm run lint`도 종료 코드 0.
 - T007 전체 회귀 `npm run test:codex -- --reporter=dot` → 종료 코드 0, `87 files passed`, `880 tests passed`, 110.55초.
+- T008 RED 대상 테스트 → 종료 코드 1, 테스트 수집 성공 후 `1 file`, `7 failed`, 2.64초. 모든 실패가 `T008 Sandbox execution contract is not implemented`였음.
+- T009 GREEN 대상 테스트 → 종료 코드 0, `1 file`, `7 passed`, 2.51초; typecheck와 lint도 종료 코드 0.
+- 최초 T009 전체 회귀 → 종료 코드 1, `87 passed / 1 failed`; 기존 휴면 코드 검사에서 실제 실행 흐름 미배선을 정확히 탐지함.
+- 휴면 경계 기록 후 대상 회귀 → 종료 코드 0, `2 files`, `10 tests passed`, 4.24초; typecheck와 lint도 종료 코드 0.
+- T009 최종 전체 회귀 → 종료 코드 0, `88 files passed`, `887 tests passed`, 122.79초.
 문서 검사: git diff --cached --check에서 오류 출력 없음.
 독립 clone의 저장소 전용 작성자 `홍길동 <hong@example.com>`으로 Phase 1과 T005~T007 커밋을 완료함.
 SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
@@ -102,14 +111,16 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - [x] T005 OpenAI 사용자 키 중계와 Codex SDK 호출 계약의 RED 테스트를 작성한다.
 - [x] T006 서버 측 OpenAI/Codex 어댑터 최소 구현으로 계약 테스트를 통과시킨다.
 - [x] T007 키 중계와 공급자 오류 매핑을 정리하고 전체 회귀검사를 통과시킨다.
-- [ ] T008 Sandbox에서 샘플 저장소의 의미 있는 실패·성공 테스트 실행 계약을 RED로 작성한다.
+- [x] T008 Sandbox에서 샘플 저장소의 의미 있는 실패·성공 테스트 실행 계약을 RED로 작성한다.
+- [x] T009 실행 제어 어댑터와 증거 수집 최소 구현을 작성하고 전체 회귀검사를 통과시킨다.
+- [ ] T010 시험 Supabase/Vercel 어댑터의 리소스 준비·배포·READY·URL 확인 계약을 RED로 작성한다.
 
 ## 5. 막힌 것 / 사용자 결정 대기
 - Plan·Tasks·Analyze 보완 승인 완료. 사용자 결정 대기 없음.
 - 없음. 연결 worktree의 Git 쓰기 제한은 독립 clone 전환으로 우회했고 첫 문서 커밋까지 검증했다.
 - 실제 공급자 계정 설정·비용 상한·별도 운영 배포 대상은 아직 없음. 별도 비용 승인 전 외부 리소스 생성 없음.
 - Codex 키 중계의 주입형 계약과 비밀값 경계는 검증했다. 실제 외부 Codex SDK/API 호출은 사용자 키·비용 승인 없이 수행하지 않았으므로 아직 미검증이다.
-- Sandbox 격리 실행·증거 수집 조합은 T008~T009에서 검증해야 한다.
+- Sandbox 격리 실행·증거 수집의 주입형 제어 계약은 검증했다. 실제 Vercel Sandbox 연결과 Workflow 배선은 각각 T011·T034 전까지 미검증이다.
 - API 비밀키는 채팅으로 받거나 파일에 임의로 채우지 않는다.
 
 ## 6. 알아둘 함정
@@ -124,3 +135,4 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - 기준선: ESLint 성공, TypeScript `LayoutProps` 오류 1건, Vitest 시작 환경 오류, Next 컴파일 성공 후 타입 검사 프로세스 `spawn EPERM` 실패.
 - Next.js의 전역 `LayoutProps`는 `next typegen`이 먼저 생성해야 깨끗한 checkout의 단독 `tsc`가 통과한다.
 - 이 Codex 샌드박스에서는 Vite의 Windows `net use` 자식 프로세스만 임시로 우회해야 Vitest가 시작된다. 제품 코드 오류로 오인하거나 영구적으로 `node_modules`를 수정하지 않는다.
+- 현재 셸 PATH에는 Node/npm도 없을 수 있다. 검증에는 `C:\Program Files\nodejs\node.exe` 절대 경로를 사용했으며 PATH 실패를 기능 RED로 취급하지 않는다.
