@@ -1,6 +1,6 @@
 # 진행 상황
 
-> 마지막 업데이트: 2026-09-19 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 2 · 세션 상태: T005~T009 완료, T010 준비
+> 마지막 업데이트: 2026-09-19 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 2 · 세션 상태: T005~T010 완료, T011 비용·계정 승인 대기
 
 ## 1. 지금 어디까지 왔나
 - 기존 저장소 복제 및 핵심 소스 읽기 완료.
@@ -14,6 +14,7 @@
 - Vitest `spawn EPERM`은 Vite가 Windows 경로 최적화를 위해 실행하는 `exec("net use")`가 Codex 샌드박스에서 차단되는 환경 문제로 분리했다. 임시 preload shim과 thread pool로 전체 기존 테스트를 실행했다.
 - Phase 2 첫 버티컬 슬라이스 T005~T007 완료: 사용자 키를 영속 작업 입력·로그·응답에 노출하지 않는 서버 측 Codex 중계 계약을 RED→GREEN→REFACTOR로 구현했다.
 - Phase 2 T008~T009 완료: 의미 있는 RED와 동일 테스트 묶음의 GREEN을 판정하고 명령·시각·종료 코드·해시·로그를 수집하는 격리 실행 제어 계약을 구현했다.
+- Phase 2 T010 RED 완료: Supabase 프로젝트 준비, Vercel 배포 `READY`, HTTPS URL 확인과 멱등성·관리 토큰 비영속 계약을 테스트로 고정했다.
 
 ## 2. 방금 세션에서 한 일
 - pinusian/sdvc-app을 현재 작업 폴더의 sdvc-app-codex에 별도 복제.
@@ -46,6 +47,7 @@
 - T008 RED 커밋 `133861d1a4810e9ad384d19cef36ed159ec8a082`: 테스트 0개·인프라 오류를 RED로 인정하지 않고 동일 명령·테스트 해시를 요구하는 계약을 작성함.
 - T009 GREEN 커밋 `732ca85e4db8c887ad2f74922d51bda518af527b`: 네트워크와 환경변수를 차단한 Sandbox 포트, 단계 판정, 취소, 증거 수집 최소 구현을 작성함.
 - T009 회귀 보완 커밋 `4b4d7089b4058411cfe7246ee76757bfd83b4dfc`: 실제 Workflow 배선 전 기술검증 어댑터임을 휴면 코드 안전장치에 기록하고 T034에서 제거하도록 고정함.
+- T010 RED 커밋 `078be8bb0539500c81270532fcbceab401a753c1`: 공식 Management/REST API의 생성·상태 조회 분리를 반영한 앱 리소스 준비·배포 계약을 작성함.
 
 ## 3. 검증 증거
 실행 명령: git ls-remote https://github.com/pinusian/sdvc-app.git HEAD
@@ -81,6 +83,7 @@
 - 최초 T009 전체 회귀 → 종료 코드 1, `87 passed / 1 failed`; 기존 휴면 코드 검사에서 실제 실행 흐름 미배선을 정확히 탐지함.
 - 휴면 경계 기록 후 대상 회귀 → 종료 코드 0, `2 files`, `10 tests passed`, 4.24초; typecheck와 lint도 종료 코드 0.
 - T009 최종 전체 회귀 → 종료 코드 0, `88 files passed`, `887 tests passed`, 122.79초.
+- T010 RED 대상 테스트 → 종료 코드 1, 테스트 수집 성공 후 `1 file`, `6 failed / 1 passed`, 2.95초. 실패 6건은 모두 `T010 application provisioning contract is not implemented`였음.
 문서 검사: git diff --cached --check에서 오류 출력 없음.
 독립 clone의 저장소 전용 작성자 `홍길동 <hong@example.com>`으로 Phase 1과 T005~T007 커밋을 완료함.
 SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
@@ -113,12 +116,15 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - [x] T007 키 중계와 공급자 오류 매핑을 정리하고 전체 회귀검사를 통과시킨다.
 - [x] T008 Sandbox에서 샘플 저장소의 의미 있는 실패·성공 테스트 실행 계약을 RED로 작성한다.
 - [x] T009 실행 제어 어댑터와 증거 수집 최소 구현을 작성하고 전체 회귀검사를 통과시킨다.
-- [ ] T010 시험 Supabase/Vercel 어댑터의 리소스 준비·배포·READY·URL 확인 계약을 RED로 작성한다.
+- [x] T010 시험 Supabase/Vercel 어댑터의 리소스 준비·배포·READY·URL 확인 계약을 RED로 작성한다.
+- [ ] T011 실제 시험 리소스 생성·배포 비용과 사용할 계정/프로젝트 범위를 사용자에게 승인받는다.
+- [ ] 승인 시 T011 시험 환경의 DB 준비·Vercel 배포·READY·URL 확인을 실증하고 결과를 기록한다.
 
 ## 5. 막힌 것 / 사용자 결정 대기
 - Plan·Tasks·Analyze 보완 승인 완료. 사용자 결정 대기 없음.
 - 없음. 연결 worktree의 Git 쓰기 제한은 독립 clone 전환으로 우회했고 첫 문서 커밋까지 검증했다.
 - 실제 공급자 계정 설정·비용 상한·별도 운영 배포 대상은 아직 없음. 별도 비용 승인 전 외부 리소스 생성 없음.
+- T011은 Supabase/Vercel 실제 시험 리소스와 관리 자격이 필요하다. 비용 발생 가능성과 생성 대상을 사용자가 명시적으로 승인하기 전에는 실행하지 않는다.
 - Codex 키 중계의 주입형 계약과 비밀값 경계는 검증했다. 실제 외부 Codex SDK/API 호출은 사용자 키·비용 승인 없이 수행하지 않았으므로 아직 미검증이다.
 - Sandbox 격리 실행·증거 수집의 주입형 제어 계약은 검증했다. 실제 Vercel Sandbox 연결과 Workflow 배선은 각각 T011·T034 전까지 미검증이다.
 - API 비밀키는 채팅으로 받거나 파일에 임의로 채우지 않는다.
