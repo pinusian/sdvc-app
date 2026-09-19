@@ -1,6 +1,7 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
-import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/server";
+import { requireLearnerPageAccess } from "@/lib/auth/learner-page-guard";
 import { getConversation, listMessages } from "@/lib/conversations/store";
 import { ChatView } from "@/components/chat/ChatView";
 
@@ -16,14 +17,7 @@ export default async function ConversationPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
+  const user = await requireLearnerPageAccess();
 
   const { id } = await params;
   const admin = createAdminClient();

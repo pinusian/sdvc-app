@@ -14,7 +14,10 @@ export default function LoginPage() {
 
   return (
     <Card>
-      <h1 className="mb-6">로그인</h1>
+      <h1 className="mb-2">수강생 로그인</h1>
+      <p className="mb-6 text-sm text-ink-muted">
+        내 프로젝트와 진행 중인 SDVC 작업을 이어가세요.
+      </p>
 
       <form action={action} className="flex flex-col gap-4">
         <Field label="이메일" name="email" type="email" required autoComplete="email" />

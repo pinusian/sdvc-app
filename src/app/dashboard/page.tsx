@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
-import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/server";
+import { requireLearnerPageAccess } from "@/lib/auth/learner-page-guard";
 import { logoutAction } from "@/app/(auth)/actions";
 import { Button } from "@/components/ui/Button";
 import { NewConversationButton } from "@/components/chat/NewConversationButton";
@@ -25,16 +25,9 @@ export default async function DashboardPage({
 }) {
   const { checkout } = await searchParams;
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
-
-  const { data: profile } = await supabase
+  const user = await requireLearnerPageAccess();
+  const admin = createAdminClient();
+  const { data: profile } = await admin
     .from("profiles")
     .select("email, role, grade, trial_ends_at, stripe_customer_id, admin_tier, suspended_at")
     .eq("id", user.id)
@@ -52,7 +45,6 @@ export default async function DashboardPage({
 
   // projects는 RLS 정책이 없어 브라우저 키로는 못 읽는다([P4-2]) — 서버가
   // secret key로 읽되 소유자 조건은 store가 직접 건다.
-  const admin = createAdminClient();
   const projects = await listProjects(admin, user.id);
 
   // [P5-4b] 각 프로젝트를 만든 대화로 돌아갈 수 있게 연결해준다 (FR-025) —
