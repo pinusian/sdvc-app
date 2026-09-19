@@ -1,6 +1,6 @@
 # 진행 상황
 
-> 마지막 업데이트: 2026-09-20 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 2 · 세션 상태: T011 로컬 GREEN·공급자 무료 경로 확인, 현재 브랜치 원격 배포 대기
+> 마지막 업데이트: 2026-09-20 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 2 완료 · 세션 상태: T005~T012 최고위험 기술 검증 완료
 
 ## 1. 지금 어디까지 왔나
 - 기존 저장소 복제 및 핵심 소스 읽기 완료.
@@ -52,7 +52,9 @@
 - T010 RED 커밋 `078be8bb0539500c81270532fcbceab401a753c1`: 공식 Management/REST API의 생성·상태 조회 분리를 반영한 앱 리소스 준비·배포 계약을 작성함.
 - T011 GREEN 커밋 `bca77581fa5bc6ce84e7ec118e24407e1b09d969`: 자격 증명 참조 로더와 공급자 포트를 주입받아 Supabase `ACTIVE_HEALTHY`, Vercel `READY`, HTTPS URL probe, 오류·멱등성·토큰 비영속 계약을 구현함.
 - Supabase `AI-VC` Free 조직에 프로젝트 `sdvc-codex-trial-20260919`가 생성됐다. 프로젝트 참조는 `nkxzkzzxebxwxwgrfxue`이며 대시보드에서 `STATUS Healthy`, Compute `NANO`, 프로젝트 URL의 HTTPS 제공을 확인했다. 비밀번호와 API 키는 읽거나 기록하지 않았다.
-- Vercel `SDVC` 팀이 Hobby 플랜이며 현재 한도 내임을 대시보드에서 확인했다. 기존 `sdvc-app` 프로덕션 배포가 `Ready`이고 HTTPS URL에서 로그인 화면이 로드되는 것을 확인했다. 다만 현재 로컬 T011 브랜치의 배포는 아니다.
+- Vercel `SDVC` 팀이 Hobby 플랜이며 현재 한도 내임을 대시보드에서 확인했다. 기존 `sdvc-app` 프로덕션 배포가 `Ready`이고 HTTPS URL에서 로그인 화면이 로드되는 것을 확인했다.
+- 현재 브랜치 commit `54d2f16`의 Vercel Preview 배포가 21초 만에 `Ready`가 됐고 HTTPS `/login` 화면을 확인해 T011을 완료했다.
+- T012에서 검증·미검증·안전장치와 후속 작업을 `docs/technology-validation.md`로 정리했다. 핵심 가정 실패가 없어 Plan 재승인은 필요하지 않다.
 
 ## 3. 검증 증거
 실행 명령: git ls-remote https://github.com/pinusian/sdvc-app.git HEAD
@@ -96,6 +98,8 @@
 - Supabase 대시보드 확인 → `AI-VC FREE`, 프로젝트 `sdvc-codex-trial-20260919`, 참조 `nkxzkzzxebxwxwgrfxue`, `STATUS Healthy`, Compute `NANO`, HTTPS 프로젝트 URL 확인.
 - Vercel 대시보드 확인 → `SDVC Hobby`, 기존 배포 `FsH3KtPfXuNcpBfyGX7H8trTQoSD`, `Ready`, Production, 배포 시간 21초. `https://sdvc-31xnpo8el-sdvc.vercel.app/` 접속은 HTTPS로 성공했고 `/login` 화면을 표시함.
 - `git push -u origin codex/sdvc-openai-codex` → 종료 코드 1, 샌드박스 프록시 `127.0.0.1`을 통한 GitHub 443 연결 실패. 원격 인증 거부가 아니라 현재 실행 환경의 네트워크 연결 실패임.
+- 사용자 터미널에서 push 완료 후 Vercel 자동 Preview 확인 → commit `54d2f16`, branch `codex/sdvc-openai-codex`, deployment `DoPNTHgvA9VuSRfW8ftmL9RMFPKZ`, `Ready`, 21초.
+- Preview URL `https://sdvc-mvsvbs3yy-sdvc.vercel.app/` 접속 → HTTPS 성공, `/login`으로 이동하고 SDVC 로그인 화면 표시.
 문서 검사: git diff --cached --check에서 오류 출력 없음.
 독립 clone의 저장소 전용 작성자 `홍길동 <hong@example.com>`으로 Phase 1과 T005~T007 커밋을 완료함.
 SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
@@ -133,12 +137,14 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - [x] T011 로컬 프로비저닝 어댑터를 구현하고 대상·전체 회귀검사를 통과시킨다.
 - [x] Supabase `AI-VC` Free 프로젝트 `sdvc-codex-trial-20260919`의 생성과 `Healthy` 상태, HTTPS 프로젝트 URL을 확인한다.
 - [x] Vercel `SDVC` Hobby의 기존 프로덕션 배포가 `Ready`이고 HTTPS URL에서 앱 화면이 로드되는 것을 확인한다.
-- [ ] 현재 `codex/sdvc-openai-codex` 브랜치를 GitHub에 push한 뒤 이 브랜치의 Vercel 시험 배포 `Ready`·HTTPS URL을 확인한다.
+- [x] 현재 `codex/sdvc-openai-codex` 브랜치를 GitHub에 push한 뒤 이 브랜치의 Vercel 시험 배포 `Ready`·HTTPS URL을 확인한다.
+- [x] T012 최고위험 기술 검증 결과를 검증/미검증/안전장치로 구분해 기록한다.
+- [ ] T013 인증되지 않은 접근, 타 사용자 접근, 차단 사용자 기존 세션·직접 API 우회 RED 테스트를 작성한다.
 
 ## 5. 막힌 것 / 사용자 결정 대기
 - Plan·Tasks·Analyze 보완 승인은 완료됐다. 외부 리소스 범위도 Supabase `AI-VC` Free와 Vercel `SDVC` Hobby로 승인됐다.
 - 연결 worktree의 Git 쓰기 제한은 독립 clone 전환으로 우회했고 T011 GREEN 커밋까지 검증했다.
-- 현재 막힘: Codex 샌드박스 프록시가 GitHub 443 연결을 차단해 현재 브랜치를 push할 수 없다. 기존 Vercel 무료 배포 경로는 검증했지만 T011 코드가 포함된 브랜치의 실제 배포는 미검증이다.
+- 현재 진행을 막는 외부 장애물이나 사용자 결정 대기는 없다.
 - 비용이 발생하는 업그레이드·추가 구매·유료 리소스는 실행하지 않는다. 무료 범위를 벗어나는 징후가 보이면 즉시 중단한다.
 - Codex 키 중계의 주입형 계약과 비밀값 경계는 검증했다. 실제 외부 Codex SDK/API 호출은 사용자 키·비용 승인 없이 수행하지 않았으므로 아직 미검증이다.
 - Sandbox 격리 실행·증거 수집의 주입형 제어 계약은 검증했다. 실제 Vercel Sandbox 연결과 Workflow 배선은 T034 전까지 미검증이다.

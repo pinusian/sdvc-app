@@ -32,8 +32,8 @@
 - [x] T008 Sandbox에서 샘플 저장소의 의미 있는 실패 테스트와 성공 테스트를 실행하는 RED 계약을 작성했다. 완료: 테스트 0개와 인프라 오류는 유효한 RED로 인정하지 않는다. 커밋: `133861d test: 격리 TDD 실행 - RED (T008)`
 - [x] T009 실행 제어 어댑터와 증거 수집 최소 구현을 작성했다. 완료: 명령·시각·종료 코드·코드/테스트 해시·로그가 수집되고 전체 88개 파일/887개 테스트가 통과했다. 커밋: `732ca85 feat: 격리 TDD 실행 - GREEN (T009)`, `4b4d708 test: 격리 실행 기술검증 경계 기록 (T009)`
 - [x] T010 [P] 시험 Supabase/Vercel 어댑터의 리소스 준비·배포·READY·URL 확인 계약을 작성했다. 완료: DB 준비·배포 READY·HTTPS URL 확인과 멱등성·관리 토큰 비영속 계약이 구현 전 의미 있게 실패했다. 커밋: `078be8b test: 앱 리소스 배포 - RED (T010)`
-- [ ] T011 시험 환경에서 DB 준비와 Vercel 배포 최소 경로를 실증한다. 부분 완료: 비용 발생 금지 조건으로 Supabase `AI-VC`와 Vercel `SDVC` 사용 승인을 받았고, 로컬 프로비저닝 어댑터와 전체 89개 파일/894개 테스트를 검증했다. Supabase Free 프로젝트 `sdvc-codex-trial-20260919`는 `Healthy`이고, Vercel Hobby의 기존 `sdvc-app` 배포는 `Ready`이며 HTTPS 로그인 화면도 로드됐다. 커밋: `bca7758 feat: 앱 리소스 배포 - GREEN (T011)`. 남은 완료 조건: GitHub push 네트워크 차단을 해소하고 현재 `codex/sdvc-openai-codex` 브랜치 자체를 Vercel에 배포해 `Ready`·HTTPS URL을 확인한다.
-- [ ] T012 기술 검증 결과를 정리하고 핵심 가정 실패 시 Plan 재승인을 요청한다. 완료: 검증/미검증/대안이 구분된다. 커밋: `docs: 최고위험 기술 검증 결과 (T012)`
+- [x] T011 시험 환경에서 DB 준비와 Vercel 배포 최소 경로를 실증했다. 완료: Supabase `AI-VC` Free 프로젝트가 `Healthy`이고, 현재 `codex/sdvc-openai-codex` 브랜치 commit `54d2f16`의 Vercel `SDVC` Hobby Preview가 21초 만에 `Ready`가 됐으며 HTTPS 로그인 화면이 로드됐다. 커밋: `bca7758 feat: 앱 리소스 배포 - GREEN (T011)`.
+- [x] T012 기술 검증 결과를 정리했다. 완료: `docs/technology-validation.md`에 검증/미검증/안전장치/다음 단계를 구분했고 핵심 가정 실패가 없어 Plan 재승인은 필요하지 않다. 커밋: `docs: 최고위험 기술 검증 결과 (T012)`
 
 ## Phase 3 — 수강생 인증과 차단 경계 (US-07, P1)
 
