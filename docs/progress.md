@@ -137,6 +137,7 @@
 - T021 정적·전체 회귀 → `npm run typecheck`와 대상 lint 종료 코드 0; 전체 `97 files passed`, `952 tests passed`, 109.47초. 의도된 예외 응답 검증 stderr 3건 외 실패 없음.
 - T022 대상 회귀 → 권한·집계·관리 API·UI `4 files`, `51 passed`, 7.51초. Playwright `e2e/admin-entry.spec.ts --list`는 `7 tests in 1 file`을 수집했다.
 - T022 정적·전체 회귀 → `npm run typecheck`와 대상 lint 종료 코드 0; 전체 `97 files passed`, `952 tests passed`, 108.73초. 의도된 예외 응답 검증 stderr 3건 외 실패 없음.
+- T022 push 시도 → 종료 코드 1, Git for Windows `schannel: AcquireCredentialsHandle failed: SEC_E_NO_CREDENTIALS`. 네트워크 권한은 허용됐으나 이 실행 환경에 GitHub 자격 증명이 없어 원격 변경은 발생하지 않았다.
 문서 검사: git diff --cached --check에서 오류 출력 없음.
 독립 clone의 저장소 전용 작성자 `홍길동 <hong@example.com>`으로 Phase 1과 T005~T007 커밋을 완료함.
 SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
@@ -186,7 +187,8 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - [x] T019 관리자 전용 수강생 목록·검색·상세·집계 API를 구현해 T018 집계 RED를 GREEN으로 만든다.
 - [x] T020 사유 필수 차단·해제, 멱등 상태 전이, 감사 기록과 활성 작업 취소 계약을 GREEN으로 만든다.
 - [x] T021 개발자 대시보드와 수강생 상세·차단·해제 화면을 구현한다.
-- [ ] T022 로컬 REFACTOR·권한 회귀는 완료했다. 커밋을 push한 뒤 Vercel `SDVC` Hobby Preview에서 비로그인 `/admin`의 관리자 로그인 표시와 수강생 정보 비노출을 확인한다.
+- [ ] 로컬 커밋 `57187a5`~`d289a85`를 `codex/sdvc-openai-codex` 원격 브랜치에 push한다.
+- [ ] T022 Vercel `SDVC` Hobby Preview에서 비로그인 `/admin`의 관리자 로그인 표시와 수강생 정보 비노출을 확인한다.
 
 ## 5. 막힌 것 / 사용자 결정 대기
 - Plan·Tasks·Analyze 보완 승인은 완료됐다. 외부 리소스 범위도 Supabase `AI-VC` Free와 Vercel `SDVC` Hobby로 승인됐다.
@@ -196,6 +198,7 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - Codex 키 중계의 주입형 계약과 비밀값 경계는 검증했다. 실제 외부 Codex SDK/API 호출은 사용자 키·비용 승인 없이 수행하지 않았으므로 아직 미검증이다.
 - Sandbox 격리 실행·증거 수집의 주입형 제어 계약은 검증했다. 실제 Vercel Sandbox 연결과 Workflow 배선은 T034 전까지 미검증이다.
 - API 비밀키는 채팅으로 받거나 파일에 임의로 채우지 않는다.
+- 현재 실행 환경의 GitHub 자격 증명이 없어 T022 push가 `SEC_E_NO_CREDENTIALS`로 중단됐다. 사용자의 인증된 터미널에서 push가 필요하다.
 
 ## 6. 알아둘 함정
 - 상위 AI_Code_Study/docs/progress.md는 독서활동 프로젝트 기록이며 이번 프로젝트 기록이 아니다.
