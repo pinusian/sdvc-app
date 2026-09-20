@@ -1,6 +1,6 @@
 # 진행 상황
 
-> 마지막 업데이트: 2026-09-20 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 3 · 세션 상태: T017 코드·회귀 완료, Preview 브라우저 검증 대기
+> 마지막 업데이트: 2026-09-20 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 4 · 세션 상태: T017 완료, T018 RED 준비
 
 ## 1. 지금 어디까지 왔나
 - 기존 저장소 복제 및 핵심 소스 읽기 완료.
@@ -118,6 +118,8 @@
 - T017 대상 회귀 → 수강생 순수·Route Handler·페이지 가드와 제한 안내 `4 files`, `36 tests passed`; typecheck와 lint 종료 코드 0.
 - T017 전체 회귀 → `npm run test:codex -- --reporter=dot` 종료 코드 0, `94 files passed`, `934 tests passed`, 136.58초. 브라우저 시나리오 2개는 Playwright 수집에 성공했으나 이 샌드박스의 브라우저 프로세스 생성이 `spawn EPERM`으로 차단됐다.
 - Vercel `SDVC` Hobby 배포 목록 확인 → 최신 Preview는 여전히 commit `54d2f16`이다. T016/T017 커밋을 원격에 push한 뒤 새 무료 Preview에서 브라우저 회귀를 실행해야 한다.
+- 사용자 push 후 Vercel `SDVC` Hobby Preview `FbUBjhURj7ng5YELp2Vq28Vy7cCh`가 commit `7f411d0`으로 28초 만에 `Ready`가 됐다. Preview URL은 `https://sdvc-jrrudhyxa-sdvc.vercel.app/`이다.
+- T017 실제 브라우저 회귀 → 비로그인 상태에서 `/dashboard`, `/conversations/not-a-real-id`, `/account-restricted`를 각각 직접 열었고, 세 경로 모두 `/login`으로 이동해 “수강생 로그인” 제목과 로그인 폼을 표시했다. 브라우저 error 로그는 0건이었다.
 문서 검사: git diff --cached --check에서 오류 출력 없음.
 독립 clone의 저장소 전용 작성자 `홍길동 <hong@example.com>`으로 Phase 1과 T005~T007 커밋을 완료함.
 SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
@@ -161,8 +163,9 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - [x] T014 로컬 계정 제한 마이그레이션을 `AI-VC` 시험 DB에 적용하고 컬럼·RLS 상태를 검증한다.
 - [x] T015 모든 보호 API와 작업 시작·재개에 공통 서버 가드를 적용하고 T013 RED 테스트를 GREEN으로 만든다.
 - [x] T016 로그인·로그아웃·차단 안내 화면을 공통 가드와 연결하고 차단 사유 노출 범위를 검증한다.
-- [ ] T017의 로컬 커밋 `0bc7a68`~`c40d7d0`을 원격 브랜치에 push한다.
-- [ ] Vercel `SDVC` Hobby 새 Preview가 Ready가 되면 비로그인 보호 화면 리디렉션과 로그인 화면을 실제 브라우저에서 검증하고 T017을 완료 처리한다.
+- [x] T017의 로컬 커밋 `0bc7a68`~`7f411d0`을 원격 브랜치에 push한다.
+- [x] Vercel `SDVC` Hobby 새 Preview에서 비로그인 보호 화면 리디렉션과 로그인 화면을 실제 브라우저로 검증하고 T017을 완료 처리한다.
+- [ ] T018 일반 수강생의 관리자 접근 거부, 현황 집계 정확성, 차단·해제·감사 기록 RED 테스트를 작성한다.
 
 ## 5. 막힌 것 / 사용자 결정 대기
 - Plan·Tasks·Analyze 보완 승인은 완료됐다. 외부 리소스 범위도 Supabase `AI-VC` Free와 Vercel `SDVC` Hobby로 승인됐다.
