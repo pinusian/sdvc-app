@@ -4,6 +4,7 @@ import {
   findSiteUserByEmail,
   suspendSiteUser,
   unsuspendSiteUser,
+  setSiteUserPasswordHash,
   setSiteUserApiKey,
   getSiteUserApiKey,
   createSiteRecord,
@@ -122,6 +123,27 @@ describe("[P11-6] suspendSiteUser / unsuspendSiteUser", () => {
     const updateCalls = (calls.update ?? []) as unknown[];
     const payload = updateCalls[0] as Record<string, unknown>;
     expect(payload.suspended_at).toBeNull();
+  });
+});
+
+/**
+ * [BL-031] 개발자가 방문자 대신 비밀번호를 재설정한다.
+ *
+ * 방문자 계정(site_users)은 이메일 발송 수단이 없어([BL-030]과 달리)
+ * 본인이 직접 "비밀번호 찾기"를 할 수 없다 — 개발자가 관리 화면에서
+ * 대신 새 비밀번호를 만들어 본인에게 직접 전달한다.
+ */
+describe("[BL-031] setSiteUserPasswordHash — 개발자가 대신 재설정", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("해시값을 password_hash 칼럼에 저장한다", async () => {
+    const { client, calls } = fakeSupabase({ data: { id: "su-1" }, error: null });
+    await setSiteUserPasswordHash(client, { siteUserId: "su-1", passwordHash: "salt:hash" });
+
+    const updateCalls = (calls.update ?? []) as unknown[];
+    const payload = updateCalls[0] as Record<string, unknown>;
+    expect(payload.password_hash).toBe("salt:hash");
+    expect(calls.eq).toContainEqual(["id", "su-1"]);
   });
 });
 

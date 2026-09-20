@@ -20,6 +20,9 @@ const getOwnedSiteUser = vi.fn();
 const suspendSiteUser = vi.fn();
 const unsuspendSiteUser = vi.fn();
 const listSiteRecordsByUser = vi.fn();
+const setSiteUserPasswordHash = vi.fn();
+const generateTempPassword = vi.fn();
+const hashPassword = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({ auth: { getUser } }),
@@ -36,6 +39,12 @@ vi.mock("@/lib/site-accounts/store", () => ({
   suspendSiteUser: (...args: unknown[]) => suspendSiteUser(...args),
   unsuspendSiteUser: (...args: unknown[]) => unsuspendSiteUser(...args),
   listSiteRecordsByUser: (...args: unknown[]) => listSiteRecordsByUser(...args),
+  setSiteUserPasswordHash: (...args: unknown[]) => setSiteUserPasswordHash(...args),
+}));
+
+vi.mock("@/lib/site-accounts/crypto", () => ({
+  generateTempPassword: (...args: unknown[]) => generateTempPassword(...args),
+  hashPassword: (...args: unknown[]) => hashPassword(...args),
 }));
 
 const PROJECT = { id: "proj-1", ownerId: "user-1", name: "독서활동", slug: "reading", status: "deployed" };
@@ -242,6 +251,70 @@ describe("[P11-6] GET /api/projects/[id]/site-users/[siteUserId]/records — 기
     expect(listSiteRecordsByUser).toHaveBeenCalledWith(expect.anything(), {
       projectId: "proj-1",
       siteUserId: "site-user-1",
+    });
+  });
+});
+
+/**
+ * [BL-031] POST /api/projects/[id]/site-users/[siteUserId]/reset-password —
+ * 방문자 계정은 이메일 발송 수단이 없어([BL-030]과 달리) 본인이 직접
+ * "비밀번호 찾기"를 할 수 없다. 개발자가 관리 화면에서 대신 새 임시
+ * 비밀번호를 만들어 본인에게 전달한다. 소유권 검사는 정지·기록 열람과
+ * 완전히 같다.
+ */
+describe("[BL-031] POST /api/projects/[id]/site-users/[siteUserId]/reset-password", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getUser.mockResolvedValue({ data: { user: { id: "user-1" } }, error: null });
+    getProjectById.mockResolvedValue(PROJECT);
+    getOwnedSiteUser.mockResolvedValue(SITE_USER);
+    generateTempPassword.mockReturnValue("tempPass9x2k");
+    hashPassword.mockResolvedValue("salt:hash");
+    setSiteUserPasswordHash.mockResolvedValue(undefined);
+  });
+
+  it("로그인하지 않으면 401", async () => {
+    getUser.mockResolvedValue({ data: { user: null }, error: null });
+    const { POST } = await import(
+      "@/app/api/projects/[id]/site-users/[siteUserId]/reset-password/route"
+    );
+    const res = await POST(postRequest("/api/projects/proj-1/site-users/site-user-1/reset-password"), userContext);
+    expect(res.status).toBe(401);
+    expect(setSiteUserPasswordHash).not.toHaveBeenCalled();
+  });
+
+  it("내 프로젝트가 아니면 404", async () => {
+    getProjectById.mockResolvedValue(null);
+    const { POST } = await import(
+      "@/app/api/projects/[id]/site-users/[siteUserId]/reset-password/route"
+    );
+    const res = await POST(postRequest("/api/projects/proj-1/site-users/site-user-1/reset-password"), userContext);
+    expect(res.status).toBe(404);
+    expect(setSiteUserPasswordHash).not.toHaveBeenCalled();
+  });
+
+  it("그 사용자가 없거나 다른 프로젝트 소속이면 404", async () => {
+    getOwnedSiteUser.mockResolvedValue(null);
+    const { POST } = await import(
+      "@/app/api/projects/[id]/site-users/[siteUserId]/reset-password/route"
+    );
+    const res = await POST(postRequest("/api/projects/proj-1/site-users/site-user-1/reset-password"), userContext);
+    expect(res.status).toBe(404);
+    expect(setSiteUserPasswordHash).not.toHaveBeenCalled();
+  });
+
+  it("정상 요청이면 임시 비밀번호를 만들어 해시로 저장하고, 평문은 응답에 한 번만 담는다", async () => {
+    const { POST } = await import(
+      "@/app/api/projects/[id]/site-users/[siteUserId]/reset-password/route"
+    );
+    const res = await POST(postRequest("/api/projects/proj-1/site-users/site-user-1/reset-password"), userContext);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ tempPassword: "tempPass9x2k" });
+    expect(hashPassword).toHaveBeenCalledWith("tempPass9x2k");
+    expect(setSiteUserPasswordHash).toHaveBeenCalledWith(expect.anything(), {
+      siteUserId: "site-user-1",
+      passwordHash: "salt:hash",
     });
   });
 });

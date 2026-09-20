@@ -4,6 +4,7 @@ import {
   verifyPassword,
   encryptApiKey,
   decryptApiKey,
+  generateTempPassword,
 } from "@/lib/site-accounts/crypto";
 
 /**
@@ -63,5 +64,25 @@ describe("[P11-4] encryptApiKey / decryptApiKey", () => {
   it("암호화 비밀값이 없으면 던진다 — 조용히 평문으로 새면 안 된다", () => {
     delete process.env.SITE_API_KEY_ENCRYPTION_SECRET;
     expect(() => encryptApiKey("some-key")).toThrow();
+  });
+});
+
+/**
+ * [BL-031] 개발자가 방문자 대신 비밀번호를 재설정할 때 쓸 임시 비밀번호.
+ * 개발자가 직접 값을 지어내지 않는다(약한 값을 고를 수 있다) — 서버가
+ * 무작위로 만들어 한 번만 보여준다.
+ */
+describe("[BL-031] generateTempPassword", () => {
+  it("최소 10자 이상이다", () => {
+    expect(generateTempPassword().length).toBeGreaterThanOrEqual(10);
+  });
+
+  it("부를 때마다 다른 값을 만든다", () => {
+    expect(generateTempPassword()).not.toBe(generateTempPassword());
+  });
+
+  it("헷갈리는 문자(0/O, 1/l/I)는 쓰지 않는다 — 개발자가 사람에게 구두로 전달해야 한다", () => {
+    const pw = generateTempPassword();
+    expect(pw).not.toMatch(/[0OIl1]/);
   });
 });
