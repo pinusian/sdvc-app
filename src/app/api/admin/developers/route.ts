@@ -2,11 +2,14 @@ import { NextResponse } from "next/server";
 import { requireAdmin, auditAndWarn } from "@/lib/admin/guard";
 import {
   extendTrial,
+  getLearnerAccessState,
   grantGrade,
   listDevelopers,
   setMonthlyLimit,
   setSuspended,
 } from "@/lib/admin/developers";
+import { changeLearnerAccess } from "@/lib/admin/learners";
+import { cancelActiveWorkForUser } from "@/lib/execution/active-work";
 
 /**
  * [P8-2] 개발자 관리 (FR-014).
@@ -75,6 +78,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "자기 계정은 정지할 수 없습니다." }, { status: 400 });
   }
 
+  if ((action === "suspend" || action === "unsuspend") && !reason?.trim()) {
+    return NextResponse.json({ error: "차단·해제 사유를 입력해야 합니다." }, { status: 400 });
+  }
+
   try {
     if (action === "grant_grade") {
       // grade가 없으면 해제로 본다.
@@ -139,16 +146,53 @@ export async function POST(request: Request) {
       return NextResponse.json({ trialEndsAt: until, ...warn });
     }
 
-    const suspended = action === "suspend";
-    await setSuspended(guard.ctx.admin, userId, suspended, reason);
-
-    const warn = await auditAndWarn(guard.ctx, {
-      action: "developer:suspend",
-      targetType: "profile",
-      targetId: userId,
-      detail: { suspended, ...(reason ? { reason } : {}) },
+    const nextState = action === "suspend" ? "suspended" : "active";
+    let auditWarning: string | undefined;
+    const transition = await changeLearnerAccess(
+      {
+        actorId: guard.ctx.actorId,
+        learnerId: userId,
+        nextState,
+        reason: reason!,
+        now: new Date().toISOString(),
+      },
+      {
+        loadState: (learnerId) => getLearnerAccessState(guard.ctx.admin, learnerId),
+        persistState: ({ learnerId, nextState: state, actorId, reason: why, changedAt }) =>
+          setSuspended(
+            guard.ctx.admin,
+            learnerId,
+            state === "suspended",
+            why,
+            new Date(changedAt),
+            actorId,
+          ),
+        cancelActiveWork: async (learnerId) => cancelActiveWorkForUser(learnerId),
+        audit: async (event) => {
+          const warn = await auditAndWarn(guard.ctx, {
+            action:
+              event.nextState === "suspended"
+                ? "developer:suspend"
+                : "developer:unsuspend",
+            targetType: "profile",
+            targetId: event.learnerId,
+            reason: event.reason,
+            previousState: { state: event.previousState },
+            nextState: { state: event.nextState },
+            detail: {
+              changed: event.previousState !== event.nextState,
+            },
+          });
+          auditWarning = warn.auditWarning;
+        },
+      },
+    );
+    return NextResponse.json({
+      suspended: transition.nextState === "suspended",
+      changed: transition.changed,
+      cancelledWorkCount: transition.cancelledWorkCount,
+      ...(auditWarning ? { auditWarning } : {}),
     });
-    return NextResponse.json({ suspended, ...warn });
   } catch (error) {
     await auditAndWarn(guard.ctx, {
       action: ACTIONS[action],

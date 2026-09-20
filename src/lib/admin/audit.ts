@@ -25,6 +25,9 @@ export interface AdminActionRecord {
   /** 거부된 시도면 false. 기본은 성공. */
   succeeded?: boolean;
   detail?: Record<string, unknown>;
+  reason?: string;
+  previousState?: Record<string, unknown>;
+  nextState?: Record<string, unknown>;
 }
 
 export type RecordResult = { recorded: true } | { recorded: false; message: string };
@@ -38,7 +41,17 @@ export type RecordResult = { recorded: true } | { recorded: false; message: stri
  */
 export async function recordAdminAction(
   admin: SupabaseClient,
-  { actorId, action, targetType, targetId, succeeded = true, detail }: AdminActionRecord,
+  {
+    actorId,
+    action,
+    targetType,
+    targetId,
+    succeeded = true,
+    detail,
+    reason,
+    previousState,
+    nextState,
+  }: AdminActionRecord,
 ): Promise<RecordResult> {
   try {
     const { error } = await admin
@@ -50,6 +63,9 @@ export async function recordAdminAction(
         target_id: targetId ?? null,
         succeeded,
         detail: detail ?? null,
+        reason: reason ?? null,
+        previous_state: previousState ?? null,
+        next_state: nextState ?? null,
       })
       .select("id")
       .single();

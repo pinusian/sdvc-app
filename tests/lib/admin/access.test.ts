@@ -82,6 +82,7 @@ describe("[P8-1a] adminCan", () => {
       "developer:extend_trial",
       "developer:read",
       "developer:suspend",
+      "developer:unsuspend",
       "policy:change",
       "project:view_any",
       "report:handle",

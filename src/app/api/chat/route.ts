@@ -33,6 +33,7 @@ import { loadAccountState } from "@/lib/billing/account";
 import { canCreateProject, canStartChat } from "@/lib/billing/access";
 import { suggestProjectName } from "@/lib/projects/name";
 import { AttachmentError, buildAttachmentBlocks } from "@/lib/attachments/message";
+import { cleanupStream, registerActiveWork } from "@/lib/execution/active-work";
 
 /**
  * SDVC 엔진과의 대화 API.
@@ -231,32 +232,48 @@ async function handleChat(request: Request) {
     ? await loadCurrentFiles(admin, conversation.projectId)
     : undefined;
 
-  const stream = await createChatStream({
-    apiKey,
-    system: buildSystemPrompt({
-      block,
-      projectName: title,
-      // [P5-4b] 이미 만든 프로젝트면 전체를 다시 만들지 않도록 알려준다 (FR-025)
-      published: Boolean(conversation.projectId),
-      // [P7-10] 붙여준 첨부를 홈페이지에 넣는 방법을 알려준다 (FR-032)
-      attachmentIds,
-      currentFiles,
-    }),
-    messages: [
-      ...history,
-      // 첨부가 있으면 글 대신 블록으로 보낸다. 첨부를 먼저 두어야 모델이
-      // "이 사진에 대해서" 같은 말을 제대로 받는다.
-      attachmentBlocks.length > 0
-        ? {
-            role: "user" as const,
-            content: [...attachmentBlocks, { type: "text" as const, text: message }],
-          }
-        : { role: "user" as const, content: message },
-    ],
-    // 구현 단계는 파일을 통째로 써야 해서 기본 길이로는 중간에 끊긴다([P4-5]
-    // 검증에서 실제로 겪음). max_tokens는 상한일 뿐이라 늘려도 안 쓰면 비용은 없다.
-    maxTokens: LONG_ANSWER_BLOCKS.includes(block) ? IMPLEMENT_MAX_TOKENS : DEFAULT_MAX_TOKENS,
-  });
+  const workController = new AbortController();
+  const unregisterWork = registerActiveWork(user.id, workController);
+  const abortFromRequest = () => workController.abort();
+  request.signal.addEventListener("abort", abortFromRequest, { once: true });
+  const cleanupWork = () => {
+    request.signal.removeEventListener("abort", abortFromRequest);
+    unregisterWork();
+  };
+
+  let stream: ReadableStream<Uint8Array>;
+  try {
+    stream = await createChatStream({
+      apiKey,
+      system: buildSystemPrompt({
+        block,
+        projectName: title,
+        // [P5-4b] 이미 만든 프로젝트면 전체를 다시 만들지 않도록 알려준다 (FR-025)
+        published: Boolean(conversation.projectId),
+        // [P7-10] 붙여준 첨부를 홈페이지에 넣는 방법을 알려준다 (FR-032)
+        attachmentIds,
+        currentFiles,
+      }),
+      messages: [
+        ...history,
+        // 첨부가 있으면 글 대신 블록으로 보낸다. 첨부를 먼저 두어야 모델이
+        // "이 사진에 대해서" 같은 말을 제대로 받는다.
+        attachmentBlocks.length > 0
+          ? {
+              role: "user" as const,
+              content: [...attachmentBlocks, { type: "text" as const, text: message }],
+            }
+          : { role: "user" as const, content: message },
+      ],
+      // 구현 단계는 파일을 통째로 써야 해서 기본 길이로는 중간에 끊긴다([P4-5]
+      // 검증에서 실제로 겪음). max_tokens는 상한일 뿐이라 늘려도 안 쓰면 비용은 없다.
+      maxTokens: LONG_ANSWER_BLOCKS.includes(block) ? IMPLEMENT_MAX_TOKENS : DEFAULT_MAX_TOKENS,
+      signal: workController.signal,
+    });
+  } catch (error) {
+    cleanupWork();
+    throw error;
+  }
 
   // 단계가 넘어갔으면 화면이 표시를 갱신할 수 있게 맨 앞에서 알려준다.
   const initialEvents: StreamEvent[] =
@@ -273,7 +290,10 @@ async function handleChat(request: Request) {
   };
 
   return new Response(
-    stream.pipeThrough(captureAndFilter(admin, conversationId, initialEvents, publishContext)),
+    cleanupStream(
+      stream.pipeThrough(captureAndFilter(admin, conversationId, initialEvents, publishContext)),
+      cleanupWork,
+    ),
     {
       status: 200,
       headers: {

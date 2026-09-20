@@ -90,11 +90,21 @@ describe("[P8-2] setSuspended", () => {
   it("정지하면 시각과 사유를 함께 남긴다", async () => {
     const { client, updates } = fakeAdmin();
 
-    await setSuspended(client, "user-9", true, "불법 콘텐츠", new Date("2026-09-12T00:00:00.000Z"));
+    await setSuspended(
+      client,
+      "user-9",
+      true,
+      "불법 콘텐츠",
+      new Date("2026-09-12T00:00:00.000Z"),
+      "admin-1",
+    );
 
     expect(updates[0].values).toEqual({
       suspended_at: "2026-09-12T00:00:00.000Z",
       suspended_reason: "불법 콘텐츠",
+      is_active: false,
+      suspended_by: "admin-1",
+      access_state_changed_at: "2026-09-12T00:00:00.000Z",
     });
     expect(updates[0].where).toEqual([["id", "user-9"]]);
   });
@@ -102,9 +112,22 @@ describe("[P8-2] setSuspended", () => {
   it("해제하면 둘 다 지운다 (사유가 남아 있으면 정지된 것처럼 보인다)", async () => {
     const { client, updates } = fakeAdmin();
 
-    await setSuspended(client, "user-9", false);
+    await setSuspended(
+      client,
+      "user-9",
+      false,
+      "검토 완료",
+      new Date("2026-09-13T00:00:00.000Z"),
+      "admin-1",
+    );
 
-    expect(updates[0].values).toEqual({ suspended_at: null, suspended_reason: null });
+    expect(updates[0].values).toEqual({
+      suspended_at: null,
+      suspended_reason: null,
+      is_active: true,
+      suspended_by: null,
+      access_state_changed_at: "2026-09-13T00:00:00.000Z",
+    });
   });
 });
 

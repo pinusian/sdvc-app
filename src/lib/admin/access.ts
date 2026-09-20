@@ -18,6 +18,7 @@ export type AdminTier = "super" | "operator" | "support";
 export const ADMIN_ACTIONS = [
   "developer:read",
   "developer:suspend",
+  "developer:unsuspend",
   "developer:extend_trial",
   "artifact:block",
   "usage:read",
@@ -53,6 +54,7 @@ const ALLOWED: Record<AdminTier, readonly AdminAction[]> = {
   operator: [
     "developer:read",
     "developer:suspend",
+    "developer:unsuspend",
     "developer:extend_trial",
     "artifact:block",
     "usage:read",

@@ -15,6 +15,7 @@ const setSuspended = vi.fn();
 const extendTrial = vi.fn();
 const grantGrade = vi.fn();
 const setMonthlyLimit = vi.fn();
+const getLearnerAccessState = vi.fn();
 const recordAdminAction = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -30,6 +31,7 @@ vi.mock("@/lib/admin/developers", () => ({
   extendTrial: (...a: unknown[]) => extendTrial(...a),
   grantGrade: (...a: unknown[]) => grantGrade(...a),
   setMonthlyLimit: (...a: unknown[]) => setMonthlyLimit(...a),
+  getLearnerAccessState: (...a: unknown[]) => getLearnerAccessState(...a),
 }));
 
 vi.mock("@/lib/admin/audit", () => ({
@@ -54,6 +56,7 @@ describe("[P8-2] /api/admin/developers", () => {
     });
     listDevelopers.mockResolvedValue([{ id: "user-9", email: "dev@example.com" }]);
     setSuspended.mockResolvedValue(undefined);
+    getLearnerAccessState.mockResolvedValue("active");
     extendTrial.mockResolvedValue("2026-09-27T00:00:00.000Z");
     recordAdminAction.mockResolvedValue({ recorded: true });
   });
@@ -112,7 +115,14 @@ describe("[P8-2] /api/admin/developers", () => {
     );
 
     expect(res.status).toBe(200);
-    expect(setSuspended).toHaveBeenCalledWith(expect.anything(), "user-9", true, "불법 콘텐츠");
+    expect(setSuspended).toHaveBeenCalledWith(
+      expect.anything(),
+      "user-9",
+      true,
+      "불법 콘텐츠",
+      expect.any(Date),
+      "admin-1",
+    );
     expect(recordAdminAction).toHaveBeenCalledWith(
       expect.anything(),
       // succeeded 기본값(true)은 recordAdminAction의 책임이고 거기서 검증한다
@@ -120,7 +130,9 @@ describe("[P8-2] /api/admin/developers", () => {
         action: "developer:suspend",
         targetType: "profile",
         targetId: "user-9",
-        detail: expect.objectContaining({ suspended: true, reason: "불법 콘텐츠" }),
+        reason: "불법 콘텐츠",
+        previousState: { state: "active" },
+        nextState: { state: "suspended" },
       }),
     );
   });
@@ -141,7 +153,9 @@ describe("[P8-2] /api/admin/developers", () => {
     });
 
     const { POST } = await import("@/app/api/admin/developers/route");
-    const res = await POST(post({ userId: "user-9", action: "suspend" }));
+    const res = await POST(
+      post({ userId: "user-9", action: "suspend", reason: "긴급 차단" }),
+    );
 
     expect(res.status).toBe(403);
     expect(setSuspended).not.toHaveBeenCalled();
@@ -189,7 +203,9 @@ describe("[P8-2] /api/admin/developers", () => {
     recordAdminAction.mockResolvedValue({ recorded: false, message: "권한 없음" });
 
     const { POST } = await import("@/app/api/admin/developers/route");
-    const res = await POST(post({ userId: "user-9", action: "suspend" }));
+    const res = await POST(
+      post({ userId: "user-9", action: "suspend", reason: "긴급 차단" }),
+    );
 
     expect(res.status).toBe(200);
     expect(setSuspended).toHaveBeenCalled();
@@ -210,6 +226,7 @@ describe("[P8-2c] 부여와 한도", () => {
     });
     grantGrade.mockResolvedValue(undefined);
     setMonthlyLimit.mockResolvedValue(undefined);
+    getLearnerAccessState.mockResolvedValue("active");
     recordAdminAction.mockResolvedValue({ recorded: true });
   });
 

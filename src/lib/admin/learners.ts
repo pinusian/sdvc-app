@@ -243,10 +243,62 @@ export interface ChangeLearnerAccessResult {
 
 /** T018 RED 계약. T020에서 멱등 전이·취소·감사를 구현한다. */
 export async function changeLearnerAccess(
-  _request: ChangeLearnerAccessRequest,
-  _dependencies: ChangeLearnerAccessDependencies,
+  request: ChangeLearnerAccessRequest,
+  dependencies: ChangeLearnerAccessDependencies,
 ): Promise<ChangeLearnerAccessResult> {
-  void _request;
-  void _dependencies;
-  throw new Error("T018 learner access contract is not implemented");
+  const reason = request.reason.trim();
+  if (!reason) throw new Error("차단·해제 사유를 입력해야 합니다.");
+
+  const previousState = await dependencies.loadState(request.learnerId);
+  const changed = previousState !== request.nextState;
+  let cancelledWorkCount = 0;
+
+  if (changed) {
+    await dependencies.persistState({
+      learnerId: request.learnerId,
+      nextState: request.nextState,
+      actorId: request.actorId,
+      reason,
+      changedAt: request.now,
+    });
+    if (request.nextState === "suspended") {
+      try {
+        cancelledWorkCount = await dependencies.cancelActiveWork(request.learnerId);
+      } finally {
+        await dependencies.audit({
+          actorId: request.actorId,
+          learnerId: request.learnerId,
+          reason,
+          occurredAt: request.now,
+          previousState,
+          nextState: request.nextState,
+        });
+      }
+    } else {
+      await dependencies.audit({
+        actorId: request.actorId,
+        learnerId: request.learnerId,
+        reason,
+        occurredAt: request.now,
+        previousState,
+        nextState: request.nextState,
+      });
+    }
+  } else {
+    await dependencies.audit({
+      actorId: request.actorId,
+      learnerId: request.learnerId,
+      reason,
+      occurredAt: request.now,
+      previousState,
+      nextState: request.nextState,
+    });
+  }
+
+  return {
+    previousState,
+    nextState: request.nextState,
+    changed,
+    cancelledWorkCount,
+  };
 }

@@ -96,18 +96,37 @@ export async function setSuspended(
   suspended: boolean,
   reason: string | null = null,
   now: Date = new Date(),
+  actorId: string | null = null,
 ): Promise<void> {
   const { error } = await admin
     .from("profiles")
     .update({
       suspended_at: suspended ? now.toISOString() : null,
       suspended_reason: suspended ? reason : null,
+      is_active: !suspended,
+      suspended_by: suspended ? actorId : null,
+      access_state_changed_at: now.toISOString(),
     })
     .eq("id", userId)
     .select("id")
     .single();
 
   if (error) throw new Error(`${suspended ? "정지" : "정지 해제"} 실패: ${error.message}`);
+}
+
+export async function getLearnerAccessState(
+  admin: SupabaseClient,
+  userId: string,
+): Promise<"active" | "suspended"> {
+  const { data, error } = await admin
+    .from("profiles")
+    .select("is_active, suspended_at")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error) throw new Error(`수강생 상태 조회 실패: ${error.message}`);
+  if (!data) throw new Error("수강생을 찾을 수 없습니다.");
+  return data.is_active && !data.suspended_at ? "active" : "suspended";
 }
 
 /**

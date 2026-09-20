@@ -74,6 +74,26 @@ describe("[P8-7a] recordAdminAction", () => {
     expect(inserted[0]).toMatchObject({ action: "developer:read", succeeded: true });
   });
 
+  it("차단·해제 사유와 이전·이후 상태를 독립 컬럼에 남긴다", async () => {
+    const { client, inserted } = fakeAdmin();
+
+    await recordAdminAction(client, {
+      actorId: "admin-1",
+      action: "developer:unsuspend",
+      targetType: "profile",
+      targetId: "user-9",
+      reason: "재검토 완료",
+      previousState: { state: "suspended" },
+      nextState: { state: "active" },
+    });
+
+    expect(inserted[0]).toMatchObject({
+      reason: "재검토 완료",
+      previous_state: { state: "suspended" },
+      next_state: { state: "active" },
+    });
+  });
+
   it("거부된 시도도 남긴다", async () => {
     const { client, inserted } = fakeAdmin();
 

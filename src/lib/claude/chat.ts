@@ -42,6 +42,7 @@ export interface CreateChatStreamOptions {
   model?: string;
   maxTokens?: number;
   fetchImpl?: typeof fetch;
+  signal?: AbortSignal;
 }
 
 export const DEFAULT_MODEL = "claude-sonnet-5";
@@ -57,6 +58,7 @@ export async function createChatStream({
   model = DEFAULT_MODEL,
   maxTokens = DEFAULT_MAX_TOKENS,
   fetchImpl = fetch,
+  signal,
 }: CreateChatStreamOptions): Promise<ReadableStream<Uint8Array>> {
   const res = await fetchImpl(ANTHROPIC_MESSAGES_URL, {
     method: "POST",
@@ -72,6 +74,7 @@ export async function createChatStream({
       ...(system ? { system } : {}),
       messages,
     }),
+    signal,
   });
 
   if (!res.ok || !res.body) {
