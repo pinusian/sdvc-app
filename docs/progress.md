@@ -80,6 +80,7 @@
 - T028에서 문서 내용 SHA-256, 중복 최신 버전 억제, 계획/작업 승인 무효화, 최신 버전 승인과 승인 기반 단계 전이를 구현했다. 서버 전용 Supabase 저장소와 `0014_document_workflow.sql`을 `AI-VC` Free 시험 DB에 적용하고 세 테이블의 RLS·클라이언트 DML 차단을 확인했다.
 - Vercel `SDVC/sdvc-app`의 Preview 환경에 `OPENAI_CREDENTIAL_ENCRYPTION_KEY`(무작위 32바이트)와 `OPENAI_CREDENTIAL_ENCRYPTION_KEY_VERSION=v1`을 Secret 변수로 저장했다. 첫 생성 후보는 자동화 출력에 노출되어 저장하지 않고 폐기했으며, 최종 저장값은 별도로 다시 생성해 노출하지 않았다.
 - 최신 커밋 `b65aef4`를 새 Preview deployment `3GwDxJeTFRbvZiEL3tEUTj4gDow6`로 재배포했다. 40초 만에 `Ready`가 됐고 `https://sdvc-9c7egndyb-sdvc.vercel.app/`의 루트가 `/login`으로 이동했다. Production 환경은 변경하지 않았다.
+- T029 Analyze에서 문서 테이블은 `projects.id`를 필수 참조하지만 기존 프로젝트 생성은 구현 파일 발행 시점이라는 수명주기 충돌을 발견했다. 사용자 승인에 따라 첫 실제 대화에서 한도를 확인해 `draft` 프로젝트를 생성·연결하고, 문서 저장 성공 뒤에만 게이트를 노출하는 방식으로 Plan·Tasks를 보완했다.
 
 ## 3. 검증 증거
 실행 명령: git ls-remote https://github.com/pinusian/sdvc-app.git HEAD
