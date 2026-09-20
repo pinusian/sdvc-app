@@ -13,6 +13,7 @@ const loginDeveloper = vi.fn();
 const signUpDeveloper = vi.fn();
 const ensureAdminRole = vi.fn();
 const ensureProfile = vi.fn();
+const requestPasswordReset = vi.fn();
 
 vi.mock("next/headers", () => ({
   headers: async () => new Map([["host", "sdvc-app.vercel.app"]]),
@@ -43,6 +44,10 @@ vi.mock("@/lib/auth/admin", () => ({
 
 vi.mock("@/lib/auth/profile", () => ({
   ensureProfile: (...a: unknown[]) => ensureProfile(...a),
+}));
+
+vi.mock("@/lib/auth/reset", () => ({
+  requestPasswordReset: (...a: unknown[]) => requestPasswordReset(...a),
 }));
 
 function form(email: string, password = "TestPass123!") {
@@ -212,5 +217,51 @@ describe("[BL-016] loginAction — 프로필 자가 복구", () => {
       "user-1",
       "student@example.com",
     );
+  });
+});
+
+/**
+ * [BL-030] requestPasswordResetAction — 개발자·시스템관리자 비밀번호 찾기.
+ * 이 두 계정은 하나의 Supabase Auth 계정을 공유하므로 액션도 하나다.
+ */
+describe("[BL-030] requestPasswordResetAction", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    requestPasswordReset.mockResolvedValue({ success: true });
+  });
+
+  function emailForm(email: string) {
+    const data = new FormData();
+    data.append("email", email);
+    return data;
+  }
+
+  it("요청을 받으면 이 서비스 origin의 /update-password로 리다이렉트할 주소를 넘긴다", async () => {
+    const { requestPasswordResetAction } = await import("@/app/(auth)/actions");
+    await run(() => requestPasswordResetAction({ error: null }, emailForm("dev@example.com")));
+
+    expect(requestPasswordReset).toHaveBeenCalledWith(
+      expect.anything(),
+      "dev@example.com",
+      "https://sdvc-app.vercel.app/update-password",
+    );
+  });
+
+  it("성공하면 확인 화면으로 리다이렉트한다", async () => {
+    const { requestPasswordResetAction } = await import("@/app/(auth)/actions");
+    const where = await run(() =>
+      requestPasswordResetAction({ error: null }, emailForm("dev@example.com")),
+    );
+
+    expect(where).toContain("REDIRECT:/forgot-password?sent=1");
+  });
+
+  it("이메일 형식이 아니면 리다이렉트하지 않고 오류를 그대로 보여준다", async () => {
+    requestPasswordReset.mockResolvedValue({ success: false, error: "올바른 이메일 주소를 입력해주세요." });
+
+    const { requestPasswordResetAction } = await import("@/app/(auth)/actions");
+    const result = await requestPasswordResetAction({ error: null }, emailForm("not-an-email"));
+
+    expect(result).toEqual({ error: "올바른 이메일 주소를 입력해주세요." });
   });
 });
