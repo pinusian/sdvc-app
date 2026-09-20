@@ -1,6 +1,6 @@
 # 진행 상황
 
-> 마지막 업데이트: 2026-09-20 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 5 · 세션 상태: T022 완료, T023 RED 준비
+> 마지막 업데이트: 2026-09-20 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 5 · 세션 상태: T023 RED 완료, T024 GREEN 준비
 
 ## 1. 지금 어디까지 왔나
 - 기존 저장소 복제 및 핵심 소스 읽기 완료.
@@ -67,6 +67,7 @@
 - T021에서 기존 관리자 콘솔에 수강생 이용 상세를 연결하고 화면 용어를 수강생으로 정리했다. 최근 이용, 프로젝트 수, 실행 수·상태, 토큰·원가, 활성·차단 상태를 펼쳐 보고 차단과 해제 모두 사유를 입력한다.
 - T022에서 수강생별 집계가 원천 배열을 반복 검색하지 않도록 프로젝트·실행·사용량을 사용자별 Map으로 한 번만 색인했다. UI도 id별 상세 Map을 메모해 반복 탐색을 제거했다.
 - 사용자 push 후 commit `c50f7ee`의 Vercel `SDVC` Hobby Preview가 24초 만에 `Ready`가 됐다. 비로그인 `/admin`은 URL을 유지한 채 “운영 콘솔”과 “서버 관리자 로그인”만 표시했고 수강생 수·이용 상세는 노출하지 않아 T022를 완료했다.
+- T023에서 수강생 OpenAI 키의 인증 암호화·무작위 nonce·마스킹, 등록·교체·삭제, 공백 키 선차단, 응답·감사·중첩 로그 원문 비노출 계약을 RED 테스트로 고정했다. 기존 방문자용 `SITE_API_KEY_ENCRYPTION_SECRET`과 분리된 버전형 키 재료를 사용하도록 경계를 잡았다.
 
 ## 3. 검증 증거
 실행 명령: git ls-remote https://github.com/pinusian/sdvc-app.git HEAD
@@ -141,6 +142,8 @@
 - T022 push 시도 → 종료 코드 1, Git for Windows `schannel: AcquireCredentialsHandle failed: SEC_E_NO_CREDENTIALS`. 네트워크 권한은 허용됐으나 이 실행 환경에 GitHub 자격 증명이 없어 원격 변경은 발생하지 않았다.
 - 사용자 push 후 Vercel `SDVC` Hobby Preview `aLb23QhkwE6azCV7kwbKk3DWUQk4`가 commit `c50f7ee`로 24초 만에 `Ready`가 됐다. Preview URL은 `https://sdvc-3ambm322k-sdvc.vercel.app/`이다.
 - T022 실제 브라우저 회귀 → 비로그인 상태에서 Preview `/admin`을 직접 열었고 URL은 `/admin`에 유지됐다. “운영 콘솔”과 “서버 관리자 로그인” 제목·로그인 폼이 표시됐으며 “수강생 N명”과 “이용 상세”는 표시되지 않았다.
+- T023 RED 대상 테스트 → 종료 코드 1, `1 file`, `8 failed`, 1.98초. 8건 모두 암호화·마스킹·등록·교체·삭제·로그 정제의 명시적인 미구현 오류에서 실패했다.
+- T023 정적 검사 → `npm run typecheck`와 신규 계약·테스트 파일 대상 lint 종료 코드 0.
 문서 검사: git diff --cached --check에서 오류 출력 없음.
 독립 clone의 저장소 전용 작성자 `홍길동 <hong@example.com>`으로 Phase 1과 T005~T007 커밋을 완료함.
 SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
@@ -192,7 +195,8 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - [x] T021 개발자 대시보드와 수강생 상세·차단·해제 화면을 구현한다.
 - [x] 로컬 커밋 `57187a5`~`c50f7ee`를 `codex/sdvc-openai-codex` 원격 브랜치에 push한다.
 - [x] T022 Vercel `SDVC` Hobby Preview에서 비로그인 `/admin`의 관리자 로그인 표시와 수강생 정보 비노출을 확인한다.
-- [ ] T023 키 등록·교체·삭제·암호화·마스킹·로그 비노출 RED 테스트를 작성한다.
+- [x] T023 키 등록·교체·삭제·암호화·마스킹·로그 비노출 RED 테스트를 작성한다.
+- [ ] T024 키 암호화 저장과 상태 API를 구현해 T023 RED를 GREEN으로 만든다.
 
 ## 5. 막힌 것 / 사용자 결정 대기
 - Plan·Tasks·Analyze 보완 승인은 완료됐다. 외부 리소스 범위도 Supabase `AI-VC` Free와 Vercel `SDVC` Hobby로 승인됐다.
