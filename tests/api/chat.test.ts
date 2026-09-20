@@ -14,6 +14,10 @@ const getConversation = vi.fn();
 const listMessages = vi.fn();
 const appendMessage = vi.fn();
 const setCurrentBlock = vi.fn();
+const setConversationProject = vi.fn();
+const createDraftProject = vi.fn();
+const saveDocumentVersion = vi.fn();
+const createDocumentWorkflowStore = vi.fn();
 const publishArtifact = vi.fn();
 const recordUsage = vi.fn();
 const loadAccountState = vi.fn();
@@ -35,6 +39,20 @@ vi.mock("@/lib/conversations/store", () => ({
   listMessages: (...args: unknown[]) => listMessages(...args),
   appendMessage: (...args: unknown[]) => appendMessage(...args),
   setCurrentBlock: (...args: unknown[]) => setCurrentBlock(...args),
+  setConversationProject: (...args: unknown[]) => setConversationProject(...args),
+}));
+
+vi.mock("@/lib/projects/draft", () => ({
+  createDraftProject: (...args: unknown[]) => createDraftProject(...args),
+}));
+
+vi.mock("@/lib/sdvc/document-state", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/sdvc/document-state")>()),
+  saveDocumentVersion: (...args: unknown[]) => saveDocumentVersion(...args),
+}));
+
+vi.mock("@/lib/sdvc/document-store", () => ({
+  createDocumentWorkflowStore: (...args: unknown[]) => createDocumentWorkflowStore(...args),
 }));
 
 vi.mock("@/lib/artifacts/publish", () => ({
@@ -83,7 +101,13 @@ async function eventsOf(res: Response) {
     .map((line) => JSON.parse(line));
 }
 
-const CONVERSATION = { id: "conv-1", ownerId: "user-1", currentBlock: "clarify" as const };
+const CONVERSATION = {
+  id: "conv-1",
+  ownerId: "user-1",
+  currentBlock: "clarify" as const,
+  title: null,
+  projectId: null,
+};
 
 function happyPath() {
   getUser.mockResolvedValue({ data: { user: { id: "user-1" } }, error: null });
@@ -91,6 +115,22 @@ function happyPath() {
   listMessages.mockResolvedValue([]);
   appendMessage.mockResolvedValue(undefined);
   setCurrentBlock.mockResolvedValue(undefined);
+  setConversationProject.mockResolvedValue(undefined);
+  createDraftProject.mockResolvedValue({
+    id: "proj-draft",
+    ownerId: "user-1",
+    name: "홈페이지 만들고 싶어",
+    slug: "homepage",
+    status: "draft",
+  });
+  createDocumentWorkflowStore.mockReturnValue({ __documentStore: true });
+  saveDocumentVersion.mockImplementation(async (input: Record<string, unknown>) => ({
+    id: `${String(input.kind)}-v1`,
+    ...input,
+    version: 1,
+    contentHash: "hash",
+    createdAt: input.now,
+  }));
   publishArtifact.mockResolvedValue(null);
   recordUsage.mockResolvedValue(undefined);
   // 기본은 체험 기간 안 (앞으로 7일)
@@ -216,6 +256,15 @@ describe("[P3-3] POST /api/chat — 진행대본 프롬프트", () => {
 
     expect(systemOf()).toContain("독서기록 앱");
   });
+
+  it("문서 블록에는 서버가 분리할 구조화 문서 경계를 요구한다", async () => {
+    getConversation.mockResolvedValue({ ...CONVERSATION, currentBlock: "plan" });
+
+    const { POST } = await import("@/app/api/chat/route");
+    await POST(request(VALID));
+
+    expect(systemOf()).toContain("SDVC_DOCUMENT:plan");
+  });
 });
 
 describe("[P3-4] POST /api/chat — 대화 상태 저장", () => {
@@ -291,7 +340,16 @@ describe("[P3-4] POST /api/chat — 대화 상태 저장", () => {
     getConversation.mockResolvedValue({ ...CONVERSATION, currentBlock: "plan" });
     createChatStream.mockResolvedValue(
       streamOf(
-        { type: "text", text: "이 계획대로 진행할까요?\n" },
+        {
+          type: "text",
+          text: [
+            "이 계획대로 진행할까요?",
+            "<!-- SDVC_DOCUMENT:plan -->",
+            "# 계획",
+            "<!-- /SDVC_DOCUMENT -->",
+            "",
+          ].join("\n"),
+        },
         { type: "text", text: "<<SDVC_GATE:" },
         { type: "text", text: "plan>>" },
         { type: "done" },
@@ -308,12 +366,59 @@ describe("[P3-4] POST /api/chat — 대화 상태 저장", () => {
       .join("");
     expect(shown).not.toContain("SDVC_GATE");
     expect(events).toContainEqual({ type: "gate", block: "plan" });
+    expect(saveDocumentVersion).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: "proj-draft", kind: "plan", content: "# 계획" }),
+      expect.anything(),
+    );
 
     expect(appendMessage).toHaveBeenLastCalledWith(expect.anything(), {
       conversationId: "conv-1",
       role: "assistant",
-      content: "이 계획대로 진행할까요?",
+      content: expect.stringContaining("이 계획대로 진행할까요?"),
     });
+  });
+
+  it("문서 저장에 실패하면 오류를 알리고 승인 게이트를 노출하지 않는다", async () => {
+    getConversation.mockResolvedValue({ ...CONVERSATION, currentBlock: "plan" });
+    saveDocumentVersion.mockRejectedValue(new Error("문서 저장 실패"));
+    createChatStream.mockResolvedValue(
+      streamOf(
+        {
+          type: "text",
+          text: [
+            "계획입니다.",
+            "<!-- SDVC_DOCUMENT:plan -->",
+            "# 계획",
+            "<!-- /SDVC_DOCUMENT -->",
+            "<<SDVC_GATE:plan>>",
+          ].join("\n"),
+        },
+        { type: "done" },
+      ),
+    );
+
+    const { POST } = await import("@/app/api/chat/route");
+    const events = await eventsOf(await POST(request(VALID)));
+
+    expect(events.some((event) => event.type === "gate")).toBe(false);
+    expect(events).toContainEqual({ type: "error", message: "구조화 문서를 저장하지 못했습니다." });
+  });
+
+  it("첫 실제 대화에서 draft 프로젝트를 만들고 대화에 연결한다", async () => {
+    const { POST } = await import("@/app/api/chat/route");
+    const response = await POST(request(VALID));
+    await response.text();
+
+    expect(createDraftProject).toHaveBeenCalledWith(expect.anything(), {
+      ownerId: "user-1",
+      name: "홈페이지 만들고 싶어",
+    });
+    expect(setConversationProject).toHaveBeenCalledWith(
+      expect.anything(),
+      "conv-1",
+      "user-1",
+      "proj-draft",
+    );
   });
 
   it("승인하면 다음 블록으로 옮기고 그 블록의 대본으로 진행한다", async () => {
@@ -697,7 +802,7 @@ describe("[BL-014] 프로젝트 개수 한도", () => {
     expect(createChatStream).toHaveBeenCalled();
   });
 
-  it("구현 단계가 아니면(계획·작업분해 등) 한도를 다 썼어도 막지 않는다 — 아직 프로젝트를 만들지 않는다", async () => {
+  it("첫 문서 단계에서도 한도를 다 썼으면 프로젝트 생성 전에 막는다", async () => {
     getConversation.mockResolvedValue({ ...CONVERSATION, currentBlock: "tasks" });
     loadAccountState.mockResolvedValue({
       grade: "trial",
@@ -710,8 +815,9 @@ describe("[BL-014] 프로젝트 개수 한도", () => {
     const { POST } = await import("@/app/api/chat/route");
     const res = await POST(request(VALID));
 
-    expect(res.status).toBe(200);
-    expect(createChatStream).toHaveBeenCalled();
+    expect(res.status).toBe(402);
+    expect(createChatStream).not.toHaveBeenCalled();
+    expect(createDraftProject).not.toHaveBeenCalled();
   });
 
   it("한도 안이면 그대로 진행한다", async () => {
