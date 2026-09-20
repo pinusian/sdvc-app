@@ -1,6 +1,6 @@
 # 진행 상황
 
-> 마지막 업데이트: 2026-09-20 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 5 · 세션 상태: T024 GREEN 완료, T025 UI 준비
+> 마지막 업데이트: 2026-09-20 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 5 · 세션 상태: T025 로컬 GREEN 완료, Preview 검증 대기
 
 ## 1. 지금 어디까지 왔나
 - 기존 저장소 복제 및 핵심 소스 읽기 완료.
@@ -70,6 +70,8 @@
 - T023에서 수강생 OpenAI 키의 인증 암호화·무작위 nonce·마스킹, 등록·교체·삭제, 공백 키 선차단, 응답·감사·중첩 로그 원문 비노출 계약을 RED 테스트로 고정했다. 기존 방문자용 `SITE_API_KEY_ENCRYPTION_SECRET`과 분리된 버전형 키 재료를 사용하도록 경계를 잡았다.
 - T024에서 AES-256-GCM 인증 암호화, 키 버전, 서버 전용 Supabase 저장소와 `/api/settings/openai-key`의 상태 조회·등록/교체·삭제를 구현했다. 원문은 응답에 없고 오류 문자열도 입력 키로 재정제한다.
 - `AI-VC` Free 시험 DB에 `0013_provider_credentials.sql`을 적용했다. RLS는 켜져 있고 클라이언트 정책은 0개이며 `anon`·`authenticated`의 직접 SELECT 권한은 모두 없다.
+- 사용자 push 후 commit `2883dd9`의 Vercel `SDVC` Hobby Preview가 24초 만에 `Ready`가 됐고 HTTPS 앱이 비로그인 사용자를 수강생 로그인 화면으로 보냈다.
+- T025에서 대시보드에 AI 연결 설정 카드를 연결했다. 키 상태는 마지막 네 글자만 표시하고 등록·교체와 2단계 삭제를 지원하며, OpenAI 직접 과금·SDVC 요금 분리·원문 비노출·서버 오류를 명확히 안내한다.
 
 ## 3. 검증 증거
 실행 명령: git ls-remote https://github.com/pinusian/sdvc-app.git HEAD
@@ -149,6 +151,11 @@
 - T024 대상 회귀 → 자격 수명주기·암호화·마스킹·로그 정제·Route Handler·마이그레이션·휴면 코드 경계 `4 files`, `18 passed`, 3.36초.
 - T024 정적·전체 회귀 → `npm run typecheck`와 관련 파일 lint 종료 코드 0; 전체 `100 files passed`, `967 tests passed`, 108.92초. 의도된 예외 응답 검증 stderr 3건 외 실패 없음.
 - Supabase SQL Editor에서 `0013_provider_credentials.sql` 실행 → `Success. No rows returned`. 검증 결과 `provider_credentials`, `rls_enabled=true`, `policy_count=0`, `anon_can_select=false`, `authenticated_can_select=false` 1행을 확인했다.
+- Vercel `SDVC` Hobby Preview 확인 → commit `2883dd9`, deployment `BfUf9swL7eCBjL4mnbv2W6heBrEJ`, `Ready`, 24초, URL `https://sdvc-oz8h5w123-sdvc.vercel.app/`; 비로그인 접속은 `/login`과 “수강생 로그인” 폼을 표시했다.
+- Preview `/api/settings/openai-key` 직접 탐색은 브라우저 확장 프로그램의 `ERR_BLOCKED_BY_CLIENT`로 중단돼 실제 HTTP 응답 검증으로 인정하지 않았다. 로컬 Route Handler의 비로그인 401 계약 테스트는 통과했다.
+- T025 RED → 컴포넌트 스텁을 대상으로 `1 file`, `5 failed`, 4.44초. 5건 모두 `T025 OpenAI key settings UI is not implemented`에서 의미 있게 실패했다.
+- T025 GREEN 대상 검증 → `1 file`, `5 passed`, 3.61초. 등록 상태·마스킹·등록/교체·오류·2단계 삭제 계약이 통과했다.
+- T025 정적·전체 회귀 → `npm run typecheck`와 관련 파일 lint 종료 코드 0; 전체 `101 files passed`, `972 tests passed`, 107.32초. 의도된 예외 응답 검증 stderr 3건 외 실패 없음.
 문서 검사: git diff --cached --check에서 오류 출력 없음.
 독립 clone의 저장소 전용 작성자 `홍길동 <hong@example.com>`으로 Phase 1과 T005~T007 커밋을 완료함.
 SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
@@ -202,7 +209,7 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - [x] T022 Vercel `SDVC` Hobby Preview에서 비로그인 `/admin`의 관리자 로그인 표시와 수강생 정보 비노출을 확인한다.
 - [x] T023 키 등록·교체·삭제·암호화·마스킹·로그 비노출 RED 테스트를 작성한다.
 - [x] T024 키 암호화 저장과 상태 API를 구현해 T023 RED를 GREEN으로 만들고 `AI-VC` 시험 DB에 서버 전용 테이블을 적용한다.
-- [ ] T025 키 설정 화면과 오류·비용 안내를 구현한다.
+- [ ] T025 로컬 UI 커밋을 push하고 인증 수강생의 키 설정 화면·API 연동을 새 Vercel Preview에서 검증한다.
 
 ## 5. 막힌 것 / 사용자 결정 대기
 - Plan·Tasks·Analyze 보완 승인은 완료됐다. 외부 리소스 범위도 Supabase `AI-VC` Free와 Vercel `SDVC` Hobby로 승인됐다.
@@ -213,6 +220,7 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - Sandbox 격리 실행·증거 수집의 주입형 제어 계약은 검증했다. 실제 Vercel Sandbox 연결과 Workflow 배선은 T034 전까지 미검증이다.
 - API 비밀키는 채팅으로 받거나 파일에 임의로 채우지 않는다.
 - 현재 실행 환경의 GitHub 자격 증명은 없지만 사용자의 인증된 터미널 push와 Vercel Preview 확인으로 T022 원격 검증을 완료했다.
+- Vercel Preview에는 `OPENAI_CREDENTIAL_ENCRYPTION_KEY`와 버전 변수가 아직 확인되지 않았다. 실제 키 저장 검증 전에는 사용자가 직접 설정하거나, Vercel `SDVC` 프로젝트에 생성한 암호화 비밀을 저장하도록 구체적으로 승인해야 한다. 실제 OpenAI API 키는 이 설정과 별개이며 AI에게 전달하지 않는다.
 
 ## 6. 알아둘 함정
 - 상위 AI_Code_Study/docs/progress.md는 독서활동 프로젝트 기록이며 이번 프로젝트 기록이 아니다.

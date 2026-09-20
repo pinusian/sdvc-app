@@ -11,6 +11,7 @@ import { loadAccountState } from "@/lib/billing/account";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { canOpenAdminConsole } from "@/lib/admin/entry";
 import type { AdminTier } from "@/lib/admin/access";
+import { OpenAIKeySettings } from "@/components/settings/OpenAIKeySettings";
 
 const GRADE_LABEL: Record<string, string> = {
   trial: "체험",
@@ -96,6 +97,8 @@ export default async function DashboardPage({
         )}
 
         <ProjectList projects={projectsWithConversation} />
+
+        <OpenAIKeySettings />
 
         {/*
           [P7-1c] 이용 상태는 **목록 아래**에 둔다 (FR-033).
