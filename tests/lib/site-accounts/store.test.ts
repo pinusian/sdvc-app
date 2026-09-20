@@ -5,6 +5,7 @@ import {
   suspendSiteUser,
   unsuspendSiteUser,
   setSiteUserPasswordHash,
+  getSiteUserPasswordHash,
   setSiteUserApiKey,
   getSiteUserApiKey,
   createSiteRecord,
@@ -143,6 +144,26 @@ describe("[BL-031] setSiteUserPasswordHash — 개발자가 대신 재설정", (
     const updateCalls = (calls.update ?? []) as unknown[];
     const payload = updateCalls[0] as Record<string, unknown>;
     expect(payload.password_hash).toBe("salt:hash");
+    expect(calls.eq).toContainEqual(["id", "su-1"]);
+  });
+});
+
+/**
+ * [BL-032] 방문자 본인이 로그인한 뒤 스스로 비밀번호를 바꾼다 — [BL-031]에서
+ * 의도적으로 범위 밖에 뒀던 것. 개발자가 준 임시 비밀번호가 사실상
+ * 영구 비밀번호가 되는 문제를 이걸로 닫는다. 현재 비밀번호 확인에 쓴다.
+ */
+describe("[BL-032] getSiteUserPasswordHash — 현재 비밀번호 확인용", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("id로 저장된 해시를 그대로 돌려준다", async () => {
+    const { client, calls } = fakeSupabase({
+      data: { password_hash: "salt:hash" },
+      error: null,
+    });
+    const hash = await getSiteUserPasswordHash(client, "su-1");
+
+    expect(hash).toBe("salt:hash");
     expect(calls.eq).toContainEqual(["id", "su-1"]);
   });
 });

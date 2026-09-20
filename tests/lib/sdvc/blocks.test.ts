@@ -350,3 +350,22 @@ describe("[BL-027] 로그아웃 API 안내", () => {
     expect(getBlock("maintenance").instruction).toContain("auth/logout");
   });
 });
+
+/**
+ * [BL-032] 비밀번호 변경 API 안내 — [BL-031]에서 개발자가 대신 재설정한
+ * 임시 비밀번호를, 로그인한 사용자 본인이 스스로 바꿀 수 있어야 한다.
+ * 안 그러면 임시 비밀번호가 사실상 영구 비밀번호가 된다.
+ */
+describe("[BL-032] 비밀번호 변경 API 안내", () => {
+  it("구현 지시문에 비밀번호 변경 경로가 담긴다", () => {
+    expect(getBlock("implement").instruction).toContain("auth/change-password");
+  });
+
+  it("유지보수 지시문에도 담긴다", () => {
+    expect(getBlock("maintenance").instruction).toContain("auth/change-password");
+  });
+
+  it("개발자가 대신 재설정해준 임시 비밀번호를 바꾸는 용도임을 설명한다", () => {
+    expect(getBlock("implement").instruction).toContain("임시 비밀번호");
+  });
+});
