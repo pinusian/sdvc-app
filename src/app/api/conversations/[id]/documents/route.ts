@@ -5,8 +5,7 @@ import { getConversation } from "@/lib/conversations/store";
 import { getProjectById } from "@/lib/projects/store";
 import { createDocumentWorkflowStore } from "@/lib/sdvc/document-store";
 import {
-  advanceDocumentStage,
-  approveDocumentVersion,
+  approveDocumentAndAdvance,
   getDocumentWorkflowView,
 } from "@/lib/sdvc/document-state";
 
@@ -82,7 +81,7 @@ export async function POST(
   }
 
   try {
-    await approveDocumentVersion(
+    const transition = await approveDocumentAndAdvance(
       {
         projectId: owned.project.id,
         kind: kind as ApprovalKind,
@@ -92,12 +91,12 @@ export async function POST(
       },
       owned.store,
     );
-    const currentStage = await advanceDocumentStage(
-      { projectId: owned.project.id, expectedStage: kind },
-      owned.store,
-    );
     const view = await getDocumentWorkflowView(owned.project.id, owned.store);
-    return NextResponse.json({ ...view, currentStage });
+    return NextResponse.json({
+      ...view,
+      currentStage: transition.currentStage,
+      approvalCreated: transition.created,
+    });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "문서를 승인하지 못했습니다." },

@@ -77,33 +77,31 @@ export const createDocumentWorkflowStore = (
     assertNoError(error);
   },
 
-  async getApproval({ projectId, kind, versionId }) {
+  async approveAndAdvance(input) {
     const { data, error } = await client
-      .from("document_approvals")
-      .select("id, project_id, kind, version_id, approved_by, approved_at")
-      .eq("project_id", projectId)
-      .eq("kind", kind)
-      .eq("version_id", versionId)
-      .is("invalidated_at", null)
-      .maybeSingle();
-    assertNoError(error);
-    return data ? toApproval(data as Record<string, unknown>) : null;
-  },
-
-  async insertApproval(input) {
-    const { data, error } = await client
-      .from("document_approvals")
-      .insert({
-        project_id: input.projectId,
-        kind: input.kind,
-        version_id: input.versionId,
-        approved_by: input.approvedBy,
-        approved_at: input.approvedAt,
+      .rpc("approve_document_and_advance", {
+        p_project_id: input.projectId,
+        p_kind: input.kind,
+        p_version_id: input.versionId,
+        p_approved_by: input.approvedBy,
+        p_approved_at: input.now,
       })
-      .select("id, project_id, kind, version_id, approved_by, approved_at")
       .single();
     assertNoError(error);
-    return toApproval(data as Record<string, unknown>);
+
+    const row = data as Record<string, unknown>;
+    return {
+      approval: {
+        id: String(row.approval_id),
+        projectId: input.projectId,
+        kind: input.kind,
+        versionId: input.versionId,
+        approvedBy: String(row.approved_by),
+        approvedAt: String(row.approved_at),
+      },
+      currentStage: row.current_stage as SdvcStage,
+      created: Boolean(row.created),
+    };
   },
 
   async getCurrentStage(projectId) {

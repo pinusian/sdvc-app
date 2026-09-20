@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  advanceDocumentStage,
-  approveDocumentVersion,
+  approveDocumentAndAdvance,
   hashDocumentContent,
   saveDocumentVersion,
   type DocumentVersion,
@@ -24,8 +23,11 @@ function dependencies(): DocumentWorkflowDependencies {
     getLatestVersion: vi.fn().mockResolvedValue(null),
     insertVersion: vi.fn(async (input) => ({ id: `${input.kind}-v${input.version}`, ...input })),
     invalidateApprovals: vi.fn().mockResolvedValue(undefined),
-    getApproval: vi.fn().mockResolvedValue(null),
-    insertApproval: vi.fn(async (input) => ({ id: "approval-1", ...input })),
+    approveAndAdvance: vi.fn(async (input) => ({
+      approval: { id: "approval-1", ...input, approvedAt: input.now },
+      currentStage: (input.kind === "plan" ? "tasks" : "analyze") as "tasks" | "analyze",
+      created: true,
+    })),
     getCurrentStage: vi.fn().mockResolvedValue("plan"),
     setCurrentStage: vi.fn().mockResolvedValue(undefined),
     listVersions: vi.fn().mockResolvedValue([]),
@@ -96,100 +98,21 @@ describe("[T027] 문서 버전·해시 계약", () => {
   });
 });
 
-describe("[T027] 승인·단계 전이 계약", () => {
-  it("최신 계획 버전을 한 번 승인하면 승인자와 버전을 결부해 저장한다", async () => {
+describe("[T031] 승인·단계 전이 계약", () => {
+  it("승인과 단계 전이를 저장소의 단일 원자 작업에 위임한다", async () => {
     const deps = dependencies();
-    vi.mocked(deps.getLatestVersion).mockResolvedValue(PLAN_V1);
-
-    const approval = await approveDocumentVersion(
-      {
-        projectId: "project-1",
-        kind: "plan",
-        versionId: PLAN_V1.id,
-        approvedBy: "learner-1",
-        now: NOW,
-      },
-      deps,
-    );
-
-    expect(approval).toMatchObject({ versionId: PLAN_V1.id, approvedBy: "learner-1" });
-    expect(deps.insertApproval).toHaveBeenCalledWith(
-      expect.objectContaining({ projectId: "project-1", kind: "plan", versionId: PLAN_V1.id }),
-    );
-  });
-
-  it("최신 버전과 다른 오래된 문서 승인은 거부한다", async () => {
-    const deps = dependencies();
-    vi.mocked(deps.getLatestVersion).mockResolvedValue({ ...PLAN_V1, id: "plan-v2", version: 2 });
-
-    await expect(
-      approveDocumentVersion(
-        {
-          projectId: "project-1",
-          kind: "plan",
-          versionId: "plan-v1",
-          approvedBy: "learner-1",
-          now: NOW,
-        },
-        deps,
-      ),
-    ).rejects.toThrow(/최신|버전/);
-    expect(deps.insertApproval).not.toHaveBeenCalled();
-  });
-
-  it("같은 문서 버전의 중복 승인은 새 기록을 만들지 않고 거부한다", async () => {
-    const deps = dependencies();
-    vi.mocked(deps.getLatestVersion).mockResolvedValue(PLAN_V1);
-    vi.mocked(deps.getApproval).mockResolvedValue({
-      id: "approval-existing",
+    const input = {
       projectId: "project-1",
-      kind: "plan",
+      kind: "plan" as const,
       versionId: PLAN_V1.id,
       approvedBy: "learner-1",
-      approvedAt: NOW,
+      now: NOW,
+    };
+
+    await expect(approveDocumentAndAdvance(input, deps)).resolves.toMatchObject({
+      currentStage: "tasks",
+      created: true,
     });
-
-    await expect(
-      approveDocumentVersion(
-        {
-          projectId: "project-1",
-          kind: "plan",
-          versionId: PLAN_V1.id,
-          approvedBy: "learner-1",
-          now: NOW,
-        },
-        deps,
-      ),
-    ).rejects.toThrow(/이미|승인/);
-    expect(deps.insertApproval).not.toHaveBeenCalled();
-  });
-
-  it("현재 계획 버전의 승인 없이는 작업 단계로 전이하지 않는다", async () => {
-    const deps = dependencies();
-    vi.mocked(deps.getLatestVersion).mockResolvedValue(PLAN_V1);
-    vi.mocked(deps.getApproval).mockResolvedValue(null);
-
-    await expect(
-      advanceDocumentStage({ projectId: "project-1", expectedStage: "plan" }, deps),
-    ).rejects.toThrow(/승인/);
-    expect(deps.setCurrentStage).not.toHaveBeenCalled();
-  });
-
-  it("현재 계획 버전이 승인됐으면 작업 단계로 전이한다", async () => {
-    const deps = dependencies();
-    vi.mocked(deps.getLatestVersion).mockResolvedValue(PLAN_V1);
-    vi.mocked(deps.getApproval).mockResolvedValue({
-      id: "approval-1",
-      projectId: "project-1",
-      kind: "plan",
-      versionId: PLAN_V1.id,
-      approvedBy: "learner-1",
-      approvedAt: NOW,
-    });
-
-    await expect(
-      advanceDocumentStage({ projectId: "project-1", expectedStage: "plan" }, deps),
-    ).resolves.toBe("tasks");
-    expect(deps.setCurrentStage).toHaveBeenCalledWith("project-1", "tasks");
+    expect(deps.approveAndAdvance).toHaveBeenCalledWith(input);
   });
 });

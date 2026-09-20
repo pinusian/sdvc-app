@@ -41,6 +41,12 @@ export interface DocumentApproval {
   approvedAt: string;
 }
 
+export interface DocumentApprovalTransition {
+  approval: DocumentApproval;
+  currentStage: SdvcStage;
+  created: boolean;
+}
+
 export interface DocumentWorkflowDependencies {
   getLatestVersion(projectId: string, kind: DocumentKind): Promise<DocumentVersion | null>;
   insertVersion(input: Omit<DocumentVersion, "id">): Promise<DocumentVersion>;
@@ -49,16 +55,30 @@ export interface DocumentWorkflowDependencies {
     kinds: readonly ("plan" | "tasks")[];
     invalidatedAt: string;
   }): Promise<void>;
-  getApproval(input: {
+  approveAndAdvance(input: {
     projectId: string;
     kind: "plan" | "tasks";
     versionId: string;
-  }): Promise<DocumentApproval | null>;
-  insertApproval(input: Omit<DocumentApproval, "id">): Promise<DocumentApproval>;
+    approvedBy: string;
+    now: string;
+  }): Promise<DocumentApprovalTransition>;
   getCurrentStage(projectId: string): Promise<SdvcStage>;
   setCurrentStage(projectId: string, stage: SdvcStage): Promise<void>;
   listVersions(projectId: string): Promise<DocumentVersion[]>;
   listApprovals(projectId: string): Promise<DocumentApproval[]>;
+}
+
+export async function approveDocumentAndAdvance(
+  input: {
+    projectId: string;
+    kind: "plan" | "tasks";
+    versionId: string;
+    approvedBy: string;
+    now: string;
+  },
+  dependencies: DocumentWorkflowDependencies,
+): Promise<DocumentApprovalTransition> {
+  return dependencies.approveAndAdvance(input);
 }
 
 export interface DocumentWorkflowView {
@@ -143,64 +163,6 @@ export async function saveDocumentVersion(
   }
 
   return saved;
-}
-
-export async function approveDocumentVersion(
-  input: {
-    projectId: string;
-    kind: "plan" | "tasks";
-    versionId: string;
-    approvedBy: string;
-    now: string;
-  },
-  dependencies: DocumentWorkflowDependencies,
-): Promise<DocumentApproval> {
-  const latest = await dependencies.getLatestVersion(input.projectId, input.kind);
-  if (!latest || latest.id !== input.versionId) {
-    throw new Error("최신 문서 버전만 승인할 수 있습니다.");
-  }
-
-  const existing = await dependencies.getApproval({
-    projectId: input.projectId,
-    kind: input.kind,
-    versionId: input.versionId,
-  });
-  if (existing) throw new Error("이미 승인한 문서 버전입니다.");
-
-  return dependencies.insertApproval({
-    projectId: input.projectId,
-    kind: input.kind,
-    versionId: input.versionId,
-    approvedBy: input.approvedBy,
-    approvedAt: input.now,
-  });
-}
-
-export async function advanceDocumentStage(
-  input: { projectId: string; expectedStage: SdvcStage },
-  dependencies: DocumentWorkflowDependencies,
-): Promise<SdvcStage> {
-  const currentStage = await dependencies.getCurrentStage(input.projectId);
-  if (currentStage !== input.expectedStage) {
-    throw new Error("현재 SDVC 단계가 요청과 일치하지 않습니다.");
-  }
-
-  if (currentStage === "plan" || currentStage === "tasks") {
-    const latest = await dependencies.getLatestVersion(input.projectId, currentStage);
-    if (!latest) throw new Error("승인할 최신 문서 버전이 없습니다.");
-    const approval = await dependencies.getApproval({
-      projectId: input.projectId,
-      kind: currentStage,
-      versionId: latest.id,
-    });
-    if (!approval) throw new Error("현재 문서 버전의 승인이 필요합니다.");
-  }
-
-  const nextStage = SDVC_STAGES[stageIndex(currentStage) + 1] ?? currentStage;
-  if (nextStage !== currentStage) {
-    await dependencies.setCurrentStage(input.projectId, nextStage);
-  }
-  return nextStage;
 }
 
 function approvalKindsInvalidatedBy(

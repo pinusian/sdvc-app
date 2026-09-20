@@ -5,8 +5,7 @@ const getConversation = vi.fn();
 const getProjectById = vi.fn();
 const createDocumentWorkflowStore = vi.fn();
 const getDocumentWorkflowView = vi.fn();
-const approveDocumentVersion = vi.fn();
-const advanceDocumentStage = vi.fn();
+const approveDocumentAndAdvance = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({ auth: { getUser } }),
@@ -27,8 +26,7 @@ vi.mock("@/lib/sdvc/document-store", () => ({
 
 vi.mock("@/lib/sdvc/document-state", () => ({
   getDocumentWorkflowView: (...args: unknown[]) => getDocumentWorkflowView(...args),
-  approveDocumentVersion: (...args: unknown[]) => approveDocumentVersion(...args),
-  advanceDocumentStage: (...args: unknown[]) => advanceDocumentStage(...args),
+  approveDocumentAndAdvance: (...args: unknown[]) => approveDocumentAndAdvance(...args),
 }));
 
 const VIEW = {
@@ -79,8 +77,11 @@ describe("[T030] 대화 문서 조회·승인 API", () => {
     getProjectById.mockResolvedValue({ id: "project-1", ownerId: "user-1" });
     createDocumentWorkflowStore.mockReturnValue({ __store: true });
     getDocumentWorkflowView.mockResolvedValue(VIEW);
-    approveDocumentVersion.mockResolvedValue({ id: "approval-1" });
-    advanceDocumentStage.mockResolvedValue("tasks");
+    approveDocumentAndAdvance.mockResolvedValue({
+      approval: { id: "approval-1" },
+      currentStage: "tasks",
+      created: true,
+    });
   });
 
   it("내 대화에 저장된 문서의 모든 버전과 승인 상태를 돌려준다", async () => {
@@ -104,17 +105,13 @@ describe("[T030] 대화 문서 조회·승인 API", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(approveDocumentVersion).toHaveBeenCalledWith(
+    expect(approveDocumentAndAdvance).toHaveBeenCalledWith(
       expect.objectContaining({
         projectId: "project-1",
         kind: "plan",
         versionId: "plan-v2",
         approvedBy: "user-1",
       }),
-      { __store: true },
-    );
-    expect(advanceDocumentStage).toHaveBeenCalledWith(
-      { projectId: "project-1", expectedStage: "plan" },
       { __store: true },
     );
     expect(await response.json()).toMatchObject({ currentStage: "tasks" });
@@ -132,7 +129,30 @@ describe("[T030] 대화 문서 조회·승인 API", () => {
     );
 
     expect(response.status).toBe(409);
-    expect(approveDocumentVersion).not.toHaveBeenCalled();
+    expect(approveDocumentAndAdvance).not.toHaveBeenCalled();
+  });
+
+  it("동시에 처리된 같은 승인은 기존 결과를 성공으로 돌려준다", async () => {
+    approveDocumentAndAdvance.mockResolvedValue({
+      approval: { id: "approval-existing" },
+      currentStage: "tasks",
+      created: false,
+    });
+    const { POST } = await import("@/app/api/conversations/[id]/documents/route");
+    const response = await POST(
+      new Request("http://localhost", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kind: "plan", versionId: "plan-v2" }),
+      }),
+      context(),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      currentStage: "tasks",
+      approvalCreated: false,
+    });
   });
 
   it("프로젝트가 연결되지 않았거나 남의 프로젝트면 문서를 노출하지 않는다", async () => {
