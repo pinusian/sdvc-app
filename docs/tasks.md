@@ -64,11 +64,11 @@
 - [x] T028 문서·승인·단계 전이 DB와 서버 서비스를 구현한다. 완료: SHA-256 불변 버전, 최신 Plan/Tasks 승인, 변경 시 승인 무효화·단계 되돌림, 승인 기반 단계 전이, 서버 전용 RLS 스키마와 저장소를 구현했다. 대상 15개·전체 988개 테스트와 typecheck·lint가 통과했다. `AI-VC` Free 시험 DB에 `0014_document_workflow.sql`을 적용했고 세 테이블 모두 RLS 활성·클라이언트 정책 0개·`anon`/`authenticated` DML 불가를 확인했다. 커밋: `feat: 문서 승인 상태기계 - GREEN server (T028)`
 - [x] T029 대화 어댑터로 헌장·명세·명확화·계획·작업 문서를 생성하고 버전 저장한다. 완료: 첫 실제 대화에서 프로젝트 한도를 확인해 고유 slug의 `draft` 프로젝트를 생성·연결하고, 모델 출력의 블록별 문서 마커를 파싱해 불변 버전으로 저장한다. 필수 문서 누락·저장 실패 시 승인/다음 단계 게이트를 노출하지 않는 fail-closed 경계를 검증했다. 대상 68개·전체 995개 테스트와 typecheck·lint가 통과했다. 커밋: `2f75cba test: SDVC 문서 생성 - RED (T029)`, `ef30706 feat: SDVC 문서 생성 - GREEN ai (T029)`
 - [ ] T030 문서 보기·버전·Plan/Tasks 승인 UI를 구현한다. 로컬 완료: 저장된 최신 문서와 이전 버전을 선택해 확인하고, 최신 Plan/Tasks만 승인하는 API·화면을 연결했다. 승인 API 성공 전에 대화 단계를 옮길 수 없고 `approved:true` 직접 요청도 409로 거부한다. Preview에서 인증 수강생의 저장 Plan 문서·버전 선택기·승인 완료 상태의 재로드 유지까지 확인했다. 남음: 외부 AI 비용이 발생하지 않는 테스트 조건에서 실제 승인 클릭→다음 단계 전환을 확인한다. 커밋: `dc65a61 test: SDVC 승인 화면 - RED (T030)`, `5be841d feat: SDVC 승인 화면 - GREEN ui (T030)`
-- [ ] T031 상태 전이와 동시 승인 처리를 정리하고 회귀검사한다. 로컬 완료: 승인 저장과 단계 전이를 workflow 행 잠금 기반 단일 DB 함수로 합치고 동시 중복 요청을 멱등 처리했다. 대상 15개·전체 1002개 테스트, typecheck, lint가 통과했다. 남음: `0015_atomic_document_approval.sql`을 AI-VC 시험 DB에 적용하고 Preview RPC를 확인한다. 커밋 예정: `refactor: 문서 승인 상태기계 - REFACTOR (T031)`
+- [ ] T031 상태 전이와 동시 승인 처리를 정리하고 회귀검사한다. 로컬 완료: 승인 저장과 단계 전이를 workflow 행 잠금 기반 단일 DB 함수로 합치고 동시 중복 요청을 멱등 처리했다. 대상 15개·전체 1002개 테스트, typecheck, lint가 통과했다. 남음: `0015_atomic_document_approval.sql`을 AI-VC 시험 DB에 적용하고 Preview RPC를 확인한다. 커밋: `4ae776d refactor: 문서 승인 상태기계 - REFACTOR (T031)`
 
 ## Phase 7 — 지속 실행과 TDD 증거 (US-03·05, P1)
 
-- [ ] T032 작업 생성·조회·취소·중복 방지·재접속·차단 중단 RED 테스트를 작성한다. 커밋: `test: 지속 작업 실행 - RED (T032)`
+- [x] T032 작업 생성·조회·취소·중복 방지·재접속·차단 중단 RED 테스트를 작성한다. 완료: 승인 문서 묶음 해시·멱등키 기반 queued 생성, 같은 키 중복 방지, 소유권 기반 조회, 영속 취소, 순서 있는 이벤트 재접속 복원, 차단 사용자 생성·재개 거부의 8개 테스트가 명시적 미구현 오류로 실패했다. 커밋 예정: `test: 지속 작업 실행 - RED (T032)`
 - [ ] T033 runs/run_events/test_evidence 저장과 lease·idempotency 처리를 구현한다. 커밋: `feat: 지속 작업 상태 - GREEN server (T033)`
 - [ ] T034 Workflow와 Sandbox 실행을 연결해 RED→GREEN→REFACTOR 증거를 불변 버전에 결부한다. 커밋: `feat: TDD 작업 실행 - GREEN worker (T034)`
 - [ ] T035 진행·로그·취소·재시도·재접속 화면을 구현한다. 커밋: `feat: 구현 진행 화면 - GREEN ui (T035)`

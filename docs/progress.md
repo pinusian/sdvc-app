@@ -1,6 +1,6 @@
 # 진행 상황
 
-> 마지막 업데이트: 2026-09-21 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 6 · 세션 상태: T031 로컬 GREEN, 0015 시험 DB 적용 대기
+> 마지막 업데이트: 2026-09-21 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 7 · 세션 상태: T032 RED 완료, T033 준비
 
 ## 1. 지금 어디까지 왔나
 - 기존 저장소 복제 및 핵심 소스 읽기 완료.
@@ -86,6 +86,7 @@
 - AI-VC 시험 DB의 누락된 `0011_site_accounts.sql`과 `0005_usage_logs.sql`을 적용한 뒤 신규 가입 수강생의 Preview `/dashboard`가 정상 로드되는 것을 확인했다. `usage_logs`는 RLS 활성·정책 0개 상태다.
 - T030 Preview 무료 검증에서 인증 수강생의 저장된 Plan 문서, 버전 선택기, 승인 완료 상태가 재로드 후에도 표시되는 것을 확인했다. 다음 단계 전환은 외부 AI 호출과 비용 가능성이 있어 무료 범위 조건에 따라 실행하지 않았다.
 - T031에서 승인 행 삽입과 workflow 단계 전이를 `0015_atomic_document_approval.sql`의 단일 트랜잭션/RPC로 합쳤다. workflow 행 잠금, 최신 버전 재검사, 동시 중복 요청의 기존 승인 재사용, 브라우저 역할 실행 차단을 구현했고 기존 분리 함수는 제거했다.
+- T032에서 승인 문서 묶음 해시·멱등키 기반 작업 생성, 소유권 조회, 영속 취소, 이벤트 순서 복원, 재접속, 차단·비활성 수강생의 생성/재개 거부 계약을 RED 테스트로 고정했다.
 
 ## 3. 검증 증거
 실행 명령: git ls-remote https://github.com/pinusian/sdvc-app.git HEAD
@@ -192,6 +193,7 @@
 - T031 최초 전체 회귀 → 새 원자 경로는 통과했지만 대체된 분리 승인 함수 2개를 휴면 코드 검사가 탐지해 `107 files passed / 1 failed`, `1005 passed / 1 failed`.
 - T031 정리 후 대상 회귀 → 승인 API·원자 migration·상태기계·휴면 검사 `4 files`, `15 tests passed`; typecheck·lint 종료 코드 0.
 - T031 최종 전체 회귀 → `108 files passed`, `1002 tests passed`, 176.31초. 의도된 예외 응답 검증 stderr 3건 외 실패 없음.
+- T032 RED → `1 file`, `8 tests failed`, 3.26초. 모든 테스트가 수집·실행됐고 실패 원인은 `T032 지속 작업 실행 계약이 아직 구현되지 않았습니다.`라는 명시적 미구현 경계였다.
 문서 검사: git diff --cached --check에서 오류 출력 없음.
 독립 clone의 저장소 전용 작성자 `홍길동 <hong@example.com>`으로 Phase 1과 T005~T007 커밋을 완료함.
 SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
@@ -252,6 +254,8 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - [x] T029 첫 대화 draft 프로젝트 생성·연결, 구조화 문서 버전 저장, 저장 성공 후 승인 게이트 노출을 구현하고 전체 회귀를 통과한다.
 - [ ] T030 Preview에서 저장 문서·버전 선택기·승인 완료 상태는 확인했다. 비용 없는 테스트 계정/경로가 준비되면 실제 승인 클릭→다음 단계 전환을 확인한다.
 - [ ] T031 로컬 원자 승인 전이와 회귀검사는 완료했다. `0015_atomic_document_approval.sql`을 AI-VC 시험 DB에 적용하고 새 Preview에서 RPC 경로를 확인한다.
+- [x] T032 작업 생성·조회·취소·중복 방지·재접속·차단 중단 RED 계약을 작성하고 8개 의미 있는 실패를 확인한다.
+- [ ] T033 runs/run_events/test_evidence 저장과 lease·idempotency 처리를 구현한다.
 
 ## 5. 막힌 것 / 사용자 결정 대기
 - Plan·Tasks·Analyze 보완 승인은 완료됐다. 외부 리소스 범위도 Supabase `AI-VC` Free와 Vercel `SDVC` Hobby로 승인됐다.
