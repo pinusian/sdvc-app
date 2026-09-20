@@ -91,5 +91,16 @@ test.describe("[P2-9] 슬라이스 1 — 로그인·인증", () => {
   test("로그인하지 않으면 대시보드 대신 로그인 화면으로 보낸다", async ({ page }) => {
     await page.goto("/dashboard");
     await expect(page).toHaveURL(/\/login/);
+    await expect(page.getByRole("heading", { name: "수강생 로그인" })).toBeVisible();
+  });
+
+  test("로그인하지 않으면 대화와 계정 제한 화면도 로그인 화면으로 보낸다", async ({
+    page,
+  }) => {
+    for (const path of ["/conversations/not-a-real-id", "/account-restricted"]) {
+      await page.goto(path);
+      await expect(page).toHaveURL(/\/login/);
+      await expect(page.getByRole("heading", { name: "수강생 로그인" })).toBeVisible();
+    }
   });
 });

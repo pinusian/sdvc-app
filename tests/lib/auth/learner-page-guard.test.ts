@@ -29,6 +29,8 @@ describe("[T016] 수강생 보호 페이지 공통 가드", () => {
   it("비로그인 사용자를 로그인 화면으로 보낸다", async () => {
     requireLearnerAccess.mockResolvedValue({
       ok: false,
+      status: 401,
+      code: "unauthenticated",
       response: new Response(null, { status: 401 }),
     });
     const { requireLearnerPageAccess } = await import("@/lib/auth/learner-page-guard");
@@ -40,6 +42,8 @@ describe("[T016] 수강생 보호 페이지 공통 가드", () => {
   it("정지·비활성 수강생을 전용 안내 화면으로 보낸다", async () => {
     requireLearnerAccess.mockResolvedValue({
       ok: false,
+      status: 403,
+      code: "account_suspended",
       response: new Response(null, { status: 403 }),
     });
     const { requireLearnerPageAccess } = await import("@/lib/auth/learner-page-guard");
@@ -66,7 +70,16 @@ describe("[T016] 보호 화면 배선", () => {
       resolve(process.cwd(), "src/app/(auth)/account-restricted/page.tsx"),
       "utf8",
     );
-    expect(source).toContain('.eq("id", user.id)');
+    expect(source).toContain("loadLearnerProfile(user.id)");
     expect(source).not.toContain("searchParams");
+  });
+
+  it("공통 프로필 로더가 전달받은 사용자 id로만 최신 상태를 조회한다", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "src/lib/auth/learner-profile.ts"),
+      "utf8",
+    );
+    expect(source).toContain('.eq("id", userId)');
+    expect(source).toContain("suspendedReason: row.suspended_reason");
   });
 });

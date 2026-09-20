@@ -13,7 +13,7 @@ export async function requireLearnerPageAccess(): Promise<User> {
   const access = await requireLearnerAccess();
   if (access.ok) return access.user;
 
-  if (access.response.status === 401) {
+  if (access.code === "unauthenticated") {
     redirect("/login");
   }
 
