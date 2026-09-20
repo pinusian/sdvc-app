@@ -197,6 +197,22 @@ export async function setSiteUserPasswordHash(
 }
 
 /**
+ * [BL-032] 방문자 본인이 로그인한 뒤 스스로 비밀번호를 바꿀 때, 현재
+ * 비밀번호가 맞는지 먼저 확인하는 데 쓴다([BL-031]에서 개발자가 준
+ * 임시 비밀번호가 영구 비밀번호가 되지 않도록 이걸로 닫는다).
+ */
+export async function getSiteUserPasswordHash(client: Client, siteUserId: string): Promise<string | null> {
+  const { data, error } = await client
+    .from("site_users")
+    .select("password_hash")
+    .eq("id", siteUserId)
+    .single();
+
+  assertNoError(error, "비밀번호 확인");
+  return (data as { password_hash: string | null } | null)?.password_hash ?? null;
+}
+
+/**
  * [P11-4] 사용자 본인의 Anthropic API 키를 암호화해서 저장한다.
  * 원문은 이 함수를 지나가는 순간부터 어디에도 남지 않는다.
  */
