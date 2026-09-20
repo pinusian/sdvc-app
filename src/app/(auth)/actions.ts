@@ -7,6 +7,7 @@ import { signUpDeveloper } from "@/lib/auth/signup";
 import { loginDeveloper } from "@/lib/auth/login";
 import { ensureAdminRole } from "@/lib/auth/admin";
 import { ensureProfile } from "@/lib/auth/profile";
+import { requestPasswordReset } from "@/lib/auth/reset";
 import { landingAfterAdminLogin, loadAdminActor } from "@/lib/admin/entry";
 
 export type AuthActionState = { error: string | null };
@@ -52,6 +53,28 @@ export async function loginAction(
   await healAccount(supabase);
 
   redirect("/dashboard");
+}
+
+/**
+ * [BL-030] 비밀번호 찾기 요청 — 개발자·시스템관리자 공용(같은 Supabase Auth
+ * 계정이라 화면도 하나다). 계정이 있든 없든 같은 화면으로 보낸다 —
+ * `requestPasswordReset` 자체가 계정 존재 여부를 밝히지 않는다.
+ */
+export async function requestPasswordResetAction(
+  _prevState: AuthActionState,
+  formData: FormData,
+): Promise<AuthActionState> {
+  const email = String(formData.get("email") ?? "").trim();
+
+  const supabase = await createClient();
+  const origin = await siteOrigin();
+
+  const result = await requestPasswordReset(supabase, email, `${origin}/update-password`);
+  if (!result.success) {
+    return { error: result.error };
+  }
+
+  redirect("/forgot-password?sent=1");
 }
 
 /**

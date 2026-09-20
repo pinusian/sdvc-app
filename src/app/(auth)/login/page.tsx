@@ -26,6 +26,13 @@ export default function LoginPage() {
           autoComplete="current-password"
         />
 
+        <Link
+          href="/forgot-password"
+          className="-mt-2 self-end text-sm text-accent-ink hover:underline"
+        >
+          비밀번호를 잊으셨나요?
+        </Link>
+
         {state.error && (
           <p className="rounded-sm bg-danger-soft px-3.5 py-2.5 text-sm text-danger">
             {state.error}
