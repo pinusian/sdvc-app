@@ -79,6 +79,21 @@ describe("[P8-2] /api/admin/developers", () => {
     expect(listDevelopers).not.toHaveBeenCalled();
   });
 
+  it("일반 수강생은 차단 API도 404로 거부된다", async () => {
+    maybeSingle.mockResolvedValue({
+      data: { role: "developer", admin_tier: null, suspended_at: null },
+      error: null,
+    });
+
+    const { POST } = await import("@/app/api/admin/developers/route");
+    const res = await POST(
+      post({ userId: "learner-2", action: "suspend", reason: "정책 위반" }),
+    );
+
+    expect(res.status).toBe(404);
+    expect(setSuspended).not.toHaveBeenCalled();
+  });
+
   it("목록을 보는 것도 감사 로그에 남는다", async () => {
     const { GET } = await import("@/app/api/admin/developers/route");
     const res = await GET(get());
@@ -108,6 +123,15 @@ describe("[P8-2] /api/admin/developers", () => {
         detail: expect.objectContaining({ suspended: true, reason: "불법 콘텐츠" }),
       }),
     );
+  });
+
+  it.each(["suspend", "unsuspend"])("%s는 공백이 아닌 사유가 필수다", async (action) => {
+    const { POST } = await import("@/app/api/admin/developers/route");
+    const res = await POST(post({ userId: "user-9", action, reason: "   " }));
+
+    expect(res.status).toBe(400);
+    expect(setSuspended).not.toHaveBeenCalled();
+    expect(recordAdminAction).not.toHaveBeenCalled();
   });
 
   it("지원 등급은 정지할 수 없고, **거부된 시도도** 로그에 남는다", async () => {
