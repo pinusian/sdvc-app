@@ -177,6 +177,26 @@ export async function unsuspendSiteUser(client: Client, siteUserId: string): Pro
 }
 
 /**
+ * [BL-031] 개발자가 방문자 대신 비밀번호를 재설정한다. 방문자 계정은
+ * 이메일 발송 수단이 없어 본인이 직접 "비밀번호 찾기"를 할 수 없다
+ * ([BL-030]은 Supabase Auth 계정용 — 여기는 완전히 별도 표다).
+ * 해시는 호출부(라우트)가 만들어서 넘긴다 — 여기는 저장만 한다.
+ */
+export async function setSiteUserPasswordHash(
+  client: Client,
+  { siteUserId, passwordHash }: { siteUserId: string; passwordHash: string },
+): Promise<void> {
+  const { error } = await client
+    .from("site_users")
+    .update({ password_hash: passwordHash })
+    .eq("id", siteUserId)
+    .select("id")
+    .single();
+
+  assertNoError(error, "비밀번호 재설정");
+}
+
+/**
  * [P11-4] 사용자 본인의 Anthropic API 키를 암호화해서 저장한다.
  * 원문은 이 함수를 지나가는 순간부터 어디에도 남지 않는다.
  */

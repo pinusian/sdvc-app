@@ -86,6 +86,11 @@ export function ProjectList({ projects }: { projects: ListItem[] }) {
     records: SiteRecordItem[] | null;
   } | null>(null);
   const [siteUserBusy, setSiteUserBusy] = useState<string | null>(null);
+  /** [BL-031] 방금 재설정한 임시 비밀번호 — 응답에만 담겨 오므로 한 번만 보여주고 다시 볼 수 없다 */
+  const [resetPasswordResult, setResetPasswordResult] = useState<{
+    siteUserId: string;
+    tempPassword: string;
+  } | null>(null);
 
   /**
    * [P5-3] 공개범위 변경 (FR-007).
@@ -237,6 +242,7 @@ export function ProjectList({ projects }: { projects: ListItem[] }) {
     setError(null);
     setViewingRecords(null);
     setSuspending(null);
+    setResetPasswordResult(null);
     setSiteUsers({ projectId: id, users: null });
     try {
       const res = await fetch(`/api/projects/${id}/site-users`);
@@ -282,6 +288,30 @@ export function ProjectList({ projects }: { projects: ListItem[] }) {
       setSuspending(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "처리하지 못했습니다.");
+    } finally {
+      setSiteUserBusy(null);
+    }
+  }
+
+  /**
+   * [BL-031] 방문자 대신 비밀번호를 재설정한다. 방문자 계정은 이메일 발송
+   * 수단이 없어 본인이 직접 "비밀번호 찾기"를 할 수 없다 — 서버가 만든
+   * 임시 비밀번호를 개발자가 이 서비스 밖의 방법(이메일·문자 등)으로
+   * 본인에게 직접 전달해야 한다. 응답에만 담겨 오고 다시 볼 수 없다.
+   */
+  async function resetSiteUserPassword(projectId: string, siteUserId: string) {
+    setSiteUserBusy(siteUserId);
+    setError(null);
+    setResetPasswordResult(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/site-users/${siteUserId}/reset-password`, {
+        method: "POST",
+      });
+      const data = (await res.json()) as { tempPassword?: string; error?: string };
+      if (!res.ok || !data.tempPassword) throw new Error(data.error ?? "재설정하지 못했습니다.");
+      setResetPasswordResult({ siteUserId, tempPassword: data.tempPassword });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "재설정하지 못했습니다.");
     } finally {
       setSiteUserBusy(null);
     }
@@ -545,6 +575,17 @@ export function ProjectList({ projects }: { projects: ListItem[] }) {
                           {viewingRecords?.siteUserId === siteUser.id ? "기록 닫기" : "기록 보기"}
                         </button>
 
+                        {/* [BL-031] 방문자 계정은 이메일 발송 수단이 없어 본인이 직접
+                            "비밀번호 찾기"를 할 수 없다 — 개발자가 대신 재설정한다 */}
+                        <Button
+                          variant="secondary"
+                          className="!px-2.5 !py-1 text-xs"
+                          disabled={siteUserBusy === siteUser.id}
+                          onClick={() => void resetSiteUserPassword(project.id, siteUser.id)}
+                        >
+                          비밀번호 재설정
+                        </Button>
+
                         {siteUser.suspendedAt ? (
                           <Button
                             variant="secondary"
@@ -598,6 +639,15 @@ export function ProjectList({ projects }: { projects: ListItem[] }) {
                         )}
                       </div>
 
+                      {resetPasswordResult?.siteUserId === siteUser.id && (
+                        <p className="mt-2 rounded-sm border border-accent bg-accent-soft px-2.5 py-2 text-xs text-accent-ink">
+                          임시 비밀번호:{" "}
+                          <strong className="font-mono">{resetPasswordResult.tempPassword}</strong>
+                          {" — "}이 화면을 벗어나면 다시 볼 수 없어요. 지금 이 사람에게 직접
+                          전달해주세요(이 서비스는 대신 알려주지 않습니다).
+                        </p>
+                      )}
+
                       {viewingRecords?.siteUserId === siteUser.id && (
                         <div className="mt-2 border-t border-border pt-2">
                           {viewingRecords.records === null ? (
@@ -627,6 +677,7 @@ export function ProjectList({ projects }: { projects: ListItem[] }) {
                   setSiteUsers(null);
                   setViewingRecords(null);
                   setSuspending(null);
+                  setResetPasswordResult(null);
                 }}
                 className="mt-2 text-xs text-ink-faint hover:text-ink"
               >

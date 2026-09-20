@@ -28,6 +28,26 @@ export async function hashPassword(password: string): Promise<string> {
   return `${salt}:${derived.toString("hex")}`;
 }
 
+// 0/O, 1/l/I처럼 화면·구두로 전달할 때 헷갈리는 문자는 뺐다 — 개발자가
+// 방문자에게 직접 불러주거나 옮겨 적어 전달해야 하기 때문이다([BL-031]).
+const TEMP_PASSWORD_ALPHABET = "23456789abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ";
+const TEMP_PASSWORD_LENGTH = 12;
+
+/**
+ * [BL-031] 개발자가 방문자 대신 비밀번호를 재설정할 때 쓸 임시 비밀번호를
+ * 만든다. 개발자가 직접 값을 지어내지 않는다(약한 값을 고를 위험) —
+ * 서버가 무작위로 만들어 한 번만 보여주고, 그 값 자체는 저장하지 않는다
+ * (해시만 저장한다).
+ */
+export function generateTempPassword(): string {
+  const bytes = randomBytes(TEMP_PASSWORD_LENGTH);
+  let out = "";
+  for (let i = 0; i < TEMP_PASSWORD_LENGTH; i++) {
+    out += TEMP_PASSWORD_ALPHABET[bytes[i] % TEMP_PASSWORD_ALPHABET.length];
+  }
+  return out;
+}
+
 export async function verifyPassword(password: string, stored: string): Promise<boolean> {
   const [salt, hashHex] = stored.split(":");
   if (!salt || !hashHex) return false;
