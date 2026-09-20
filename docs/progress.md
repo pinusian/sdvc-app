@@ -1,6 +1,6 @@
 # 진행 상황
 
-> 마지막 업데이트: 2026-09-20 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 5 · 세션 상태: T026 Preview 확인, T025 인증 후 검증 대기
+> 마지막 업데이트: 2026-09-20 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 6 · 세션 상태: T027 RED 완료, T025 인증 후 검증 병행 대기
 
 ## 1. 지금 어디까지 왔나
 - 기존 저장소 복제 및 핵심 소스 읽기 완료.
@@ -76,6 +76,7 @@
 - Vercel `SDVC/sdvc-app` 환경변수 목록을 값 공개 없이 확인했고 `OPENAI_CREDENTIAL_ENCRYPTION_KEY`와 버전 변수는 없었다. 승인 전에는 새 비밀을 생성·저장하지 않았다.
 - T026에서 저장 암호문 조회와 AES-GCM 복호화를 Codex 중계 자격 로더에 배선했다. 키가 없거나 삭제된 뒤에는 서버 키조차 읽지 않고 `null`을 반환하며, 중계 이벤트와 설정 API가 공통 원문 필터를 사용한다.
 - 사용자 push 후 commit `e59ac26`의 Vercel `SDVC` Hobby Preview가 23초 만에 `Ready`가 됐다. 최신 Preview의 루트와 `/dashboard`는 비로그인 상태에서 모두 `/login`으로 이동했다.
+- T027에서 문서 SHA-256 해시·불변 증가 버전, 계획 변경 시 계획/작업 승인 무효화와 단계 되돌림, 오래된 버전·중복 승인 거부, 미승인 단계 전이 거부를 RED 계약으로 고정했다.
 
 ## 3. 검증 증거
 실행 명령: git ls-remote https://github.com/pinusian/sdvc-app.git HEAD
@@ -164,6 +165,8 @@
 - T026 대상 보안 회귀 → 자격 로더·암호화 수명주기·Codex 중계·설정 API·휴면 코드 검사 `5 files`, `28 passed`, 19.56초.
 - T026 정적·전체 회귀 → Next typegen·TypeScript·관련 파일 lint 종료 코드 0; 전체 `102 files passed`, `976 tests passed`, 136.34초.
 - T026 Vercel Preview 확인 → commit `e59ac26`, deployment `DUQiCjLRcYUKzxkwhftAprx3yqqB`, `Ready`, 23초, URL `https://sdvc-l0uhyygyn-sdvc.vercel.app/`; 비로그인 루트와 `/dashboard`는 `/login`과 “수강생 로그인” 폼을 표시했다.
+- T027 RED → `1 file`, `6 failed`, 2.57초. 6건 모두 `T027 document ... is not implemented` 경계에서 실패했고 테스트 수집은 성공했다.
+- T027 정적 검사 → Next typegen·TypeScript와 신규 계약/테스트 파일 lint 종료 코드 0.
 문서 검사: git diff --cached --check에서 오류 출력 없음.
 독립 clone의 저장소 전용 작성자 `홍길동 <hong@example.com>`으로 Phase 1과 T005~T007 커밋을 완료함.
 SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
@@ -219,6 +222,7 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - [x] T024 키 암호화 저장과 상태 API를 구현해 T023 RED를 GREEN으로 만들고 `AI-VC` 시험 DB에 서버 전용 테이블을 적용한다.
 - [ ] T025 커밋 `6f29f24`의 새 Preview 배포와 비로그인 보호 경계는 확인했다. 인증 수강생의 키 설정 화면·API 연동 검증을 완료한다.
 - [x] T026 Codex 중계 자격 로더 배선, 삭제 후 신규 호출 거부, 공통 로그 필터 정리와 보안 회귀검사를 완료한다.
+- [x] T027 문서 버전·해시·현재 단계·승인 무효화·중복 승인 RED 테스트를 작성하고 의미 있는 실패를 확인한다.
 
 ## 5. 막힌 것 / 사용자 결정 대기
 - Plan·Tasks·Analyze 보완 승인은 완료됐다. 외부 리소스 범위도 Supabase `AI-VC` Free와 Vercel `SDVC` Hobby로 승인됐다.
