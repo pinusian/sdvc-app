@@ -123,4 +123,24 @@ export const createDocumentWorkflowStore = (
     );
     assertNoError(error);
   },
+
+  async listVersions(projectId) {
+    const { data, error } = await client
+      .from("document_versions")
+      .select("id, project_id, kind, version, content, content_hash, created_at")
+      .eq("project_id", projectId)
+      .order("version", { ascending: false });
+    assertNoError(error);
+    return ((data ?? []) as Record<string, unknown>[]).map(toVersion);
+  },
+
+  async listApprovals(projectId) {
+    const { data, error } = await client
+      .from("document_approvals")
+      .select("id, project_id, kind, version_id, approved_by, approved_at")
+      .eq("project_id", projectId)
+      .is("invalidated_at", null);
+    assertNoError(error);
+    return ((data ?? []) as Record<string, unknown>[]).map(toApproval);
+  },
 });

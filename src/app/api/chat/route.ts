@@ -38,7 +38,7 @@ import { getProjectById, type Project } from "@/lib/projects/store";
 import { AttachmentError, buildAttachmentBlocks } from "@/lib/attachments/message";
 import { cleanupStream, registerActiveWork } from "@/lib/execution/active-work";
 import { createDocumentWorkflowStore } from "@/lib/sdvc/document-store";
-import { saveDocumentVersion } from "@/lib/sdvc/document-state";
+import { isDocumentStageAtLeast, saveDocumentVersion } from "@/lib/sdvc/document-state";
 import { persistGeneratedDocuments } from "@/lib/sdvc/generated-documents";
 
 /**
@@ -170,6 +170,23 @@ async function handleChat(request: Request) {
   if (body.approved === true && hasAnswerToApprove) {
     const advanced = resolveBlock(advanceBlock(block, { approved: true }));
     if (advanced !== block) {
+      if (block === "plan" || block === "tasks") {
+        if (!conversation.projectId) {
+          return NextResponse.json(
+            { error: "저장된 문서를 먼저 승인해주세요." },
+            { status: 409 },
+          );
+        }
+        const documentStore = createDocumentWorkflowStore(admin);
+        const documentStage = await documentStore.getCurrentStage(conversation.projectId);
+        const requiredStage = block === "plan" ? "tasks" : "analyze";
+        if (!isDocumentStageAtLeast(documentStage, requiredStage)) {
+          return NextResponse.json(
+            { error: "최신 문서 버전을 먼저 승인해주세요." },
+            { status: 409 },
+          );
+        }
+      }
       await setCurrentBlock(admin, conversationId, user.id, advanced);
       block = advanced;
     }

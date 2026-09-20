@@ -440,7 +440,12 @@ describe("[P3-4] POST /api/chat — 대화 상태 저장", () => {
   });
 
   it("승인하면 다음 블록으로 옮기고 그 블록의 대본으로 진행한다", async () => {
-    getConversation.mockResolvedValue({ ...CONVERSATION, currentBlock: "plan" });
+    getConversation.mockResolvedValue({
+      ...CONVERSATION,
+      currentBlock: "plan",
+      projectId: "proj-existing",
+    });
+    getDocumentStage.mockResolvedValue("tasks");
     listMessages.mockResolvedValue([
       { role: "user", content: "계획 세워줘" },
       { role: "assistant", content: "이 계획대로 진행할까요?" },
@@ -460,7 +465,12 @@ describe("[P3-4] POST /api/chat — 대화 상태 저장", () => {
   });
 
   it("[P3-6] 단계가 넘어갔으면 스트림 맨 앞에서 새 블록을 알려준다", async () => {
-    getConversation.mockResolvedValue({ ...CONVERSATION, currentBlock: "plan" });
+    getConversation.mockResolvedValue({
+      ...CONVERSATION,
+      currentBlock: "plan",
+      projectId: "proj-existing",
+    });
+    getDocumentStage.mockResolvedValue("tasks");
     listMessages.mockResolvedValue([
       { role: "user", content: "계획 세워줘" },
       { role: "assistant", content: "이 계획대로 진행할까요?" },

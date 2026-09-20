@@ -4,7 +4,9 @@ import { useRef, useState } from "react";
 import { SDVC_BLOCKS, resolveBlock, type BlockId } from "@/lib/sdvc/blocks";
 import { MAX_ATTACHMENTS_PER_MESSAGE } from "@/lib/attachments/validate";
 import type { ChatMessage } from "@/lib/claude/chat";
+import type { DocumentWorkflowView } from "@/lib/sdvc/document-state";
 import { Button } from "@/components/ui/Button";
+import { DocumentPanel } from "@/components/chat/DocumentPanel";
 
 /**
  * [P3-5] SDVC 대화 화면.
@@ -27,9 +29,15 @@ interface Props {
   conversationId: string;
   currentBlock: BlockId;
   initialMessages: ChatMessage[];
+  initialDocumentWorkflow?: DocumentWorkflowView | null;
 }
 
-export function ChatView({ conversationId, currentBlock, initialMessages }: Props) {
+export function ChatView({
+  conversationId,
+  currentBlock,
+  initialMessages,
+  initialDocumentWorkflow = null,
+}: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [draft, setDraft] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -52,10 +60,61 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
   /** [P7-11] 지금 붙여둔 첨부 — 고르는 즉시 올려 id를 받아둔다 (FR-031) */
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [documentWorkflow, setDocumentWorkflow] =
+    useState<DocumentWorkflowView | null>(initialDocumentWorkflow);
+  const [approvingDocument, setApprovingDocument] = useState(false);
+  const [documentPanelOpen, setDocumentPanelOpen] = useState(
+    initialDocumentWorkflow !== null && (currentBlock === "plan" || currentBlock === "tasks"),
+  );
   const endRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const blockInfo = SDVC_BLOCKS.find((b) => b.id === resolveBlock(block));
+  const approvalKind = block === "plan" || block === "tasks" ? block : null;
+
+  async function refreshDocuments() {
+    try {
+      const response = await fetch(`/api/conversations/${conversationId}/documents`, {
+        cache: "no-store",
+      });
+      const data = (await response.json().catch(() => null)) as
+        | (DocumentWorkflowView & { error?: string })
+        | null;
+      if (!response.ok || !data) {
+        throw new Error(data?.error ?? "저장된 문서를 불러오지 못했습니다.");
+      }
+      setDocumentWorkflow(data);
+      return data;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "저장된 문서를 불러오지 못했습니다.");
+      return null;
+    }
+  }
+
+  async function approveDocument(versionId: string) {
+    if (!approvalKind || approvingDocument || streaming) return;
+    setApprovingDocument(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/conversations/${conversationId}/documents`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kind: approvalKind, versionId }),
+      });
+      const data = (await response.json().catch(() => null)) as
+        | (DocumentWorkflowView & { error?: string })
+        | null;
+      if (!response.ok || !data) {
+        throw new Error(data?.error ?? "문서를 승인하지 못했습니다.");
+      }
+      setDocumentWorkflow(data);
+      await send({ message: "예, 이대로 진행해주세요.", approved: true });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "문서를 승인하지 못했습니다.");
+    } finally {
+      setApprovingDocument(false);
+    }
+  }
 
   /**
    * [P7-11] 고른 파일을 **바로** 올린다.
@@ -157,8 +216,17 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
         onDone: () => {
           completed = true;
         },
-        onGate: (gateBlock) => setGate(gateBlock),
-        onBlock: (nextBlock) => setBlock(nextBlock),
+        onGate: (gateBlock) => {
+          setGate(gateBlock);
+          if (gateBlock === "plan" || gateBlock === "tasks") {
+            setDocumentPanelOpen(true);
+            void refreshDocuments();
+          }
+        },
+        onBlock: (nextBlock) => {
+          setBlock(nextBlock);
+          setDocumentPanelOpen(false);
+        },
         onArtifact: (published) => setArtifact(published),
         onTruncated: () => setTruncated(true),
       });
@@ -211,7 +279,11 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
           사용자가 스스로 다음 단계로 갈 수 있어야 하기 때문이다.
           누르는 것 자체가 명시적 승인이므로 승인 게이트 원칙에 어긋나지 않는다.
         */}
-        {blockInfo && blockInfo.id !== "implement" && blockInfo.id !== "maintenance" && (
+        {blockInfo &&
+          blockInfo.id !== "plan" &&
+          blockInfo.id !== "tasks" &&
+          blockInfo.id !== "implement" &&
+          blockInfo.id !== "maintenance" && (
           <Button
             variant="secondary"
             className="!px-3 !py-1.5 text-xs"
@@ -292,7 +364,23 @@ export function ChatView({ conversationId, currentBlock, initialMessages }: Prop
           </div>
         )}
 
-        {gate && !streaming && (
+        {approvalKind && documentWorkflow && documentPanelOpen && !streaming && (
+          <DocumentPanel
+            kind={approvalKind}
+            view={documentWorkflow}
+            busy={approvingDocument}
+            onApprove={approveDocument}
+            onContinue={() =>
+              send({ message: "예, 이대로 진행해주세요.", approved: true })
+            }
+            onRevise={() => {
+              setGate(null);
+              setDocumentPanelOpen(false);
+            }}
+          />
+        )}
+
+        {gate && gate !== "plan" && gate !== "tasks" && !streaming && (
           <div className="rounded-lg border border-accent bg-accent-soft px-4 py-3">
             <p className="mb-3 text-sm text-accent-ink">
               {gateLabel(gate)} 단계를 마쳤습니다. 이대로 다음 단계로 넘어갈까요?

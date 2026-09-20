@@ -28,6 +28,8 @@ function dependencies(): DocumentWorkflowDependencies {
     insertApproval: vi.fn(async (input) => ({ id: "approval-1", ...input })),
     getCurrentStage: vi.fn().mockResolvedValue("plan"),
     setCurrentStage: vi.fn().mockResolvedValue(undefined),
+    listVersions: vi.fn().mockResolvedValue([]),
+    listApprovals: vi.fn().mockResolvedValue([]),
   };
 }
 

@@ -3,6 +3,9 @@ import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/server";
 import { requireLearnerPageAccess } from "@/lib/auth/learner-page-guard";
 import { getConversation, listMessages } from "@/lib/conversations/store";
+import { getProjectById } from "@/lib/projects/store";
+import { createDocumentWorkflowStore } from "@/lib/sdvc/document-store";
+import { getDocumentWorkflowView } from "@/lib/sdvc/document-state";
 import { ChatView } from "@/components/chat/ChatView";
 
 /**
@@ -28,6 +31,15 @@ export default async function ConversationPage({
   }
 
   const messages = await listMessages(admin, id);
+  const linkedProject = conversation.projectId
+    ? await getProjectById(admin, conversation.projectId, user.id)
+    : null;
+  const initialDocumentWorkflow = linkedProject
+    ? await getDocumentWorkflowView(
+        linkedProject.id,
+        createDocumentWorkflowStore(admin),
+      )
+    : null;
 
   return (
     <div className="flex h-dvh flex-col">
@@ -48,6 +60,7 @@ export default async function ConversationPage({
         conversationId={conversation.id}
         currentBlock={conversation.currentBlock}
         initialMessages={messages}
+        initialDocumentWorkflow={initialDocumentWorkflow}
       />
     </div>
   );

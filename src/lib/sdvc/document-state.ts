@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 export const DOCUMENT_KINDS = [
   "constitution",
   "spec",
@@ -55,6 +57,44 @@ export interface DocumentWorkflowDependencies {
   insertApproval(input: Omit<DocumentApproval, "id">): Promise<DocumentApproval>;
   getCurrentStage(projectId: string): Promise<SdvcStage>;
   setCurrentStage(projectId: string, stage: SdvcStage): Promise<void>;
+  listVersions(projectId: string): Promise<DocumentVersion[]>;
+  listApprovals(projectId: string): Promise<DocumentApproval[]>;
+}
+
+export interface DocumentWorkflowView {
+  currentStage: SdvcStage;
+  documents: Array<{
+    kind: DocumentKind;
+    approvedVersionId: string | null;
+    versions: DocumentVersion[];
+  }>;
+}
+
+export async function getDocumentWorkflowView(
+  projectId: string,
+  dependencies: DocumentWorkflowDependencies,
+): Promise<DocumentWorkflowView> {
+  const [currentStage, versions, approvals] = await Promise.all([
+    dependencies.getCurrentStage(projectId),
+    dependencies.listVersions(projectId),
+    dependencies.listApprovals(projectId),
+  ]);
+
+  return {
+    currentStage,
+    documents: DOCUMENT_KINDS.map((kind) => ({
+      kind,
+      approvedVersionId:
+        approvals.find((approval) => approval.kind === kind)?.versionId ?? null,
+      versions: versions
+        .filter((version) => version.kind === kind)
+        .sort((left, right) => right.version - left.version),
+    })).filter((document) => document.versions.length > 0),
+  };
+}
+
+export function isDocumentStageAtLeast(stage: SdvcStage, required: SdvcStage): boolean {
+  return stageIndex(stage) >= stageIndex(required);
 }
 
 export function hashDocumentContent(_content: string): string {
@@ -180,4 +220,3 @@ function stageForDocument(kind: DocumentKind): SdvcStage {
 function stageIndex(stage: SdvcStage): number {
   return SDVC_STAGES.indexOf(stage);
 }
-import { createHash } from "node:crypto";
