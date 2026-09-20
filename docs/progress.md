@@ -1,6 +1,6 @@
 # 진행 상황
 
-> 마지막 업데이트: 2026-09-20 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 4 · 세션 상태: T022 로컬 검증 완료, Preview 대기
+> 마지막 업데이트: 2026-09-20 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 5 · 세션 상태: T022 완료, T023 RED 준비
 
 ## 1. 지금 어디까지 왔나
 - 기존 저장소 복제 및 핵심 소스 읽기 완료.
@@ -66,6 +66,7 @@
 - 진행 중 채팅 AI 호출은 사용자별 `AbortController`로 등록해 차단 시 현재 서버 인스턴스에서 즉시 취소한다. Vercel 다중 인스턴스를 가로지르는 지속 작업 취소는 T033의 run/lease 저장과 T036 경쟁 조건 회귀에서 완성한다.
 - T021에서 기존 관리자 콘솔에 수강생 이용 상세를 연결하고 화면 용어를 수강생으로 정리했다. 최근 이용, 프로젝트 수, 실행 수·상태, 토큰·원가, 활성·차단 상태를 펼쳐 보고 차단과 해제 모두 사유를 입력한다.
 - T022에서 수강생별 집계가 원천 배열을 반복 검색하지 않도록 프로젝트·실행·사용량을 사용자별 Map으로 한 번만 색인했다. UI도 id별 상세 Map을 메모해 반복 탐색을 제거했다.
+- 사용자 push 후 commit `c50f7ee`의 Vercel `SDVC` Hobby Preview가 24초 만에 `Ready`가 됐다. 비로그인 `/admin`은 URL을 유지한 채 “운영 콘솔”과 “서버 관리자 로그인”만 표시했고 수강생 수·이용 상세는 노출하지 않아 T022를 완료했다.
 
 ## 3. 검증 증거
 실행 명령: git ls-remote https://github.com/pinusian/sdvc-app.git HEAD
@@ -138,6 +139,8 @@
 - T022 대상 회귀 → 권한·집계·관리 API·UI `4 files`, `51 passed`, 7.51초. Playwright `e2e/admin-entry.spec.ts --list`는 `7 tests in 1 file`을 수집했다.
 - T022 정적·전체 회귀 → `npm run typecheck`와 대상 lint 종료 코드 0; 전체 `97 files passed`, `952 tests passed`, 108.73초. 의도된 예외 응답 검증 stderr 3건 외 실패 없음.
 - T022 push 시도 → 종료 코드 1, Git for Windows `schannel: AcquireCredentialsHandle failed: SEC_E_NO_CREDENTIALS`. 네트워크 권한은 허용됐으나 이 실행 환경에 GitHub 자격 증명이 없어 원격 변경은 발생하지 않았다.
+- 사용자 push 후 Vercel `SDVC` Hobby Preview `aLb23QhkwE6azCV7kwbKk3DWUQk4`가 commit `c50f7ee`로 24초 만에 `Ready`가 됐다. Preview URL은 `https://sdvc-3ambm322k-sdvc.vercel.app/`이다.
+- T022 실제 브라우저 회귀 → 비로그인 상태에서 Preview `/admin`을 직접 열었고 URL은 `/admin`에 유지됐다. “운영 콘솔”과 “서버 관리자 로그인” 제목·로그인 폼이 표시됐으며 “수강생 N명”과 “이용 상세”는 표시되지 않았다.
 문서 검사: git diff --cached --check에서 오류 출력 없음.
 독립 clone의 저장소 전용 작성자 `홍길동 <hong@example.com>`으로 Phase 1과 T005~T007 커밋을 완료함.
 SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
@@ -187,8 +190,9 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - [x] T019 관리자 전용 수강생 목록·검색·상세·집계 API를 구현해 T018 집계 RED를 GREEN으로 만든다.
 - [x] T020 사유 필수 차단·해제, 멱등 상태 전이, 감사 기록과 활성 작업 취소 계약을 GREEN으로 만든다.
 - [x] T021 개발자 대시보드와 수강생 상세·차단·해제 화면을 구현한다.
-- [ ] 로컬 커밋 `57187a5`~`d289a85`를 `codex/sdvc-openai-codex` 원격 브랜치에 push한다.
-- [ ] T022 Vercel `SDVC` Hobby Preview에서 비로그인 `/admin`의 관리자 로그인 표시와 수강생 정보 비노출을 확인한다.
+- [x] 로컬 커밋 `57187a5`~`c50f7ee`를 `codex/sdvc-openai-codex` 원격 브랜치에 push한다.
+- [x] T022 Vercel `SDVC` Hobby Preview에서 비로그인 `/admin`의 관리자 로그인 표시와 수강생 정보 비노출을 확인한다.
+- [ ] T023 키 등록·교체·삭제·암호화·마스킹·로그 비노출 RED 테스트를 작성한다.
 
 ## 5. 막힌 것 / 사용자 결정 대기
 - Plan·Tasks·Analyze 보완 승인은 완료됐다. 외부 리소스 범위도 Supabase `AI-VC` Free와 Vercel `SDVC` Hobby로 승인됐다.
@@ -198,7 +202,7 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - Codex 키 중계의 주입형 계약과 비밀값 경계는 검증했다. 실제 외부 Codex SDK/API 호출은 사용자 키·비용 승인 없이 수행하지 않았으므로 아직 미검증이다.
 - Sandbox 격리 실행·증거 수집의 주입형 제어 계약은 검증했다. 실제 Vercel Sandbox 연결과 Workflow 배선은 T034 전까지 미검증이다.
 - API 비밀키는 채팅으로 받거나 파일에 임의로 채우지 않는다.
-- 현재 실행 환경의 GitHub 자격 증명이 없어 T022 push가 `SEC_E_NO_CREDENTIALS`로 중단됐다. 사용자의 인증된 터미널에서 push가 필요하다.
+- 현재 실행 환경의 GitHub 자격 증명은 없지만 사용자의 인증된 터미널 push와 Vercel Preview 확인으로 T022 원격 검증을 완료했다.
 
 ## 6. 알아둘 함정
 - 상위 AI_Code_Study/docs/progress.md는 독서활동 프로젝트 기록이며 이번 프로젝트 기록이 아니다.
