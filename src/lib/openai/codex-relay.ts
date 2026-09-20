@@ -1,3 +1,5 @@
+import { redactProviderCredentialText } from "@/lib/openai/provider-credentials";
+
 export interface CodexRelayRequest {
   runId: string;
   credentialId: string;
@@ -145,7 +147,7 @@ function redactEvent(event: CodexSdkEvent, apiKey: string): CodexSdkEvent {
 }
 
 function redact(value: string, secret: string): string {
-  return secret.length === 0 ? value : value.split(secret).join("[REDACTED]");
+  return redactProviderCredentialText(value, [secret]);
 }
 
 function isAbortError(error: unknown): boolean {

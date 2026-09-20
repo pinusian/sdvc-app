@@ -1,3 +1,5 @@
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+
 export interface ProviderCredentialEnvelope {
   ciphertext: string;
   iv: string;
@@ -155,4 +157,10 @@ export function redactProviderCredentialSecrets(
   };
   return clean(value);
 }
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+
+export function redactProviderCredentialText(
+  value: string,
+  secrets: readonly string[],
+): string {
+  return redactProviderCredentialSecrets(value, secrets) as string;
+}

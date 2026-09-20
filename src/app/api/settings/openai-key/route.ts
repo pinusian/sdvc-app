@@ -4,7 +4,7 @@ import { cancelActiveWorkForUser } from "@/lib/execution/active-work";
 import {
   deleteProviderCredential,
   encryptProviderCredential,
-  redactProviderCredentialSecrets,
+  redactProviderCredentialText,
   registerProviderCredential,
 } from "@/lib/openai/provider-credentials";
 import { loadProviderCredentialKey } from "@/lib/openai/provider-credential-key";
@@ -52,9 +52,9 @@ export async function PUT(request: Request) {
     return NextResponse.json(status);
   } catch (error) {
     const rawMessage = error instanceof Error ? error.message : "OpenAI API 키를 저장하지 못했습니다.";
-    const safeMessage = redactProviderCredentialSecrets(rawMessage, [apiKey]);
+    const safeMessage = redactProviderCredentialText(rawMessage, [apiKey]);
     return NextResponse.json(
-      { error: typeof safeMessage === "string" ? safeMessage : "OpenAI API 키를 저장하지 못했습니다." },
+      { error: safeMessage },
       { status: 500 },
     );
   }
