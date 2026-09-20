@@ -26,6 +26,7 @@
 | `0010_reports.sql` | 플랫폼 신고 `reports` 표 (FR-013·042·043·044). 신고자가 탈퇴해도 신고는 남는다(set null) | 2026-09-12 적용됨 (CHECK 3종·브라우저키 차단 실검증) |
 | `0007_conversation_maintenance.sql` | `current_block`에 `maintenance` 허용 (FR-029) — **코드는 바꿨는데 스키마를 안 바꿔 쓰기가 거부되던 것을 [P7-9] 검증에서 발견** | 2026-09-12 적용됨 (e2e 회귀 테스트로 고정) |
 | `0012_learner_access_boundary.sql` | 수강생 활성 상태·차단 수행자와 감사 이전/이후 상태 (FR-020·022·023·024) | 2026-09-20 `AI-VC` 시험 DB 적용·검증 완료 |
+| `0013_provider_credentials.sql` | 수강생 OpenAI 자격의 서버 전용 인증 암호문·키 버전·마스킹 메타데이터 (FR-011) | 2026-09-20 `AI-VC` 시험 DB 적용·검증 완료 |
 
 ### Codex 전환 시험 DB 적용
 
@@ -33,6 +34,7 @@
 - 빈 시험 DB의 의존성 순서에 맞춰 `0001` → `0002` → `0003` → `0004` → `0008` → `0012`를 하나의 트랜잭션으로 적용했다.
 - 검증 쿼리 결과: T014 컬럼 9개, `profiles_select_own` 정책 1개, `profiles`·`conversations`·`messages`·`projects`·`admin_audit_logs`의 RLS 활성 상태를 포함해 총 15행을 확인했다.
 - `profiles_update_own` 정책은 남아 있지 않고, `admin_audit_logs`에는 클라이언트 정책을 만들지 않았다.
+- `0013_provider_credentials.sql` 적용 후 `provider_credentials`의 RLS 활성, 정책 0개, `anon`·`authenticated` SELECT 권한 `false`를 확인했다.
 
 > Storage(파일 저장소) 설정은 SQL이 아니라 `scripts/setup-storage.mjs`로 만든다 — `node scripts/setup-storage.mjs`.
 >
