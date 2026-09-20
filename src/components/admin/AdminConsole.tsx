@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import type { EconomicsSummary } from "@/lib/admin/economics";
 import type { DeveloperRow } from "@/lib/admin/developers";
@@ -75,6 +75,10 @@ export function AdminConsole({ summary, developers, learnerOverviews = [], allPr
   } | null>(null);
   /** [P8-2c] 한도를 고치려는 대상 (FR-036) */
   const [limiting, setLimiting] = useState<{ id: string; value: string } | null>(null);
+  const learnerOverviewById = useMemo(
+    () => new Map(learnerOverviews.map((overview) => [overview.id, overview])),
+    [learnerOverviews],
+  );
 
   const inTheRed = summary.costRatio !== null && summary.costRatio >= 1;
 
@@ -317,11 +321,7 @@ export function AdminConsole({ summary, developers, learnerOverviews = [], allPr
                     정지됨{row.suspendedReason ? ` — ${row.suspendedReason}` : ""}
                   </p>
                 )}
-                {learnerOverviews.find((overview) => overview.id === row.id) && (
-                  <LearnerUsageDetails
-                    overview={learnerOverviews.find((overview) => overview.id === row.id)!}
-                  />
-                )}
+                <LearnerUsageDetails overview={learnerOverviewById.get(row.id)} />
                 {/* [P8-2c] 부여받은 등급·계정 한도는 결제분과 구별해 보여준다 */}
                 {(row.grantedGrade || row.monthlyTokenLimit != null) && (
                   <p className="mt-0.5 text-xs text-accent-ink">
@@ -627,7 +627,8 @@ export function AdminConsole({ summary, developers, learnerOverviews = [], allPr
   );
 }
 
-function LearnerUsageDetails({ overview }: { overview: LearnerOverview }) {
+function LearnerUsageDetails({ overview }: { overview?: LearnerOverview }) {
+  if (!overview) return null;
   const totalTokens = overview.inputTokens + overview.outputTokens;
   return (
     <details className="mt-2 rounded-sm border border-border bg-surface-muted px-3 py-2 text-xs">

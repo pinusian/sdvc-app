@@ -61,12 +61,16 @@ export interface LearnerOverviewSources {
 export function aggregateLearnerOverviews(
   sources: LearnerOverviewSources,
 ): LearnerOverview[] {
+  const projectsByOwner = groupBy(sources.projects, (row) => row.ownerId);
+  const executionsByOwner = groupBy(sources.executions, (row) => row.ownerId);
+  const usageByUser = groupBy(sources.usage, (row) => row.userId);
+
   return sources.profiles
     .filter((profile) => profile.role === "developer")
     .map((profile) => {
-      const projects = sources.projects.filter((row) => row.ownerId === profile.id);
-      const executions = sources.executions.filter((row) => row.ownerId === profile.id);
-      const usage = sources.usage.filter((row) => row.userId === profile.id);
+      const projects = projectsByOwner.get(profile.id) ?? [];
+      const executions = executionsByOwner.get(profile.id) ?? [];
+      const usage = usageByUser.get(profile.id) ?? [];
       const latestExecution = executions.reduce<LearnerExecutionSource | null>(
         (latest, row) => (!latest || row.updatedAt > latest.updatedAt ? row : latest),
         null,
@@ -95,6 +99,17 @@ export function aggregateLearnerOverviews(
         suspendedAt: profile.suspendedAt,
       };
     });
+}
+
+function groupBy<T>(rows: readonly T[], keyOf: (row: T) => string): Map<string, T[]> {
+  const grouped = new Map<string, T[]>();
+  for (const row of rows) {
+    const key = keyOf(row);
+    const group = grouped.get(key) ?? [];
+    group.push(row);
+    grouped.set(key, group);
+  }
+  return grouped;
 }
 
 interface ProfileRow {

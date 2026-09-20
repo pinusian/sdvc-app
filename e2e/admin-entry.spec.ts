@@ -56,6 +56,8 @@ test.describe("[P8-11e] 관리자 입구", () => {
     await expect(page).toHaveURL(/\/admin$/);
     await expect(page.getByRole("heading", { name: "서버 관리자 로그인" })).toBeVisible();
     await expect(page.getByText("운영 콘솔")).toBeVisible();
+    await expect(page.getByRole("heading", { name: /수강생 \d+명/ })).toHaveCount(0);
+    await expect(page.getByText("이용 상세")).toHaveCount(0);
     // 관리자는 가입해서 되는 것이 아니다
     await expect(page.getByRole("link", { name: "가입하기" })).toHaveCount(0);
   });
