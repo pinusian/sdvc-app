@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import type { EconomicsSummary } from "@/lib/admin/economics";
 import type { DeveloperRow } from "@/lib/admin/developers";
+import type { LearnerOverview } from "@/lib/admin/learners";
 import type { AdminProjectRow } from "@/lib/admin/projects";
 import { formatTokens } from "@/lib/billing/plans";
 import { endOfDaySeoul, formatSeoulDate } from "@/lib/time/seoul";
@@ -18,6 +19,7 @@ import { endOfDaySeoul, formatSeoulDate } from "@/lib/time/seoul";
 interface Props {
   summary: EconomicsSummary;
   developers: DeveloperRow[];
+  learnerOverviews?: LearnerOverview[];
   /**
    * [P8-13] 전체 프로젝트 열람 (FR-045). 최고관리자가 아니면 아예 전달하지
    * 않는다 — 값이 없으면 표 자체를 그리지 않는다(있는데 숨기지 않는다).
@@ -41,18 +43,29 @@ const PROJECT_STATUS_LABEL: Record<string, string> = {
   deployed: "완성",
   failed: "실패",
 };
+const EXECUTION_STATUS_LABEL: Record<string, string> = {
+  queued: "대기",
+  running: "실행 중",
+  completed: "완료",
+  failed: "실패",
+  cancelled: "취소",
+};
 
 const money = (usd: number) => `$${usd.toFixed(2).replace(/\.00$/, "")}`;
 const percent = (ratio: number | null) =>
   ratio === null ? "—" : `${Math.round(ratio * 100)}%`;
 
-export function AdminConsole({ summary, developers, allProjects }: Props) {
+export function AdminConsole({ summary, developers, learnerOverviews = [], allProjects }: Props) {
   const [rows, setRows] = useState(developers);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   /** 정지하려는 대상과 사유 — 사유 없이는 정지할 수 없다 */
-  const [suspending, setSuspending] = useState<{ id: string; reason: string } | null>(null);
+  const [suspending, setSuspending] = useState<{
+    id: string;
+    action: "suspend" | "unsuspend";
+    reason: string;
+  } | null>(null);
   /** [P8-2c] 등급을 부여하려는 대상 (FR-035) */
   const [granting, setGranting] = useState<{
     id: string;
@@ -284,7 +297,7 @@ export function AdminConsole({ summary, developers, allProjects }: Props) {
 
       <section className="rounded-lg border border-border bg-surface">
         <h2 className="border-b border-border px-5 py-3 text-base font-semibold text-ink">
-          개발자 {rows.length}명
+          수강생 {rows.length}명
         </h2>
 
         <ul className="divide-y divide-border">
@@ -303,6 +316,11 @@ export function AdminConsole({ summary, developers, allProjects }: Props) {
                   <p className="mt-0.5 text-xs font-medium text-red-700">
                     정지됨{row.suspendedReason ? ` — ${row.suspendedReason}` : ""}
                   </p>
+                )}
+                {learnerOverviews.find((overview) => overview.id === row.id) && (
+                  <LearnerUsageDetails
+                    overview={learnerOverviews.find((overview) => overview.id === row.id)!}
+                  />
                 )}
                 {/* [P8-2c] 부여받은 등급·계정 한도는 결제분과 구별해 보여준다 */}
                 {(row.grantedGrade || row.monthlyTokenLimit != null) && (
@@ -376,7 +394,9 @@ export function AdminConsole({ summary, developers, allProjects }: Props) {
                     className="!px-2.5 !py-1 text-xs"
                     disabled={busy === row.id}
                     aria-label={`${row.email} 정지 해제`}
-                    onClick={() => void act(row.id, "unsuspend")}
+                    onClick={() =>
+                      setSuspending({ id: row.id, action: "unsuspend", reason: "" })
+                    }
                   >
                     정지 해제
                   </Button>
@@ -386,7 +406,9 @@ export function AdminConsole({ summary, developers, allProjects }: Props) {
                     className="!px-2.5 !py-1 text-xs"
                     disabled={busy === row.id}
                     aria-label={`${row.email} 정지`}
-                    onClick={() => setSuspending({ id: row.id, reason: "" })}
+                    onClick={() =>
+                      setSuspending({ id: row.id, action: "suspend", reason: "" })
+                    }
                   >
                     정지
                   </Button>
@@ -493,25 +515,29 @@ export function AdminConsole({ summary, developers, allProjects }: Props) {
                 </form>
               )}
 
-              {/* 사유 없이는 정지할 수 없다 — 나중에 왜 정지했는지 알아야 한다 */}
+              {/* 사유 없이는 정지·해제할 수 없다 — 나중에 왜 바꿨는지 알아야 한다 */}
               {suspending?.id === row.id && (
                 <form
                   className="flex w-full flex-wrap items-center gap-2 rounded-sm bg-surface-muted p-2.5"
                   onSubmit={(event) => {
                     event.preventDefault();
-                    void act(row.id, "suspend", suspending.reason.trim());
+                    void act(row.id, suspending.action, suspending.reason.trim());
                   }}
                 >
                   <label className="text-xs text-ink-muted" htmlFor={`reason-${row.id}`}>
-                    정지 사유
+                    {suspending.action === "suspend" ? "정지 사유" : "해제 사유"}
                   </label>
                   <input
                     id={`reason-${row.id}`}
                     value={suspending.reason}
                     autoFocus
-                    placeholder="예: 약관 위반 신고 접수"
+                    placeholder={
+                      suspending.action === "suspend"
+                        ? "예: 약관 위반 신고 접수"
+                        : "예: 운영 검토 및 본인 확인 완료"
+                    }
                     onChange={(event) =>
-                      setSuspending({ id: row.id, reason: event.target.value })
+                      setSuspending({ ...suspending, reason: event.target.value })
                     }
                     className="min-w-0 flex-1 rounded-sm border border-border bg-surface px-2 py-1 text-xs text-ink focus:border-accent focus:outline-none"
                   />
@@ -521,7 +547,7 @@ export function AdminConsole({ summary, developers, allProjects }: Props) {
                     className="!px-2.5 !py-1 text-xs"
                     disabled={!suspending.reason.trim() || busy === row.id}
                   >
-                    정지합니다
+                    {suspending.action === "suspend" ? "정지합니다" : "해제합니다"}
                   </Button>
                   <Button
                     type="button"
@@ -598,5 +624,46 @@ export function AdminConsole({ summary, developers, allProjects }: Props) {
         </section>
       )}
     </div>
+  );
+}
+
+function LearnerUsageDetails({ overview }: { overview: LearnerOverview }) {
+  const totalTokens = overview.inputTokens + overview.outputTokens;
+  return (
+    <details className="mt-2 rounded-sm border border-border bg-surface-muted px-3 py-2 text-xs">
+      <summary className="cursor-pointer font-medium text-ink">이용 상세</summary>
+      <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+        <div>
+          <dt className="text-ink-muted">최근 이용</dt>
+          <dd className="text-ink">{formatSeoulDate(overview.recentActivityAt)}</dd>
+        </div>
+        <div>
+          <dt className="text-ink-muted">프로젝트</dt>
+          <dd className="text-ink">{overview.projectCount.toLocaleString("ko-KR")}개</dd>
+        </div>
+        <div>
+          <dt className="text-ink-muted">실행</dt>
+          <dd className="text-ink">
+            {overview.executionCount.toLocaleString("ko-KR")}회 · {overview.latestExecutionStatus
+              ? EXECUTION_STATUS_LABEL[overview.latestExecutionStatus]
+              : "없음"}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-ink-muted">토큰 사용량</dt>
+          <dd className="text-ink">{formatTokens(totalTokens)}</dd>
+        </div>
+        <div>
+          <dt className="text-ink-muted">AI 원가</dt>
+          <dd className="text-ink">{money(overview.costUsd)}</dd>
+        </div>
+        <div>
+          <dt className="text-ink-muted">접근 상태</dt>
+          <dd className={overview.suspendedAt || !overview.isActive ? "text-red-700" : "text-ink"}>
+            {overview.suspendedAt ? "차단" : overview.isActive ? "활성" : "비활성"}
+          </dd>
+        </div>
+      </dl>
+    </details>
   );
 }

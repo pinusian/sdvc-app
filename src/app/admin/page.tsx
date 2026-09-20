@@ -3,6 +3,7 @@ import { adminEntry, loadAdminActor } from "@/lib/admin/entry";
 import { adminCan } from "@/lib/admin/access";
 import { recordAdminAction } from "@/lib/admin/audit";
 import { listDevelopers } from "@/lib/admin/developers";
+import { listLearnerOverviews } from "@/lib/admin/learners";
 import { listAllProjectsForAdmin } from "@/lib/admin/projects";
 import { summarizeEconomics, type UsageRow } from "@/lib/admin/economics";
 import { AdminConsole } from "@/components/admin/AdminConsole";
@@ -35,6 +36,7 @@ export default async function AdminPage() {
   }
 
   const developers = await listDevelopers(admin);
+  const learnerOverviews = await listLearnerOverviews(admin);
 
   const now = new Date();
   const monthStart = new Date(
@@ -89,7 +91,12 @@ export default async function AdminPage() {
         </form>
       }
     >
-      <AdminConsole summary={summary} developers={developers} allProjects={allProjects} />
+      <AdminConsole
+        summary={summary}
+        developers={developers}
+        learnerOverviews={learnerOverviews}
+        allProjects={allProjects}
+      />
     </AdminShell>
   );
 }

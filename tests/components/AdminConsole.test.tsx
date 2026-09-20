@@ -52,6 +52,37 @@ const DEVELOPERS = [
   },
 ];
 
+const LEARNER_OVERVIEWS = [
+  {
+    id: "a",
+    email: "heavy@x.com",
+    joinedAt: "2026-09-01T00:00:00.000Z",
+    recentActivityAt: "2026-09-19T12:00:00.000Z",
+    projectCount: 3,
+    executionCount: 7,
+    latestExecutionStatus: "running" as const,
+    inputTokens: 1200,
+    outputTokens: 300,
+    costUsd: 5,
+    isActive: true,
+    suspendedAt: null,
+  },
+  {
+    id: "b",
+    email: "bad@x.com",
+    joinedAt: "2026-09-05T00:00:00.000Z",
+    recentActivityAt: "2026-09-12T00:00:00.000Z",
+    projectCount: 1,
+    executionCount: 2,
+    latestExecutionStatus: "completed" as const,
+    inputTokens: 400,
+    outputTokens: 100,
+    costUsd: 1,
+    isActive: false,
+    suspendedAt: "2026-09-12T00:00:00.000Z",
+  },
+];
+
 const ALL_PROJECTS = [
   {
     id: "proj-1",
@@ -86,7 +117,7 @@ describe("[P8-13] 전체 프로젝트 열람표", () => {
     );
 
     const table = screen.getByRole("table", { name: "전체 프로젝트" });
-    const developerHeading = screen.getByRole("heading", { name: /개발자 2명/ });
+    const developerHeading = screen.getByRole("heading", { name: /수강생 2명/ });
     // 개발자 관리 표보다 아래(문서 순서상 뒤)에 있어야 한다
     expect(
       developerHeading.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -175,6 +206,25 @@ describe("[P8-2][P8-3] AdminConsole", () => {
     expect(screen.getByText(/불법 콘텐츠/)).toBeInTheDocument();
   });
 
+  it("수강생 상세에서 최근 이용·프로젝트·실행·사용량·접근 상태를 보여준다", async () => {
+    render(
+      <AdminConsole
+        summary={SUMMARY}
+        developers={DEVELOPERS}
+        learnerOverviews={LEARNER_OVERVIEWS}
+      />,
+    );
+
+    const details = screen.getAllByText("이용 상세")[0];
+    await userEvent.click(details);
+    const panel = details.parentElement!;
+    expect(panel).toHaveTextContent("최근 이용");
+    expect(panel).toHaveTextContent("프로젝트3개");
+    expect(panel).toHaveTextContent("실행7회 · 실행 중");
+    expect(panel).toHaveTextContent("1,500");
+    expect(panel).toHaveTextContent("활성");
+  });
+
   it("정지하려면 사유를 적어야 한다 (나중에 왜 정지했는지 알아야 한다)", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ suspended: true })));
     vi.stubGlobal("fetch", fetchMock);
@@ -196,17 +246,23 @@ describe("[P8-2][P8-3] AdminConsole", () => {
     );
   });
 
-  it("정지 해제는 사유 없이 바로 된다", async () => {
+  it("정지 해제도 사유를 적어야 한다", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ suspended: false })));
     vi.stubGlobal("fetch", fetchMock);
 
     render(<AdminConsole summary={SUMMARY} developers={DEVELOPERS} />);
 
     await userEvent.click(screen.getByRole("button", { name: /bad@x.com 정지 해제/ }));
+    expect(screen.getByRole("button", { name: "해제합니다" })).toBeDisabled();
+    await userEvent.type(screen.getByLabelText("해제 사유"), "운영 검토 완료");
+    await userEvent.click(screen.getByRole("button", { name: "해제합니다" }));
 
-    await waitFor(() =>
-      expect(JSON.parse(fetchMock.mock.calls[0][1].body).action).toBe("unsuspend"),
-    );
+    await waitFor(() => {
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({
+        action: "unsuspend",
+        reason: "운영 검토 완료",
+      });
+    });
   });
 
   it("체험 연장을 누르면 늘어난 날짜를 보여준다", async () => {
@@ -239,6 +295,8 @@ describe("[P8-2][P8-3] AdminConsole", () => {
 
     render(<AdminConsole summary={SUMMARY} developers={DEVELOPERS} />);
     await userEvent.click(screen.getByRole("button", { name: /bad@x.com 정지 해제/ }));
+    await userEvent.type(screen.getByLabelText("해제 사유"), "운영 검토 완료");
+    await userEvent.click(screen.getByRole("button", { name: "해제합니다" }));
 
     await waitFor(() =>
       expect(screen.getByRole("alert")).toHaveTextContent("감사 로그를 남기지 못했습니다"),
@@ -257,6 +315,8 @@ describe("[P8-2][P8-3] AdminConsole", () => {
 
     render(<AdminConsole summary={SUMMARY} developers={DEVELOPERS} />);
     await userEvent.click(screen.getByRole("button", { name: /bad@x.com 정지 해제/ }));
+    await userEvent.type(screen.getByLabelText("해제 사유"), "운영 검토 완료");
+    await userEvent.click(screen.getByRole("button", { name: "해제합니다" }));
 
     await waitFor(() =>
       expect(screen.getByRole("alert")).toHaveTextContent("권한이 없습니다"),
