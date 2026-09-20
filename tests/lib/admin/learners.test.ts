@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   aggregateLearnerOverviews,
   changeLearnerAccess,
+  listLearnerOverviews,
   type ChangeLearnerAccessDependencies,
   type LearnerOverviewSources,
 } from "@/lib/admin/learners";
@@ -103,6 +104,102 @@ describe("[T018] 수강생 이용현황 집계 계약", () => {
     });
 
     expect(empty[0].recentActivityAt).toBe("2026-09-01T00:00:00.000Z");
+  });
+});
+
+function learnerAdmin() {
+  const filters: Record<string, unknown[][]> = {};
+  const rows: Record<string, Record<string, unknown>[]> = {
+    profiles: [
+      {
+        id: "learner-1",
+        email: "one@example.com",
+        role: "developer",
+        created_at: "2026-09-01T00:00:00.000Z",
+        is_active: true,
+        suspended_at: null,
+      },
+    ],
+    projects: [{ owner_id: "learner-1", updated_at: "2026-09-11T00:00:00.000Z" }],
+    conversations: [
+      {
+        owner_id: "learner-1",
+        current_block: "implement",
+        updated_at: "2026-09-12T00:00:00.000Z",
+      },
+    ],
+    usage_logs: [
+      {
+        user_id: "learner-1",
+        input_tokens: 12,
+        output_tokens: 8,
+        cost_usd: "0.125",
+        created_at: "2026-09-13T00:00:00.000Z",
+      },
+    ],
+  };
+  const client = {
+    from(table: string) {
+      filters[table] = [];
+      return {
+        select() {
+          const chain = {
+            eq(column: string, value: unknown) {
+              filters[table].push(["eq", column, value]);
+              return chain;
+            },
+            ilike(column: string, value: unknown) {
+              filters[table].push(["ilike", column, value]);
+              return chain;
+            },
+            in(column: string, value: unknown) {
+              filters[table].push(["in", column, value]);
+              return chain;
+            },
+            order() {
+              return chain;
+            },
+            limit() {
+              return chain;
+            },
+            then(resolve: (result: unknown) => unknown) {
+              return resolve({ data: rows[table], error: null });
+            },
+          };
+          return chain;
+        },
+      };
+    },
+  };
+  return { client: client as never, filters };
+}
+
+describe("[T019] 관리자 수강생 현황 조회", () => {
+  it("역할·검색·상세 조건을 서버 쿼리에 걸고 관련 원천만 집계한다", async () => {
+    const { client, filters } = learnerAdmin();
+
+    const rows = await listLearnerOverviews(client, {
+      search: " one@ ",
+      learnerId: "learner-1",
+    });
+
+    expect(filters.profiles).toEqual([
+      ["eq", "role", "developer"],
+      ["eq", "id", "learner-1"],
+      ["ilike", "email", "%one@%"],
+    ]);
+    expect(filters.projects[0]).toEqual(["in", "owner_id", ["learner-1"]]);
+    expect(filters.conversations[0]).toEqual(["in", "owner_id", ["learner-1"]]);
+    expect(filters.usage_logs[0]).toEqual(["in", "user_id", ["learner-1"]]);
+    expect(rows[0]).toMatchObject({
+      projectCount: 1,
+      executionCount: 1,
+      latestExecutionStatus: "running",
+      inputTokens: 12,
+      outputTokens: 8,
+      costUsd: 0.125,
+      recentActivityAt: "2026-09-13T00:00:00.000Z",
+    });
   });
 });
 
