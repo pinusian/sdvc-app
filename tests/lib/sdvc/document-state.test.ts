@@ -73,9 +73,49 @@ describe("[T027] 문서 버전·해시 계약", () => {
     });
     expect(deps.setCurrentStage).toHaveBeenCalledWith("project-1", "plan");
   });
+
+  it("최신 버전과 내용이 같으면 중복 버전이나 승인 무효화를 만들지 않는다", async () => {
+    const deps = dependencies();
+    const content = "첫 계획";
+    vi.mocked(deps.getLatestVersion).mockResolvedValue({
+      ...PLAN_V1,
+      content,
+      contentHash: hashDocumentContent(content),
+    });
+
+    const saved = await saveDocumentVersion(
+      { projectId: "project-1", kind: "plan", content, now: NOW },
+      deps,
+    );
+
+    expect(saved.id).toBe(PLAN_V1.id);
+    expect(deps.insertVersion).not.toHaveBeenCalled();
+    expect(deps.invalidateApprovals).not.toHaveBeenCalled();
+  });
 });
 
 describe("[T027] 승인·단계 전이 계약", () => {
+  it("최신 계획 버전을 한 번 승인하면 승인자와 버전을 결부해 저장한다", async () => {
+    const deps = dependencies();
+    vi.mocked(deps.getLatestVersion).mockResolvedValue(PLAN_V1);
+
+    const approval = await approveDocumentVersion(
+      {
+        projectId: "project-1",
+        kind: "plan",
+        versionId: PLAN_V1.id,
+        approvedBy: "learner-1",
+        now: NOW,
+      },
+      deps,
+    );
+
+    expect(approval).toMatchObject({ versionId: PLAN_V1.id, approvedBy: "learner-1" });
+    expect(deps.insertApproval).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: "project-1", kind: "plan", versionId: PLAN_V1.id }),
+    );
+  });
+
   it("최신 버전과 다른 오래된 문서 승인은 거부한다", async () => {
     const deps = dependencies();
     vi.mocked(deps.getLatestVersion).mockResolvedValue({ ...PLAN_V1, id: "plan-v2", version: 2 });
@@ -131,5 +171,23 @@ describe("[T027] 승인·단계 전이 계약", () => {
       advanceDocumentStage({ projectId: "project-1", expectedStage: "plan" }, deps),
     ).rejects.toThrow(/승인/);
     expect(deps.setCurrentStage).not.toHaveBeenCalled();
+  });
+
+  it("현재 계획 버전이 승인됐으면 작업 단계로 전이한다", async () => {
+    const deps = dependencies();
+    vi.mocked(deps.getLatestVersion).mockResolvedValue(PLAN_V1);
+    vi.mocked(deps.getApproval).mockResolvedValue({
+      id: "approval-1",
+      projectId: "project-1",
+      kind: "plan",
+      versionId: PLAN_V1.id,
+      approvedBy: "learner-1",
+      approvedAt: NOW,
+    });
+
+    await expect(
+      advanceDocumentStage({ projectId: "project-1", expectedStage: "plan" }, deps),
+    ).resolves.toBe("tasks");
+    expect(deps.setCurrentStage).toHaveBeenCalledWith("project-1", "tasks");
   });
 });

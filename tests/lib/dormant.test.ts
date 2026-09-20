@@ -29,12 +29,18 @@ const ROOT = process.cwd();
  * 이유를 못 적겠으면 그건 지울 코드라는 뜻이다.
  */
 const KNOWN_DORMANT: Record<string, string> = {
+  advanceDocumentStage:
+    "[T028] 문서 단계 전이 서버 서비스. T030 승인 API와 화면에 배선한 뒤 이 휴면 예외를 제거한다",
+  approveDocumentVersion:
+    "[T028] 최신 Plan/Tasks 버전 승인 서버 서비스. T030 승인 API에 배선한 뒤 이 휴면 예외를 제거한다",
   provisionTrialApplication:
     "[T011] Supabase/Vercel 앱 리소스 기술검증 제어기. T038에서 실제 프로비저닝 작업 경로에 " +
     "배선한 뒤 이 휴면 예외를 제거한다",
   runTddVerification:
     "[T009] Sandbox 실행 제어 기술검증 어댑터. T034에서 Workflow 작업 실행 경로에 " +
     "배선한 뒤 이 휴면 예외를 제거한다",
+  saveDocumentVersion:
+    "[T028] 구조화 문서 불변 버전 저장 서비스. T029 대화 어댑터에 배선한 뒤 이 휴면 예외를 제거한다",
   hasVerifiedMfa:
     "[P8-1] MFA 건너뛰기로 결정(2026-09-13). 관리자 1인 체제에서 2단계 인증을 켜면 " +
     "휴대폰을 잃는 순간 운영 콘솔에 아무도 못 들어간다. 복구 수단과 함께 다시 볼 것",

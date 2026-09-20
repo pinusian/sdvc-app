@@ -1,6 +1,6 @@
 # 진행 상황
 
-> 마지막 업데이트: 2026-09-20 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 6 · 세션 상태: T027 RED 완료, T025 인증 후 검증 병행 대기
+> 마지막 업데이트: 2026-09-20 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 6 · 세션 상태: T028 로컬 GREEN, 외부 설정·DB 적용 승인 대기
 
 ## 1. 지금 어디까지 왔나
 - 기존 저장소 복제 및 핵심 소스 읽기 완료.
@@ -77,6 +77,7 @@
 - T026에서 저장 암호문 조회와 AES-GCM 복호화를 Codex 중계 자격 로더에 배선했다. 키가 없거나 삭제된 뒤에는 서버 키조차 읽지 않고 `null`을 반환하며, 중계 이벤트와 설정 API가 공통 원문 필터를 사용한다.
 - 사용자 push 후 commit `e59ac26`의 Vercel `SDVC` Hobby Preview가 23초 만에 `Ready`가 됐다. 최신 Preview의 루트와 `/dashboard`는 비로그인 상태에서 모두 `/login`으로 이동했다.
 - T027에서 문서 SHA-256 해시·불변 증가 버전, 계획 변경 시 계획/작업 승인 무효화와 단계 되돌림, 오래된 버전·중복 승인 거부, 미승인 단계 전이 거부를 RED 계약으로 고정했다.
+- T028에서 문서 내용 SHA-256, 중복 최신 버전 억제, 계획/작업 승인 무효화, 최신 버전 승인과 승인 기반 단계 전이를 구현했다. 서버 전용 Supabase 저장소와 `0014_document_workflow.sql`도 작성했지만 시험 DB에는 아직 적용하지 않았다.
 
 ## 3. 검증 증거
 실행 명령: git ls-remote https://github.com/pinusian/sdvc-app.git HEAD
@@ -167,6 +168,8 @@
 - T026 Vercel Preview 확인 → commit `e59ac26`, deployment `DUQiCjLRcYUKzxkwhftAprx3yqqB`, `Ready`, 23초, URL `https://sdvc-l0uhyygyn-sdvc.vercel.app/`; 비로그인 루트와 `/dashboard`는 `/login`과 “수강생 로그인” 폼을 표시했다.
 - T027 RED → `1 file`, `6 failed`, 2.57초. 6건 모두 `T027 document ... is not implemented` 경계에서 실패했고 테스트 수집은 성공했다.
 - T027 정적 검사 → Next typegen·TypeScript와 신규 계약/테스트 파일 lint 종료 코드 0.
+- T028 대상 GREEN → 문서 상태기계·마이그레이션·휴면 코드 검사 `3 files`, `15 passed`, 3.59초.
+- T028 정적·전체 회귀 → Next typegen·TypeScript와 관련 파일 lint 종료 코드 0; 전체 `104 files passed`, `988 tests passed`, 125.27초.
 문서 검사: git diff --cached --check에서 오류 출력 없음.
 독립 clone의 저장소 전용 작성자 `홍길동 <hong@example.com>`으로 Phase 1과 T005~T007 커밋을 완료함.
 SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
@@ -223,6 +226,7 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - [ ] T025 커밋 `6f29f24`의 새 Preview 배포와 비로그인 보호 경계는 확인했다. 인증 수강생의 키 설정 화면·API 연동 검증을 완료한다.
 - [x] T026 Codex 중계 자격 로더 배선, 삭제 후 신규 호출 거부, 공통 로그 필터 정리와 보안 회귀검사를 완료한다.
 - [x] T027 문서 버전·해시·현재 단계·승인 무효화·중복 승인 RED 테스트를 작성하고 의미 있는 실패를 확인한다.
+- [ ] T028 로컬 GREEN과 서버 전용 migration을 완료했다. `AI-VC` 시험 DB에 `0014_document_workflow.sql`을 적용하고 실제 RLS·권한을 확인한다.
 
 ## 5. 막힌 것 / 사용자 결정 대기
 - Plan·Tasks·Analyze 보완 승인은 완료됐다. 외부 리소스 범위도 Supabase `AI-VC` Free와 Vercel `SDVC` Hobby로 승인됐다.
@@ -234,6 +238,7 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - API 비밀키는 채팅으로 받거나 파일에 임의로 채우지 않는다.
 - 현재 실행 환경의 GitHub 자격 증명은 없지만 사용자의 인증된 터미널 push와 Vercel Preview 확인으로 T022 원격 검증을 완료했다.
 - Vercel `SDVC/sdvc-app`에는 `OPENAI_CREDENTIAL_ENCRYPTION_KEY`와 버전 변수가 없다. 실제 키 저장 검증 전에는 사용자가 직접 설정하거나, 해당 Preview 환경에 생성한 암호화 비밀을 저장하도록 구체적으로 승인해야 한다. 실제 OpenAI API 키는 이 설정과 별개이며 AI에게 전달하지 않는다.
+- `0014_document_workflow.sql`은 로컬 검증만 완료했다. `AI-VC` 시험 DB 적용은 외부 DB 변경이므로 사용자 승인을 받은 뒤 실행한다.
 
 ## 6. 알아둘 함정
 - 상위 AI_Code_Study/docs/progress.md는 독서활동 프로젝트 기록이며 이번 프로젝트 기록이 아니다.
