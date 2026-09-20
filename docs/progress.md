@@ -1,6 +1,6 @@
 # 진행 상황
 
-> 마지막 업데이트: 2026-09-21 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 7 · 세션 상태: T032 RED 완료, T033 준비
+> 마지막 업데이트: 2026-09-21 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 7 · 세션 상태: T033 로컬 GREEN, 0015·0016 시험 DB 적용 대기
 
 ## 1. 지금 어디까지 왔나
 - 기존 저장소 복제 및 핵심 소스 읽기 완료.
@@ -87,6 +87,7 @@
 - T030 Preview 무료 검증에서 인증 수강생의 저장된 Plan 문서, 버전 선택기, 승인 완료 상태가 재로드 후에도 표시되는 것을 확인했다. 다음 단계 전환은 외부 AI 호출과 비용 가능성이 있어 무료 범위 조건에 따라 실행하지 않았다.
 - T031에서 승인 행 삽입과 workflow 단계 전이를 `0015_atomic_document_approval.sql`의 단일 트랜잭션/RPC로 합쳤다. workflow 행 잠금, 최신 버전 재검사, 동시 중복 요청의 기존 승인 재사용, 브라우저 역할 실행 차단을 구현했고 기존 분리 함수는 제거했다.
 - T032에서 승인 문서 묶음 해시·멱등키 기반 작업 생성, 소유권 조회, 영속 취소, 이벤트 순서 복원, 재접속, 차단·비활성 수강생의 생성/재개 거부 계약을 RED 테스트로 고정했다.
+- T033에서 `runs`·`run_events`·`test_evidence` 서버 전용 스키마, 사용자별 멱등 생성, 만료 lease 원자 인수, 순차 이벤트 기록과 Supabase 저장소를 구현했다. 작업 생성·조회·취소·재접속 도메인 계약을 GREEN으로 만들었다.
 
 ## 3. 검증 증거
 실행 명령: git ls-remote https://github.com/pinusian/sdvc-app.git HEAD
@@ -194,6 +195,10 @@
 - T031 정리 후 대상 회귀 → 승인 API·원자 migration·상태기계·휴면 검사 `4 files`, `15 tests passed`; typecheck·lint 종료 코드 0.
 - T031 최종 전체 회귀 → `108 files passed`, `1002 tests passed`, 176.31초. 의도된 예외 응답 검증 stderr 3건 외 실패 없음.
 - T032 RED → `1 file`, `8 tests failed`, 3.26초. 모든 테스트가 수집·실행됐고 실패 원인은 `T032 지속 작업 실행 계약이 아직 구현되지 않았습니다.`라는 명시적 미구현 경계였다.
+- T033 대상 GREEN → 지속 작업 도메인·migration `2 files`, `14 tests passed`; typecheck·관련 lint 종료 코드 0.
+- T033 최초 전체 회귀 → 기능 테스트는 통과했지만 T035에서 연결할 생성·취소·재접속 서비스 3개를 휴면 검사에서 탐지해 `109 files passed / 1 failed`, `1015 passed / 1 failed`.
+- T033 휴면 경계 기록 후 대상 회귀 → 지속 작업·migration·휴면 검사 `3 files`, `17 tests passed`.
+- T033 최종 전체 회귀 → `110 files passed`, `1016 tests passed`, 149.77초. 의도된 예외 응답 검증 stderr 3건 외 실패 없음.
 문서 검사: git diff --cached --check에서 오류 출력 없음.
 독립 clone의 저장소 전용 작성자 `홍길동 <hong@example.com>`으로 Phase 1과 T005~T007 커밋을 완료함.
 SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
@@ -255,14 +260,14 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - [ ] T030 Preview에서 저장 문서·버전 선택기·승인 완료 상태는 확인했다. 비용 없는 테스트 계정/경로가 준비되면 실제 승인 클릭→다음 단계 전환을 확인한다.
 - [ ] T031 로컬 원자 승인 전이와 회귀검사는 완료했다. `0015_atomic_document_approval.sql`을 AI-VC 시험 DB에 적용하고 새 Preview에서 RPC 경로를 확인한다.
 - [x] T032 작업 생성·조회·취소·중복 방지·재접속·차단 중단 RED 계약을 작성하고 8개 의미 있는 실패를 확인한다.
-- [ ] T033 runs/run_events/test_evidence 저장과 lease·idempotency 처리를 구현한다.
+- [ ] T033 로컬 runs/run_events/test_evidence 저장과 lease·idempotency 처리는 구현했다. `0016_persistent_runs.sql`을 AI-VC 시험 DB에 적용하고 실제 테이블·RLS·함수를 확인한다.
 
 ## 5. 막힌 것 / 사용자 결정 대기
 - Plan·Tasks·Analyze 보완 승인은 완료됐다. 외부 리소스 범위도 Supabase `AI-VC` Free와 Vercel `SDVC` Hobby로 승인됐다.
 - 연결 worktree의 Git 쓰기 제한은 독립 clone 전환으로 우회했고 T011 GREEN 커밋까지 검증했다.
 - T014와 T028 시험 DB 적용, Vercel `SDVC/sdvc-app` Preview 암호화 환경변수 저장·재배포는 승인받아 완료했다.
 - 비용이 발생하는 업그레이드·추가 구매·유료 리소스는 실행하지 않는다. 무료 범위를 벗어나는 징후가 보이면 즉시 중단한다.
-- T031의 `0015_atomic_document_approval.sql`은 로컬 작성·검증만 완료했으며 AI-VC 시험 DB 적용은 별도 승인을 기다린다.
+- T031의 `0015_atomic_document_approval.sql`과 T033의 `0016_persistent_runs.sql`은 로컬 작성·검증만 완료했으며 AI-VC 시험 DB 적용은 별도 승인을 기다린다.
 - Codex 키 중계의 주입형 계약과 비밀값 경계는 검증했다. 실제 외부 Codex SDK/API 호출은 사용자 키·비용 승인 없이 수행하지 않았으므로 아직 미검증이다.
 - Sandbox 격리 실행·증거 수집의 주입형 제어 계약은 검증했다. 실제 Vercel Sandbox 연결과 Workflow 배선은 T034 전까지 미검증이다.
 - API 비밀키는 채팅으로 받거나 파일에 임의로 채우지 않는다.

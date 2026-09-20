@@ -68,8 +68,8 @@
 
 ## Phase 7 — 지속 실행과 TDD 증거 (US-03·05, P1)
 
-- [x] T032 작업 생성·조회·취소·중복 방지·재접속·차단 중단 RED 테스트를 작성한다. 완료: 승인 문서 묶음 해시·멱등키 기반 queued 생성, 같은 키 중복 방지, 소유권 기반 조회, 영속 취소, 순서 있는 이벤트 재접속 복원, 차단 사용자 생성·재개 거부의 8개 테스트가 명시적 미구현 오류로 실패했다. 커밋 예정: `test: 지속 작업 실행 - RED (T032)`
-- [ ] T033 runs/run_events/test_evidence 저장과 lease·idempotency 처리를 구현한다. 커밋: `feat: 지속 작업 상태 - GREEN server (T033)`
+- [x] T032 작업 생성·조회·취소·중복 방지·재접속·차단 중단 RED 테스트를 작성한다. 완료: 승인 문서 묶음 해시·멱등키 기반 queued 생성, 같은 키 중복 방지, 소유권 기반 조회, 영속 취소, 순서 있는 이벤트 재접속 복원, 차단 사용자 생성·재개 거부의 8개 테스트가 명시적 미구현 오류로 실패했다. 커밋: `e3a3cdc test: 지속 작업 실행 - RED (T032)`
+- [ ] T033 runs/run_events/test_evidence 저장과 lease·idempotency 처리를 구현한다. 로컬 완료: 서버 전용 세 테이블, 사용자별 멱등 생성, 만료 lease 원자 인수, 순차 이벤트 RPC, Supabase 저장소와 작업 생성·조회·취소·재접속 서비스를 구현했다. 대상 14개 테스트와 typecheck·lint가 통과했다. 남음: `0016_persistent_runs.sql`을 AI-VC 시험 DB에 적용·검증한다. 커밋 예정: `feat: 지속 작업 상태 - GREEN server (T033)`
 - [ ] T034 Workflow와 Sandbox 실행을 연결해 RED→GREEN→REFACTOR 증거를 불변 버전에 결부한다. 커밋: `feat: TDD 작업 실행 - GREEN worker (T034)`
 - [ ] T035 진행·로그·취소·재시도·재접속 화면을 구현한다. 커밋: `feat: 구현 진행 화면 - GREEN ui (T035)`
 - [ ] T036 작업 복구·취소·차단 경쟁 조건을 정리하고 회귀검사한다. 커밋: `refactor: 지속 작업 실행 - REFACTOR (T036)`

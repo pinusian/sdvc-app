@@ -93,6 +93,24 @@ describe("[T032] 지속 작업 생성·중복 방지", () => {
     ).rejects.toThrow(/차단|비활성|사용할 수/);
     expect(deps.insertRun).not.toHaveBeenCalled();
   });
+
+  it("같은 멱등키를 다른 문서 묶음에 재사용하면 충돌로 거부한다", async () => {
+    const deps = dependencies();
+    vi.mocked(deps.findByIdempotency).mockResolvedValue(RUN);
+
+    await expect(
+      createPersistentRun(
+        {
+          ownerId: RUN.ownerId,
+          projectId: RUN.projectId,
+          documentBundleHash: "b".repeat(64),
+          idempotencyKey: RUN.idempotencyKey,
+          now: NOW,
+        },
+        deps,
+      ),
+    ).rejects.toThrow(/멱등키|다른/);
+  });
 });
 
 describe("[T032] 지속 작업 조회·취소·재접속", () => {
@@ -124,6 +142,16 @@ describe("[T032] 지속 작업 조회·취소·재접속", () => {
       cancelPersistentRun({ runId: RUN.id, ownerId: RUN.ownerId, now: NOW }, deps),
     ).resolves.toMatchObject({ status: "cancel_requested" });
     expect(deps.requestCancellation).toHaveBeenCalledWith(RUN.id, NOW);
+  });
+
+  it("완료된 작업의 반복 취소는 상태를 되돌리지 않는다", async () => {
+    const deps = dependencies();
+    vi.mocked(deps.getOwnedRun).mockResolvedValue({ ...RUN, status: "succeeded" });
+
+    await expect(
+      cancelPersistentRun({ runId: RUN.id, ownerId: RUN.ownerId, now: NOW }, deps),
+    ).resolves.toMatchObject({ status: "succeeded" });
+    expect(deps.requestCancellation).not.toHaveBeenCalled();
   });
 
   it("재접속 시 새 작업을 만들지 않고 기존 작업·이벤트를 복원한다", async () => {
