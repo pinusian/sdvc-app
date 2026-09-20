@@ -1,6 +1,6 @@
 # 진행 상황
 
-> 마지막 업데이트: 2026-09-20 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 6 · 세션 상태: T029 완료, T030 착수 가능
+> 마지막 업데이트: 2026-09-20 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 6 · 세션 상태: T030 로컬 GREEN, Preview 브라우저 검증 대기
 
 ## 1. 지금 어디까지 왔나
 - 기존 저장소 복제 및 핵심 소스 읽기 완료.
@@ -82,6 +82,7 @@
 - 최신 커밋 `b65aef4`를 새 Preview deployment `3GwDxJeTFRbvZiEL3tEUTj4gDow6`로 재배포했다. 40초 만에 `Ready`가 됐고 `https://sdvc-9c7egndyb-sdvc.vercel.app/`의 루트가 `/login`으로 이동했다. Production 환경은 변경하지 않았다.
 - T029 Analyze에서 문서 테이블은 `projects.id`를 필수 참조하지만 기존 프로젝트 생성은 구현 파일 발행 시점이라는 수명주기 충돌을 발견했다. 사용자 승인에 따라 첫 실제 대화에서 한도를 확인해 `draft` 프로젝트를 생성·연결하고, 문서 저장 성공 뒤에만 게이트를 노출하는 방식으로 Plan·Tasks를 보완했다.
 - T029에서 첫 실제 대화 시 프로젝트 한도를 선검사하고 고유 slug의 `draft` 프로젝트를 생성·연결하도록 대화 API를 변경했다. 블록별 구조화 문서 마커를 프롬프트에 추가하고 헌장·명세·명확화·계획·작업 문서를 불변 버전으로 저장한다. 필수 문서 누락 또는 저장 실패 때 승인 게이트를 숨기는 fail-closed 경계를 구현했다.
+- T030에서 대화 소유권을 재검사하는 문서 조회·승인 API와 문서 버전 선택 패널을 연결했다. 최신 Plan/Tasks 버전만 승인할 수 있고, 승인 API가 문서 단계를 전진시킨 뒤에만 채팅의 다음 단계 요청을 허용한다. 기존 상단 이동 버튼의 Plan/Tasks 우회를 제거하고 직접 `approved:true` 요청도 서버에서 409로 차단한다.
 
 ## 3. 검증 증거
 실행 명령: git ls-remote https://github.com/pinusian/sdvc-app.git HEAD
@@ -180,6 +181,11 @@
 - T029 RED → `2 files`, `5 failed / 56 passed`. 문서 파서·저장 배선 부재, 저장 실패 뒤 게이트 노출, 첫 대화 draft 미생성, 문서 단계 프로젝트 한도 미적용이 의미 있게 실패했다.
 - T029 대상 GREEN → 문서 생성·채팅 API·휴면 코드 검사 `3 files`, `68 tests passed`, 5.24초.
 - T029 정적·전체 회귀 → Next typegen·TypeScript와 관련 파일 lint 종료 코드 0; 전체 `105 files passed`, `995 tests passed`, 128.48초. 의도된 예외 응답 검증 stderr 3건 외 실패 없음.
+- T030 RED → `3 failed files`, `1 failed / 61 passed`. 문서 API·패널 모듈 부재 2건과 Tasks 승인 없이 구현 단계 진입이 200으로 허용된 보안 경계 1건이 의미 있게 실패했다.
+- T030 대상 GREEN → 문서 조회·승인 API, 버전 패널, 채팅 승인 흐름, 문서 상태기계 `5 files`, `114 tests passed`, 11.39초.
+- T030 정적 검사 → `npm run typecheck`와 관련 파일 lint 종료 코드 0.
+- T030 최초 전체 회귀 → 기능 테스트는 통과했지만 이제 배선된 `approveDocumentVersion`·`advanceDocumentStage`가 휴면 예외 목록에 남아 `1 failed / 1002 passed`; 예외를 제거한 뒤 휴면 검사 `3 passed`.
+- T030 최종 전체 회귀 → `107 files passed`, `1003 tests passed`, 129.76초. 의도된 예외 응답 검증 stderr 3건 외 실패 없음.
 문서 검사: git diff --cached --check에서 오류 출력 없음.
 독립 clone의 저장소 전용 작성자 `홍길동 <hong@example.com>`으로 Phase 1과 T005~T007 커밋을 완료함.
 SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
@@ -238,7 +244,7 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - [x] T027 문서 버전·해시·현재 단계·승인 무효화·중복 승인 RED 테스트를 작성하고 의미 있는 실패를 확인한다.
 - [x] T028 로컬 GREEN과 서버 전용 migration을 완료하고 `AI-VC` 시험 DB에 `0014_document_workflow.sql`을 적용해 실제 RLS·권한을 확인한다.
 - [x] T029 첫 대화 draft 프로젝트 생성·연결, 구조화 문서 버전 저장, 저장 성공 후 승인 게이트 노출을 구현하고 전체 회귀를 통과한다.
-- [ ] T030 문서 보기·버전·Plan/Tasks 승인 UI와 승인 전 구현 실행 서버 거부를 구현한다.
+- [ ] T030 로컬 GREEN 커밋을 push하고 Vercel Preview에서 인증 수강생의 저장 문서 보기·버전 선택·Plan/Tasks 승인·다음 단계 전환을 실제 브라우저로 확인한다.
 
 ## 5. 막힌 것 / 사용자 결정 대기
 - Plan·Tasks·Analyze 보완 승인은 완료됐다. 외부 리소스 범위도 Supabase `AI-VC` Free와 Vercel `SDVC` Hobby로 승인됐다.
