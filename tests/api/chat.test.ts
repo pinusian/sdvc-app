@@ -19,6 +19,7 @@ const createDraftProject = vi.fn();
 const getProjectById = vi.fn();
 const saveDocumentVersion = vi.fn();
 const createDocumentWorkflowStore = vi.fn();
+const getDocumentStage = vi.fn();
 const publishArtifact = vi.fn();
 const recordUsage = vi.fn();
 const loadAccountState = vi.fn();
@@ -136,7 +137,11 @@ function happyPath() {
     slug: "existing-project",
     status: "deployed",
   });
-  createDocumentWorkflowStore.mockReturnValue({ __documentStore: true });
+  getDocumentStage.mockResolvedValue("implement");
+  createDocumentWorkflowStore.mockReturnValue({
+    __documentStore: true,
+    getCurrentStage: (...args: unknown[]) => getDocumentStage(...args),
+  });
   saveDocumentVersion.mockImplementation(async (input: Record<string, unknown>) => ({
     id: `${String(input.kind)}-v1`,
     ...input,
@@ -1365,5 +1370,42 @@ describe("[BL-022] 끊긴 답변과 단계 이동", () => {
     expect(types.filter((t) => t === "done")).toHaveLength(1);
     expect(types[types.length - 1]).toBe("done");
     expect(types.indexOf("artifact")).toBeLessThan(types.indexOf("done"));
+  });
+});
+
+describe("[T030] 승인 전 구현 실행 차단", () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.ANTHROPIC_API_KEY = "sk-ant-test";
+    happyPath();
+    getConversation.mockResolvedValue({
+      ...CONVERSATION,
+      currentBlock: "tasks",
+      projectId: "proj-existing",
+    });
+    listMessages.mockResolvedValue([
+      { role: "user", content: "작업을 나눠줘" },
+      { role: "assistant", content: "작업 문서입니다." },
+    ]);
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  it("최신 Tasks 승인 없이 approved:true를 직접 보내도 implement로 넘어가지 않는다", async () => {
+    getDocumentStage.mockResolvedValue("tasks");
+
+    const { POST } = await import("@/app/api/chat/route");
+    const response = await POST(
+      request({ conversationId: "conv-1", message: "구현해줘", approved: true }),
+    );
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: expect.stringMatching(/승인/) });
+    expect(setCurrentBlock).not.toHaveBeenCalled();
+    expect(createChatStream).not.toHaveBeenCalled();
   });
 });
