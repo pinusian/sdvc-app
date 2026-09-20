@@ -1,6 +1,6 @@
 # 진행 상황
 
-> 마지막 업데이트: 2026-09-20 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 6 · 세션 상태: T028 시험 DB 적용·Preview 비밀 설정 완료, T029 착수 가능
+> 마지막 업데이트: 2026-09-20 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 6 · 세션 상태: T029 완료, T030 착수 가능
 
 ## 1. 지금 어디까지 왔나
 - 기존 저장소 복제 및 핵심 소스 읽기 완료.
@@ -81,6 +81,7 @@
 - Vercel `SDVC/sdvc-app`의 Preview 환경에 `OPENAI_CREDENTIAL_ENCRYPTION_KEY`(무작위 32바이트)와 `OPENAI_CREDENTIAL_ENCRYPTION_KEY_VERSION=v1`을 Secret 변수로 저장했다. 첫 생성 후보는 자동화 출력에 노출되어 저장하지 않고 폐기했으며, 최종 저장값은 별도로 다시 생성해 노출하지 않았다.
 - 최신 커밋 `b65aef4`를 새 Preview deployment `3GwDxJeTFRbvZiEL3tEUTj4gDow6`로 재배포했다. 40초 만에 `Ready`가 됐고 `https://sdvc-9c7egndyb-sdvc.vercel.app/`의 루트가 `/login`으로 이동했다. Production 환경은 변경하지 않았다.
 - T029 Analyze에서 문서 테이블은 `projects.id`를 필수 참조하지만 기존 프로젝트 생성은 구현 파일 발행 시점이라는 수명주기 충돌을 발견했다. 사용자 승인에 따라 첫 실제 대화에서 한도를 확인해 `draft` 프로젝트를 생성·연결하고, 문서 저장 성공 뒤에만 게이트를 노출하는 방식으로 Plan·Tasks를 보완했다.
+- T029에서 첫 실제 대화 시 프로젝트 한도를 선검사하고 고유 slug의 `draft` 프로젝트를 생성·연결하도록 대화 API를 변경했다. 블록별 구조화 문서 마커를 프롬프트에 추가하고 헌장·명세·명확화·계획·작업 문서를 불변 버전으로 저장한다. 필수 문서 누락 또는 저장 실패 때 승인 게이트를 숨기는 fail-closed 경계를 구현했다.
 
 ## 3. 검증 증거
 실행 명령: git ls-remote https://github.com/pinusian/sdvc-app.git HEAD
@@ -176,6 +177,9 @@
 - Supabase SQL Editor에서 `0014_document_workflow.sql`을 트랜잭션으로 실행 → `Success. No rows returned`. 검증 결과 `document_workflows`·`document_versions`·`document_approvals` 모두 `rls_enabled=true`, `policy_count=0`, `anon_has_dml=false`, `authenticated_has_dml=false`였다.
 - Vercel `SDVC/sdvc-app` 환경변수 확인 → `OPENAI_CREDENTIAL_ENCRYPTION_KEY`와 `OPENAI_CREDENTIAL_ENCRYPTION_KEY_VERSION`이 모두 Secret·Preview 범위로 표시됐다. 버전은 `v1`; 암호화 비밀은 무작위 32바이트이며 값은 기록하지 않았다.
 - 환경변수 반영 재배포 확인 → commit `b65aef4`, deployment `3GwDxJeTFRbvZiEL3tEUTj4gDow6`, Environment `Preview`, `Ready`, 40초, URL `https://sdvc-9c7egndyb-sdvc.vercel.app/`; 비로그인 루트는 `/login`과 “수강생 로그인” 폼을 표시했다.
+- T029 RED → `2 files`, `5 failed / 56 passed`. 문서 파서·저장 배선 부재, 저장 실패 뒤 게이트 노출, 첫 대화 draft 미생성, 문서 단계 프로젝트 한도 미적용이 의미 있게 실패했다.
+- T029 대상 GREEN → 문서 생성·채팅 API·휴면 코드 검사 `3 files`, `68 tests passed`, 5.24초.
+- T029 정적·전체 회귀 → Next typegen·TypeScript와 관련 파일 lint 종료 코드 0; 전체 `105 files passed`, `995 tests passed`, 128.48초. 의도된 예외 응답 검증 stderr 3건 외 실패 없음.
 문서 검사: git diff --cached --check에서 오류 출력 없음.
 독립 clone의 저장소 전용 작성자 `홍길동 <hong@example.com>`으로 Phase 1과 T005~T007 커밋을 완료함.
 SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
@@ -233,6 +237,8 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - [x] T026 Codex 중계 자격 로더 배선, 삭제 후 신규 호출 거부, 공통 로그 필터 정리와 보안 회귀검사를 완료한다.
 - [x] T027 문서 버전·해시·현재 단계·승인 무효화·중복 승인 RED 테스트를 작성하고 의미 있는 실패를 확인한다.
 - [x] T028 로컬 GREEN과 서버 전용 migration을 완료하고 `AI-VC` 시험 DB에 `0014_document_workflow.sql`을 적용해 실제 RLS·권한을 확인한다.
+- [x] T029 첫 대화 draft 프로젝트 생성·연결, 구조화 문서 버전 저장, 저장 성공 후 승인 게이트 노출을 구현하고 전체 회귀를 통과한다.
+- [ ] T030 문서 보기·버전·Plan/Tasks 승인 UI와 승인 전 구현 실행 서버 거부를 구현한다.
 
 ## 5. 막힌 것 / 사용자 결정 대기
 - Plan·Tasks·Analyze 보완 승인은 완료됐다. 외부 리소스 범위도 Supabase `AI-VC` Free와 Vercel `SDVC` Hobby로 승인됐다.
