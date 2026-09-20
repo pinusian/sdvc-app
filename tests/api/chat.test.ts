@@ -16,6 +16,7 @@ const appendMessage = vi.fn();
 const setCurrentBlock = vi.fn();
 const setConversationProject = vi.fn();
 const createDraftProject = vi.fn();
+const getProjectById = vi.fn();
 const saveDocumentVersion = vi.fn();
 const createDocumentWorkflowStore = vi.fn();
 const publishArtifact = vi.fn();
@@ -44,6 +45,11 @@ vi.mock("@/lib/conversations/store", () => ({
 
 vi.mock("@/lib/projects/draft", () => ({
   createDraftProject: (...args: unknown[]) => createDraftProject(...args),
+}));
+
+vi.mock("@/lib/projects/store", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/projects/store")>()),
+  getProjectById: (...args: unknown[]) => getProjectById(...args),
 }));
 
 vi.mock("@/lib/sdvc/document-state", async (importOriginal) => ({
@@ -122,6 +128,13 @@ function happyPath() {
     name: "홈페이지 만들고 싶어",
     slug: "homepage",
     status: "draft",
+  });
+  getProjectById.mockResolvedValue({
+    id: "proj-existing",
+    ownerId: "user-1",
+    name: "기존 프로젝트",
+    slug: "existing-project",
+    status: "deployed",
   });
   createDocumentWorkflowStore.mockReturnValue({ __documentStore: true });
   saveDocumentVersion.mockImplementation(async (input: Record<string, unknown>) => ({
@@ -411,7 +424,7 @@ describe("[P3-4] POST /api/chat — 대화 상태 저장", () => {
 
     expect(createDraftProject).toHaveBeenCalledWith(expect.anything(), {
       ownerId: "user-1",
-      name: "홈페이지 만들고 싶어",
+      name: "홈페이지",
     });
     expect(setConversationProject).toHaveBeenCalledWith(
       expect.anything(),
@@ -636,7 +649,7 @@ describe("[P6-2] POST /api/chat — 사용량 기록", () => {
     expect(recordUsage).toHaveBeenCalledWith(expect.anything(), {
       userId: "user-1",
       conversationId: "conv-1",
-      projectId: null,
+      projectId: "proj-draft",
       model: "claude-sonnet-5",
       inputTokens: 1234,
       outputTokens: 567,
@@ -1146,6 +1159,11 @@ describe("[P7-10] 산출물 이미지 알림", () => {
     vi.clearAllMocks();
     process.env.ANTHROPIC_API_KEY = "sk-ant-test";
     happyPath();
+    getConversation.mockResolvedValue({
+      ...CONVERSATION,
+      currentBlock: "implement",
+      projectId: "proj-existing",
+    });
     createChatStream.mockResolvedValue(
       streamOf({ type: "text", text: "사진을 넣었습니다." }, { type: "done" }),
     );

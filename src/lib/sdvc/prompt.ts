@@ -1,5 +1,6 @@
 import { SDVC_BLOCKS, getBlock, resolveBlock, type BlockId } from "@/lib/sdvc/blocks";
 import type { CurrentFiles } from "@/lib/artifacts/current";
+import { documentOutputInstruction } from "@/lib/sdvc/generated-documents";
 
 /**
  * [P3-3] 진행대본 → 시스템 프롬프트.
@@ -94,6 +95,7 @@ export function buildSystemPrompt({
       "",
       `이 블록의 산출물: ${current.produces.join(", ")}`,
     ].join("\n"),
+    documentOutputInstruction(here) || null,
     // 유지보수에는 다음 단계가 없다 — 확인 버튼 안내를 넣으면 모델이 없는 게이트를 만든다.
     isMaintenance ? null : [
       "## 다음 단계로 넘어가는 방법",

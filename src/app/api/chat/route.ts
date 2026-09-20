@@ -23,6 +23,7 @@ import {
   appendMessage,
   getConversation,
   listMessages,
+  setConversationProject,
   setCurrentBlock,
 } from "@/lib/conversations/store";
 import { publishArtifact } from "@/lib/artifacts/publish";
@@ -32,8 +33,13 @@ import { recordUsage } from "@/lib/usage/store";
 import { loadAccountState } from "@/lib/billing/account";
 import { canCreateProject, canStartChat } from "@/lib/billing/access";
 import { suggestProjectName } from "@/lib/projects/name";
+import { createDraftProject } from "@/lib/projects/draft";
+import { getProjectById, type Project } from "@/lib/projects/store";
 import { AttachmentError, buildAttachmentBlocks } from "@/lib/attachments/message";
 import { cleanupStream, registerActiveWork } from "@/lib/execution/active-work";
+import { createDocumentWorkflowStore } from "@/lib/sdvc/document-store";
+import { saveDocumentVersion } from "@/lib/sdvc/document-state";
+import { persistGeneratedDocuments } from "@/lib/sdvc/generated-documents";
 
 /**
  * SDVC 엔진과의 대화 API.
@@ -169,14 +175,9 @@ async function handleChat(request: Request) {
     }
   }
 
-  // [BL-014] `canCreateProject`는 [P6-3]부터 있었지만 아무도 부르지 않았다 —
-  // 대시보드는 "프로젝트 0 / 1개"라고 알리면서 실제로는 무제한으로 만들 수
-  // 있었다. **새 프로젝트를 만들려는 순간**(구현 단계 + 아직 연결된 프로젝트
-  // 없음)에만 본다 — 이미 만든 프로젝트를 고치는 turn까지 막으면 그 프로젝트
-  // 자체를 못 쓰게 되고, 계획·작업분해 같은 이전 블록에서 막으면 프로젝트를
-  // 만들지도 않았는데 거절하는 셈이다. canStartChat과 같은 이유로 Claude를
-  // 부르기 전에, 메시지를 저장하기 전에 확인한다.
-  if (block === "implement" && !conversation.projectId) {
+  // [T029] 헌장부터 문서를 project_id에 묶으므로 첫 실제 대화가 프로젝트 생성 시점이다.
+  // 대화 행만 만든 뒤 아무 말도 하지 않은 사용자는 한도를 차감하지 않는다.
+  if (!conversation.projectId) {
     const projectAccess = canCreateProject(verifiedAccount);
     if (!projectAccess.allowed) {
       return NextResponse.json(
@@ -221,16 +222,32 @@ async function handleChat(request: Request) {
     }
   }
 
-  await appendMessage(admin, { conversationId, role: "user", content: message });
-
   const title = conversation.title ?? undefined;
+  const projectName = title ?? suggestProjectName(firstUserMessage(history, message));
+  let projectId = conversation.projectId;
+  let linkedProject: Project;
+  if (!projectId) {
+    const draft = await createDraftProject(admin, { ownerId: user.id, name: projectName });
+    await setConversationProject(admin, conversationId, user.id, draft.id);
+    projectId = draft.id;
+    linkedProject = draft;
+  } else {
+    const existing = await getProjectById(admin, projectId, user.id);
+    if (!existing) {
+      return NextResponse.json({ error: "프로젝트를 찾을 수 없습니다." }, { status: 404 });
+    }
+    linkedProject = existing;
+  }
+
+  await appendMessage(admin, { conversationId, role: "user", content: message });
 
   // [BL-018] 이미 만든 프로젝트면 **지금 저장된 파일**을 함께 알려준다.
   // 대화 기록만 믿으면 되돌리기(P7-7) 뒤에 없는 버전을 고치게 되고,
   // 기록이 잘린 대화에서는 "내용을 붙여넣어 주세요"라고 되묻는다.
-  const currentFiles = conversation.projectId
-    ? await loadCurrentFiles(admin, conversation.projectId)
-    : undefined;
+  const currentFiles =
+    linkedProject.status === "deployed" && LONG_ANSWER_BLOCKS.includes(block)
+      ? await loadCurrentFiles(admin, projectId)
+      : undefined;
 
   const workController = new AbortController();
   const unregisterWork = registerActiveWork(user.id, workController);
@@ -249,7 +266,7 @@ async function handleChat(request: Request) {
         block,
         projectName: title,
         // [P5-4b] 이미 만든 프로젝트면 전체를 다시 만들지 않도록 알려준다 (FR-025)
-        published: Boolean(conversation.projectId),
+        published: linkedProject.status === "deployed",
         // [P7-10] 붙여준 첨부를 홈페이지에 넣는 방법을 알려준다 (FR-032)
         attachmentIds,
         currentFiles,
@@ -283,15 +300,19 @@ async function handleChat(request: Request) {
     ownerId: user.id,
     // [P7-1b] 이름을 안 적었으면 첫 요청 문장으로 짓는다 (FR-030).
     // 모델을 한 번 더 부르지 않는다 — 이름 하나에 돈을 쓸 이유가 없다.
-    projectName: title ?? suggestProjectName(firstUserMessage(history, message)),
-    // 항상 null 또는 문자열로 맞춘다 (undefined가 DB까지 흘러가면 컬럼이 빠진다)
-    projectId: conversation.projectId ?? null,
+    projectName,
+    projectId,
     request: message,
+    allowArtifactPublish: LONG_ANSWER_BLOCKS.includes(block),
   };
+
+  const documentContext: DocumentContext = { projectId, block };
 
   return new Response(
     cleanupStream(
-      stream.pipeThrough(captureAndFilter(admin, conversationId, initialEvents, publishContext)),
+      stream.pipeThrough(
+        captureAndFilter(admin, conversationId, initialEvents, publishContext, documentContext),
+      ),
       cleanupWork,
     ),
     {
@@ -333,6 +354,12 @@ interface PublishContext {
   projectId: string | null;
   /** [P7-6a] 이번 사용자 요청 — 버전 목록의 설명이 된다 */
   request: string;
+  allowArtifactPublish: boolean;
+}
+
+interface DocumentContext {
+  projectId: string;
+  block: LiveBlockId;
 }
 
 /** [P6-2] 스트림에서 걷어낸 사용량 — 화면에는 보내지 않고 기록만 한다. */
@@ -349,6 +376,7 @@ function captureAndFilter(
   conversationId: string,
   initialEvents: StreamEvent[] = [],
   publish?: PublishContext,
+  documentContext?: DocumentContext,
 ): TransformStream<Uint8Array, Uint8Array> {
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
@@ -419,9 +447,7 @@ function captureAndFilter(
 
       // 붙들어 둔 꼬리가 진짜 마커였는지 확인한다.
       const gate = parseGateMarker(held);
-      if (gate) {
-        emit(controller, { type: "gate", block: gate });
-      } else if (held) {
+      if (!gate && held) {
         answer += held;
         emit(controller, { type: "text", text: held });
       }
@@ -456,9 +482,37 @@ function captureAndFilter(
         }
       }
 
+      let documentSaved = true;
+      if (gate && documentContext) {
+        try {
+          const store = createDocumentWorkflowStore(admin);
+          await persistGeneratedDocuments(
+            {
+              projectId: documentContext.projectId,
+              block: documentContext.block,
+              answer: content,
+              now: new Date().toISOString(),
+            },
+            {
+              saveDocument: (input) => saveDocumentVersion(input, store),
+            },
+          );
+        } catch {
+          documentSaved = false;
+          emit(controller, {
+            type: "error",
+            message: "구조화 문서를 저장하지 못했습니다.",
+          });
+        }
+      }
+
+      if (gate && documentSaved && gate === documentContext?.block) {
+        emit(controller, { type: "gate", block: gate });
+      }
+
       // [P4-3] 답변에 파일이 들어 있으면 산출물로 발행한다. 실패해도 대화는
       // 그대로 살리고 오류만 알린다 — 대화 기록까지 잃으면 다시 만들 수 없다.
-      if (content && publish) {
+      if (content && publish?.allowArtifactPublish) {
         try {
           const published = await publishArtifact(admin, {
             ownerId: publish.ownerId,
