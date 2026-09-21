@@ -19,8 +19,15 @@ export interface PersistentRunStore extends PersistentRunDependencies {
     type: string;
     payload: Record<string, unknown>;
     createdAt: string;
+    dedupeKey?: string;
   }): Promise<PersistentRunEvent>;
   insertTestEvidence(input: TestEvidenceRecord): Promise<void>;
+  finishRun(input: {
+    runId: string;
+    workerId: string;
+    status: "cancelled" | "succeeded" | "failed";
+    finishedAt: string;
+  }): Promise<void>;
 }
 
 function assertNoError(error: { message?: string } | null) {
@@ -141,9 +148,10 @@ export const createPersistentRunStore = (client: SupabaseClient): PersistentRunS
     const { data, error } = await client
       .rpc("append_run_event", {
         p_run_id: input.runId,
-        p_event_type: input.type,
-        p_payload: input.payload,
-        p_created_at: input.createdAt,
+      p_event_type: input.type,
+      p_payload: input.payload,
+      p_dedupe_key: input.dedupeKey ?? null,
+      p_created_at: input.createdAt,
       })
       .single();
     assertNoError(error);
@@ -151,7 +159,7 @@ export const createPersistentRunStore = (client: SupabaseClient): PersistentRunS
   },
 
   async insertTestEvidence(input) {
-    const { error } = await client.from("test_evidence").insert({
+    const { error } = await client.from("test_evidence").upsert({
       run_id: input.runId,
       phase: input.phase,
       code_hash: input.codeHash,
@@ -161,6 +169,16 @@ export const createPersistentRunStore = (client: SupabaseClient): PersistentRunS
       finished_at: input.finishedAt,
       exit_code: input.exitCode,
       log_path: input.logPath,
+    }, { onConflict: "run_id,phase,code_hash,test_hash" });
+    assertNoError(error);
+  },
+
+  async finishRun(input) {
+    const { error } = await client.rpc("finish_persistent_run", {
+      p_run_id: input.runId,
+      p_worker_id: input.workerId,
+      p_status: input.status,
+      p_finished_at: input.finishedAt,
     });
     assertNoError(error);
   },
