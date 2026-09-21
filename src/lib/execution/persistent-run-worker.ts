@@ -105,18 +105,18 @@ export async function executePersistentRun(
         ? "cancelled"
         : "failed";
 
-  await dependencies.store.finishRun({
-    runId: input.runId,
-    workerId: input.workerId,
-    status,
-    finishedAt,
-  });
   await dependencies.store.appendEvent({
     runId: input.runId,
     type: "worker_finished",
     payload: { status, reason: verification.reason ?? null },
     createdAt: finishedAt,
     dedupeKey: `worker:${input.workerId}:finished`,
+  });
+  await dependencies.store.finishRun({
+    runId: input.runId,
+    workerId: input.workerId,
+    status,
+    finishedAt,
   });
 
   return { status: "executed", verification };

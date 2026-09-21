@@ -29,6 +29,9 @@ const ROOT = process.cwd();
  * 이유를 못 적겠으면 그건 지울 코드라는 뜻이다.
  */
 const KNOWN_DORMANT: Record<string, string> = {
+  executePersistentRun:
+    "[T034 부분] lease·영속 증거 worker는 구현·검증했다. Workflow/@vercel/sandbox 패키지 설치가 " +
+    "현재 네트워크 프록시로 막혀 실제 Workflow 진입점에 배선한 뒤 이 예외를 제거한다",
   createPersistentRun:
     "[T033] 지속 작업 생성 도메인 서비스. T035에서 수강생 작업 API·화면에 배선한 뒤 이 휴면 예외를 제거한다",
   cancelPersistentRun:
@@ -37,9 +40,6 @@ const KNOWN_DORMANT: Record<string, string> = {
     "[T033] 재접속 작업 복원 도메인 서비스. T035에서 진행 화면 재접속 경로에 배선한 뒤 이 휴면 예외를 제거한다",
   provisionTrialApplication:
     "[T011] Supabase/Vercel 앱 리소스 기술검증 제어기. T038에서 실제 프로비저닝 작업 경로에 " +
-    "배선한 뒤 이 휴면 예외를 제거한다",
-  runTddVerification:
-    "[T009] Sandbox 실행 제어 기술검증 어댑터. T034에서 Workflow 작업 실행 경로에 " +
     "배선한 뒤 이 휴면 예외를 제거한다",
   hasVerifiedMfa:
     "[P8-1] MFA 건너뛰기로 결정(2026-09-13). 관리자 1인 체제에서 2단계 인증을 켜면 " +
