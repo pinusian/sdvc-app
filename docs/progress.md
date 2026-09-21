@@ -1,6 +1,6 @@
 # 진행 상황
 
-> 마지막 업데이트: 2026-09-21 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 7 · 세션 상태: T033 완료, T034 준비
+> 마지막 업데이트: 2026-09-21 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 7 · 세션 상태: T034 핵심 worker 완료, Vercel SDK 배선 대기
 
 ## 1. 지금 어디까지 왔나
 - 기존 저장소 복제 및 핵심 소스 읽기 완료.
@@ -90,6 +90,9 @@
 - T033에서 `runs`·`run_events`·`test_evidence` 서버 전용 스키마, 사용자별 멱등 생성, 만료 lease 원자 인수, 순차 이벤트 기록과 Supabase 저장소를 구현했다. 작업 생성·조회·취소·재접속 도메인 계약을 GREEN으로 만들었다.
 - 사용자 승인 후 AI-VC Free 시험 DB에 `0015_atomic_document_approval.sql`과 `0016_persistent_runs.sql`을 한 트랜잭션으로 적용했다. 승인 RPC와 세 테이블 존재, RLS, 브라우저 역할 차단, service-role RPC 실행 권한을 합친 검증이 `all_checks_pass=true`였다.
 - 기존 시험 프로젝트를 이용한 롤백 스모크 검증에서 작업 생성→lease 인수→이벤트 순차 기록→테스트 증거 삽입이 성공했다. `rollback_smoke_pass=true`, `test_data_removed=true`로 검증용 데이터가 남지 않았다.
+- T034 RED에서 lease 보유 worker만 실행, 승인 문서 묶음 해시 재검사, RED/GREEN 증거와 로그 영속화, 중복 실행 방지, 실패 상태 확정 계약 5건을 의미 있게 실패시켰다.
+- T034 GREEN에서 `runTddVerification`을 지속 작업 worker에 연결하고, 테스트 증거의 불변 버전 upsert, 이벤트 dedupe key, lease 소유자 전용 최종 상태 RPC를 `0017_persistent_run_worker.sql`로 구현했다.
+- 실제 `workflow`·`@vercel/sandbox` SDK 설치는 Codex 셸의 외부 npm 연결이 `127.0.0.1:9` 프록시로 차단되어 완료하지 못했다. 핵심 worker는 검증됐지만 실제 Workflow 진입점은 아직 배선되지 않아 T034는 부분 완료 상태다.
 
 ## 3. 검증 증거
 실행 명령: git ls-remote https://github.com/pinusian/sdvc-app.git HEAD
@@ -202,6 +205,11 @@
 - T033 휴면 경계 기록 후 대상 회귀 → 지속 작업·migration·휴면 검사 `3 files`, `17 tests passed`.
 - T033 최종 전체 회귀 → `110 files passed`, `1016 tests passed`, 149.77초. 의도된 예외 응답 검증 stderr 3건 외 실패 없음.
 - AI-VC 시험 DB 0015·0016 실제 검증 → `all_checks_pass=true`; 롤백 스모크 결과 `rollback_smoke_pass=true`, `test_data_removed=true`.
+- T034 RED 대상 테스트 → `1 file`, `5 failed`, 32.42초. 5건 모두 `T034 persistent run worker is not implemented` 명시적 경계에서 실패했다.
+- T034 GREEN 대상 회귀 → 지속 worker·Sandbox 판정·0016/0017 migration `4 files`, `20 tests passed`, 9.93초.
+- T034 정적 검사 → `npm run typecheck`와 관련 5개 파일 lint 모두 종료 코드 0.
+- T034 최초 전체 회귀 → 기능은 `111 files / 1024 tests` 통과했으나 실제 Workflow 진입점 미배선으로 휴면 검사 1건이 의도대로 실패했다. SDK 설치 대기 사유를 예외에 기록한 뒤 대상 `3 files`, `12 tests passed`.
+- Vercel SDK 설치 시도 → `NPM_CONFIG_OFFLINE=true` 해제 전 `ENOTCACHED`; 해제 후 npm registry 연결이 `ECONNREFUSED 127.0.0.1:9`로 차단됐다. `package.json`과 lockfile 변경은 발생하지 않았다.
 문서 검사: git diff --cached --check에서 오류 출력 없음.
 독립 clone의 저장소 전용 작성자 `홍길동 <hong@example.com>`으로 Phase 1과 T005~T007 커밋을 완료함.
 SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
@@ -264,7 +272,8 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - [x] T031 원자 승인 전이와 회귀검사를 완료하고 `0015_atomic_document_approval.sql`을 AI-VC 시험 DB에 적용해 함수·권한을 확인한다.
 - [x] T032 작업 생성·조회·취소·중복 방지·재접속·차단 중단 RED 계약을 작성하고 8개 의미 있는 실패를 확인한다.
 - [x] T033 runs/run_events/test_evidence 저장과 lease·idempotency 처리를 구현하고 `0016_persistent_runs.sql`을 AI-VC 시험 DB에 적용해 테이블·RLS·RPC·롤백 스모크를 확인한다.
-- [ ] T034 Workflow와 Sandbox 실행을 지속 작업 저장소에 연결해 RED→GREEN→REFACTOR 증거를 불변 버전에 결부한다.
+- [ ] T034 핵심 worker의 RED→GREEN→REFACTOR와 불변 증거 저장은 완료했다. 사용자 PowerShell에서 `workflow`·`@vercel/sandbox`를 설치한 뒤 실제 Workflow 진입점과 Vercel Sandbox 포트를 배선하고 휴면 예외를 제거한다.
+- [ ] `0017_persistent_run_worker.sql`의 AI-VC Free 시험 DB 적용 승인을 받은 뒤 권한·멱등성 롤백 스모크를 실행한다.
 
 ## 5. 막힌 것 / 사용자 결정 대기
 - Plan·Tasks·Analyze 보완 승인은 완료됐다. 외부 리소스 범위도 Supabase `AI-VC` Free와 Vercel `SDVC` Hobby로 승인됐다.
@@ -274,6 +283,8 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - T031의 `0015_atomic_document_approval.sql`과 T033의 `0016_persistent_runs.sql`은 AI-VC Free 시험 DB 적용과 실제 권한·롤백 스모크 검증까지 완료했다.
 - Codex 키 중계의 주입형 계약과 비밀값 경계는 검증했다. 실제 외부 Codex SDK/API 호출은 사용자 키·비용 승인 없이 수행하지 않았으므로 아직 미검증이다.
 - Sandbox 격리 실행·증거 수집의 주입형 제어 계약은 검증했다. 실제 Vercel Sandbox 연결과 Workflow 배선은 T034 전까지 미검증이다.
+- 현재 Codex 셸은 npm registry를 `127.0.0.1:9` 차단 프록시로 보내므로 신규 SDK를 내려받을 수 없다. 사용자의 일반 PowerShell에서 `npm install workflow @vercel/sandbox`가 한 번 필요하다.
+- `0017_persistent_run_worker.sql`은 로컬 작성·테스트만 완료했으며 AI-VC 시험 DB에는 아직 적용하지 않았다.
 - API 비밀키는 채팅으로 받거나 파일에 임의로 채우지 않는다.
 - 현재 실행 환경의 GitHub 자격 증명은 없지만 사용자의 인증된 터미널 push와 Vercel Preview 확인으로 T022 원격 검증을 완료했다.
 - Vercel Preview의 서버 암호화 비밀은 준비됐지만 실제 OpenAI API 키는 별개다. 인증 수강생 계정과 사용자 소유 OpenAI 키를 새로 만들거나 입력하지 않았으므로 T025의 인증 화면·API 실증은 남아 있다.
