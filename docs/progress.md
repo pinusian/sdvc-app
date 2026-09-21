@@ -209,6 +209,7 @@
 - T034 GREEN 대상 회귀 → 지속 worker·Sandbox 판정·0016/0017 migration `4 files`, `20 tests passed`, 9.93초.
 - T034 정적 검사 → `npm run typecheck`와 관련 5개 파일 lint 모두 종료 코드 0.
 - T034 최초 전체 회귀 → 기능은 `111 files / 1024 tests` 통과했으나 실제 Workflow 진입점 미배선으로 휴면 검사 1건이 의도대로 실패했다. SDK 설치 대기 사유를 예외에 기록한 뒤 대상 `3 files`, `12 tests passed`.
+- T034 최종 전체 회귀 → `112 files passed`, `1025 tests passed`, 228.28초.
 - Vercel SDK 설치 시도 → `NPM_CONFIG_OFFLINE=true` 해제 전 `ENOTCACHED`; 해제 후 npm registry 연결이 `ECONNREFUSED 127.0.0.1:9`로 차단됐다. `package.json`과 lockfile 변경은 발생하지 않았다.
 문서 검사: git diff --cached --check에서 오류 출력 없음.
 독립 clone의 저장소 전용 작성자 `홍길동 <hong@example.com>`으로 Phase 1과 T005~T007 커밋을 완료함.
