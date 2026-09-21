@@ -1,6 +1,6 @@
 # 진행 상황
 
-> 마지막 업데이트: 2026-09-21 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 7 · 세션 상태: T034 Preview 빌드 완료, 0017 적용 승인 대기
+> 마지막 업데이트: 2026-09-22 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 7 · 세션 상태: T034 외부 준비 완료, T035 실행 UI 착수 전 휴식
 
 ## 1. 지금 어디까지 왔나
 - 기존 저장소 복제 및 핵심 소스 읽기 완료.
@@ -219,6 +219,12 @@
 - 사용자 push 후 commit `0ca67fb`의 Vercel `SDVC` Hobby Preview 배포 `JBaZouS24Teb5Puyboki6hPQrRhW`가 1분 1초 만에 `Ready`가 됐다. 빌드 로그는 `workflows build complete (77 steps, 1 workflow, time 1.0s)`와 `Build Completed`를 기록했다. 4개 미승인 install script는 경고였으나 빌드를 막지 않았다.
 - 새 Preview `https://sdvc-plquyb7x9-sdvc.vercel.app/`의 루트가 `/login`으로 이동하고 수강생 로그인 화면이 로드되는 것을 실제 브라우저로 확인했다. Workflows 화면에는 아직 실행 이력이 없으며 비용 안전장치를 열지 않았으므로 예상된 상태다.
 - Vercel SDVC Hobby의 최근 30일 Usage에서 `Sandbox Creations 0 / 5K`와 활성 Sandbox 없음 상태를 확인했다. 공식 가격표의 Hobby 포함량은 Sandbox Active CPU 5시간/월, Provisioned Memory 420 GB-시간/월, 생성 5,000회/월, 전송 20 GB/월, Workflow 이벤트 50,000회/월이다. 1 vCPU·최대 120초 1회 검증은 현재 무료 범위 안이다.
+- AI-VC Free 시험 DB에 `0017_persistent_run_worker.sql`을 적용했다. 증거·이벤트 멱등 인덱스, 새 `append_run_event`, lease 소유자 전용 `finish_persistent_run`, 브라우저 역할 차단과 service-role 권한을 확인했다.
+- 0017 실제 롤백 스모크에서 작업 생성→lease 인수→중복 이벤트 동일 ID→중복 증거 1건→잘못된 worker 종료 거부→정상 worker 종료가 성공했다. 결과는 `rollback_smoke_pass=true`, `test_data_removed=true`로 시험 데이터가 남지 않았다.
+- Vercel `SDVC/sdvc-app`에 Config 변수 `ENABLE_VERCEL_SANDBOX=true`를 Preview 전용으로 저장했다. Production·Development는 변경하지 않았다.
+- T034 commit `0ca67fb`를 새 Preview deployment `6PvqeJyhq76v4ZHPrrFXoS2VP1SR`로 재배포했다. 55초 만에 `Ready`가 됐고 새 배포 URL은 `https://sdvc-9cjgw0vk4-sdvc.vercel.app/`이다.
+- 실제 Sandbox 실행을 시작하려 했으나 현재 앱에는 인증·소유권 실행 `POST /api/runs/[runId]/execute`만 있고 run 생성·조회·취소·재접속 UI/API가 아직 없다. 인증 경계를 우회하지 않고 예정된 T035를 먼저 구현한 뒤 무료 1회 검증하기로 했다.
+- 실 Sandbox 검증 후보는 RED `912af934246d22a3c7ab8907291602568a0ffa94`, GREEN `c4a354770120fdc4ad9af82fc164fcc72cb39648`, 동일 `tests/lib/execution/persistent-run-worker.test.ts`이다.
 문서 검사: git diff --cached --check에서 오류 출력 없음.
 독립 clone의 저장소 전용 작성자 `홍길동 <hong@example.com>`으로 Phase 1과 T005~T007 커밋을 완료함.
 SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
@@ -281,8 +287,11 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - [x] T031 원자 승인 전이와 회귀검사를 완료하고 `0015_atomic_document_approval.sql`을 AI-VC 시험 DB에 적용해 함수·권한을 확인한다.
 - [x] T032 작업 생성·조회·취소·중복 방지·재접속·차단 중단 RED 계약을 작성하고 8개 의미 있는 실패를 확인한다.
 - [x] T033 runs/run_events/test_evidence 저장과 lease·idempotency 처리를 구현하고 `0016_persistent_runs.sql`을 AI-VC 시험 DB에 적용해 테이블·RLS·RPC·롤백 스모크를 확인한다.
-- [ ] T034 SDK 설치, 실제 Workflow 진입점·Vercel Sandbox 포트·인증 실행 API 배선, 휴면 예외 제거, Preview의 Workflow 1개 빌드와 로그인 화면 검증을 완료했다. `0017` 적용 뒤 Preview 무료 범위에서 실 Sandbox 1회 증거를 확인한다.
-- [ ] `0017_persistent_run_worker.sql`의 AI-VC Free 시험 DB 적용 승인을 받은 뒤 권한·멱등성 롤백 스모크를 실행한다.
+- [ ] T034 SDK 설치, 실제 Workflow 진입점·Vercel Sandbox 포트·인증 실행 API 배선, 0017 DB 적용, Preview 전용 실행 플래그와 재배포까지 완료했다. T035 UI로 Preview 무료 범위의 실 Sandbox 1회 증거를 확인한다.
+- [x] `0017_persistent_run_worker.sql`을 AI-VC Free 시험 DB에 적용하고 권한·멱등성·lease 종료 롤백 스모크를 통과시킨다.
+- [ ] T035 RED 테스트를 작성해 run 생성·조회·취소·재시도·재접속 화면/API 계약을 고정한다.
+- [ ] T035 GREEN 구현 후 대상·전체 회귀와 Next.js typecheck/lint를 실행한다.
+- [ ] T035 커밋을 원격 브랜치에 push한 뒤 Preview에서 인증 수강생으로 RED/GREEN 실 Sandbox 1회를 실행하고 Workflows·Sandboxes·DB 이벤트 증거를 확인한다.
 
 ## 5. 막힌 것 / 사용자 결정 대기
 - Plan·Tasks·Analyze 보완 승인은 완료됐다. 외부 리소스 범위도 Supabase `AI-VC` Free와 Vercel `SDVC` Hobby로 승인됐다.
@@ -291,9 +300,9 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - 비용이 발생하는 업그레이드·추가 구매·유료 리소스는 실행하지 않는다. 무료 범위를 벗어나는 징후가 보이면 즉시 중단한다.
 - T031의 `0015_atomic_document_approval.sql`과 T033의 `0016_persistent_runs.sql`은 AI-VC Free 시험 DB 적용과 실제 권한·롤백 스모크 검증까지 완료했다.
 - Codex 키 중계의 주입형 계약과 비밀값 경계는 검증했다. 실제 외부 Codex SDK/API 호출은 사용자 키·비용 승인 없이 수행하지 않았으므로 아직 미검증이다.
-- Sandbox 격리 실행·증거 수집 계약과 Vercel SDK 어댑터·Workflow 배선은 로컬 및 Preview 빌드에서 검증했다. 실제 Preview Sandbox 생성은 비용 안전장치를 열지 않아 아직 실행하지 않았다.
+- Sandbox 격리 실행·증거 수집 계약과 Vercel SDK 어댑터·Workflow 배선은 로컬 및 Preview 빌드에서 검증했다. Preview 전용 비용 안전장치도 열었지만, 인증·소유권 run 생성·상태 화면이 T035 범위라 실제 Sandbox 생성은 아직 실행하지 않았다.
 - 신규 SDK 설치는 사용자 일반 PowerShell에서 완료했다. Codex 셸은 npm registry가 차단되어 온라인 `npm audit` 결과를 재현할 수 없으므로 자동 fix 없이 상세 보고 확인이 남아 있다.
-- `0017_persistent_run_worker.sql`은 로컬 작성·테스트만 완료했으며 AI-VC 시험 DB에는 아직 적용하지 않았다.
+- `0017_persistent_run_worker.sql`은 AI-VC 시험 DB 적용과 권한·롤백 스모크까지 완료했다.
 - API 비밀키는 채팅으로 받거나 파일에 임의로 채우지 않는다.
 - 현재 실행 환경의 GitHub 자격 증명은 없지만 사용자의 인증된 터미널 push와 Vercel Preview 확인으로 T022 원격 검증을 완료했다.
 - Vercel Preview의 서버 암호화 비밀은 준비됐지만 실제 OpenAI API 키는 별개다. 인증 수강생 계정과 사용자 소유 OpenAI 키를 새로 만들거나 입력하지 않았으므로 T025의 인증 화면·API 실증은 남아 있다.
@@ -305,6 +314,7 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - 기존 README의 체크리스트는 실제 소스 구현량을 반영하지 못한다.
 - 기존 tests.html 안내를 실제 서버 TDD 증거로 취급하지 않는다.
 - AGENTS.md에 따라 구현 전 설치된 Next.js 버전의 로컬 문서를 읽어야 한다.
+- 실제 Sandbox 검증을 위해 실행 API 인증을 우회하거나 브라우저 세션 쿠키를 추출하지 않는다. T035의 소유권 검증 run API/UI를 먼저 연결한다.
 - `.sdvc/session-checkpoint/`는 로컬 세션 인계용이며 Git에 커밋하지 않는다. 현재 파일이 더 최신이면 체크포인트로 자동 덮어쓰지 않는다.
 - 임시 pnpm 설치는 build script 승인 제한으로 종료 코드 1이었다. `package-lock.json` 기반 npm 설치를 정본으로 삼고 pnpm 생성 파일을 커밋하지 않는다.
 - 기준선: ESLint 성공, TypeScript `LayoutProps` 오류 1건, Vitest 시작 환경 오류, Next 컴파일 성공 후 타입 검사 프로세스 `spawn EPERM` 실패.
