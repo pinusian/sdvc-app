@@ -30,17 +30,18 @@ const VERIFICATION: TddVerificationRequest = {
   runId: RUN.id,
   taskId: "T034",
   repository: "artifact://project-1/bundle-a",
-  revision: BUNDLE_HASH,
   phases: [
     {
       phase: "red",
       command: "npm test -- generated.test.ts",
+      sourceRevision: "1".repeat(40),
       codeHash: "c".repeat(64),
       testHash: TEST_HASH,
     },
     {
       phase: "green",
       command: "npm test -- generated.test.ts",
+      sourceRevision: "2".repeat(40),
       codeHash: "d".repeat(64),
       testHash: TEST_HASH,
     },

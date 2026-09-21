@@ -29,9 +29,6 @@ const ROOT = process.cwd();
  * 이유를 못 적겠으면 그건 지울 코드라는 뜻이다.
  */
 const KNOWN_DORMANT: Record<string, string> = {
-  executePersistentRun:
-    "[T034 부분] lease·영속 증거 worker는 구현·검증했다. Workflow/@vercel/sandbox 패키지 설치가 " +
-    "현재 네트워크 프록시로 막혀 실제 Workflow 진입점에 배선한 뒤 이 예외를 제거한다",
   createPersistentRun:
     "[T033] 지속 작업 생성 도메인 서비스. T035에서 수강생 작업 API·화면에 배선한 뒤 이 휴면 예외를 제거한다",
   cancelPersistentRun:

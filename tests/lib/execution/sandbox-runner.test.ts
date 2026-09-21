@@ -12,19 +12,20 @@ const REQUEST: TddVerificationRequest = {
   runId: "run-008",
   taskId: "T008",
   repository: "sample://calculator",
-  revision: "commit-green",
   phases: [
     {
       phase: "red",
       command: "npm test -- calculator.test.ts",
-      codeHash: "sha256:code-red",
-      testHash: "sha256:tests-v1",
+      sourceRevision: "1".repeat(40),
+      codeHash: "c".repeat(64),
+      testHash: "b".repeat(64),
     },
     {
       phase: "green",
       command: "npm test -- calculator.test.ts",
-      codeHash: "sha256:code-green",
-      testHash: "sha256:tests-v1",
+      sourceRevision: "2".repeat(40),
+      codeHash: "d".repeat(64),
+      testHash: "b".repeat(64),
     },
   ],
 };
@@ -100,7 +101,7 @@ describe("[T008] 격리 TDD 실행 계약", () => {
     const sandbox = sandboxWith(RED, GREEN);
     const changedTests: TddVerificationRequest = {
       ...REQUEST,
-      phases: [REQUEST.phases[0], { ...REQUEST.phases[1], testHash: "sha256:weakened" }],
+      phases: [REQUEST.phases[0], { ...REQUEST.phases[1], testHash: "e".repeat(64) }],
     };
 
     const result = await runTddVerification(changedTests, { sandbox });
@@ -122,8 +123,8 @@ describe("[T008] 격리 TDD 실행 계약", () => {
       startedAt: RED.startedAt,
       finishedAt: RED.finishedAt,
       exitCode: 1,
-      codeHash: "sha256:code-red",
-      testHash: "sha256:tests-v1",
+      codeHash: "c".repeat(64),
+      testHash: "b".repeat(64),
       stdout: RED.stdout,
       stderr: RED.stderr,
     });

@@ -211,6 +211,11 @@
 - T034 최초 전체 회귀 → 기능은 `111 files / 1024 tests` 통과했으나 실제 Workflow 진입점 미배선으로 휴면 검사 1건이 의도대로 실패했다. SDK 설치 대기 사유를 예외에 기록한 뒤 대상 `3 files`, `12 tests passed`.
 - T034 최종 전체 회귀 → `112 files passed`, `1025 tests passed`, 228.28초.
 - Vercel SDK 설치 시도 → `NPM_CONFIG_OFFLINE=true` 해제 전 `ENOTCACHED`; 해제 후 npm registry 연결이 `ECONNREFUSED 127.0.0.1:9`로 차단됐다. `package.json`과 lockfile 변경은 발생하지 않았다.
+- 사용자 PowerShell SDK 설치 → `workflow@4.8.9`, `@vercel/sandbox@3.3.0` 설치 완료. npm은 ESLint 9 지원 종료 경고, 16개 취약점, 4개 미승인 install script를 보고했다. 자동 `npm audit fix`와 일괄 script 승인은 하지 않았다.
+- T034 실제 배선 RED → Next 설정·Workflow·Sandbox 어댑터·실행 route가 없어 `1 file`, `4 failed`.
+- T034 실제 배선 대상 회귀 → 단계별 source revision, Workflow step, Preview 전용 실행 API, 1 vCPU·120초 비영속 Sandbox와 npm 설치 후 deny-all 네트워크를 구현해 `5 files`, `22 tests passed`; 직접 `tsc --noEmit`과 관련 lint 종료 코드 0.
+- T034 실제 배선 최종 전체 회귀 → `114 files passed`, `1032 tests passed`, 165.05초. Sandbox SDK 어댑터의 결과 파싱·설치 실패 분류·종료·URL 제한 검증을 포함한다.
+- `npm run typecheck`의 `next typegen`과 `npm run build`는 `withWorkflow` 설정 로드 중 현재 Codex 격리 환경의 하위 프로세스가 `spawn EPERM`으로 차단됐다. 직접 TypeScript 검사에는 오류가 없었고, 사용자 PowerShell/Preview 빌드에서 재검증할 항목으로 남겼다.
 문서 검사: git diff --cached --check에서 오류 출력 없음.
 독립 clone의 저장소 전용 작성자 `홍길동 <hong@example.com>`으로 Phase 1과 T005~T007 커밋을 완료함.
 SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
@@ -273,7 +278,7 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - [x] T031 원자 승인 전이와 회귀검사를 완료하고 `0015_atomic_document_approval.sql`을 AI-VC 시험 DB에 적용해 함수·권한을 확인한다.
 - [x] T032 작업 생성·조회·취소·중복 방지·재접속·차단 중단 RED 계약을 작성하고 8개 의미 있는 실패를 확인한다.
 - [x] T033 runs/run_events/test_evidence 저장과 lease·idempotency 처리를 구현하고 `0016_persistent_runs.sql`을 AI-VC 시험 DB에 적용해 테이블·RLS·RPC·롤백 스모크를 확인한다.
-- [ ] T034 핵심 worker의 RED→GREEN→REFACTOR와 불변 증거 저장은 완료했다. 사용자 PowerShell에서 `workflow`·`@vercel/sandbox`를 설치한 뒤 실제 Workflow 진입점과 Vercel Sandbox 포트를 배선하고 휴면 예외를 제거한다.
+- [ ] T034 SDK 설치, 실제 Workflow 진입점·Vercel Sandbox 포트·인증 실행 API 배선과 휴면 예외 제거를 완료했다. `0017` 적용 뒤 Preview 무료 범위에서 실 Sandbox 1회 증거를 확인한다.
 - [ ] `0017_persistent_run_worker.sql`의 AI-VC Free 시험 DB 적용 승인을 받은 뒤 권한·멱등성 롤백 스모크를 실행한다.
 
 ## 5. 막힌 것 / 사용자 결정 대기
@@ -283,8 +288,8 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - 비용이 발생하는 업그레이드·추가 구매·유료 리소스는 실행하지 않는다. 무료 범위를 벗어나는 징후가 보이면 즉시 중단한다.
 - T031의 `0015_atomic_document_approval.sql`과 T033의 `0016_persistent_runs.sql`은 AI-VC Free 시험 DB 적용과 실제 권한·롤백 스모크 검증까지 완료했다.
 - Codex 키 중계의 주입형 계약과 비밀값 경계는 검증했다. 실제 외부 Codex SDK/API 호출은 사용자 키·비용 승인 없이 수행하지 않았으므로 아직 미검증이다.
-- Sandbox 격리 실행·증거 수집의 주입형 제어 계약은 검증했다. 실제 Vercel Sandbox 연결과 Workflow 배선은 T034 전까지 미검증이다.
-- 현재 Codex 셸은 npm registry를 `127.0.0.1:9` 차단 프록시로 보내므로 신규 SDK를 내려받을 수 없다. 사용자의 일반 PowerShell에서 `npm install workflow @vercel/sandbox`가 한 번 필요하다.
+- Sandbox 격리 실행·증거 수집 계약과 Vercel SDK 어댑터·Workflow 배선은 로컬 검증했다. 실제 Preview Sandbox 생성은 비용 안전장치를 열지 않아 아직 실행하지 않았다.
+- 신규 SDK 설치는 사용자 일반 PowerShell에서 완료했다. Codex 셸은 npm registry가 차단되어 온라인 `npm audit` 결과를 재현할 수 없으므로 자동 fix 없이 상세 보고 확인이 남아 있다.
 - `0017_persistent_run_worker.sql`은 로컬 작성·테스트만 완료했으며 AI-VC 시험 DB에는 아직 적용하지 않았다.
 - API 비밀키는 채팅으로 받거나 파일에 임의로 채우지 않는다.
 - 현재 실행 환경의 GitHub 자격 증명은 없지만 사용자의 인증된 터미널 push와 Vercel Preview 확인으로 T022 원격 검증을 완료했다.

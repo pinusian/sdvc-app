@@ -15,6 +15,7 @@
 | `CRON_SECRET` | 비밀 | 서버 예약 작업 | 다른 암호화 키와 재사용 금지 |
 | `SITE_API_KEY_ENCRYPTION_SECRET` | 비밀 | 기존 방문자 키 암호화 | 수강생 OpenAI 자격 증명 키와 용도를 분리 |
 | `SITE_SESSION_SECRET` | 비밀 | 기존 방문자 세션 | 수강생 Supabase Auth 및 공급자 키 암호화와 분리 |
+| `ENABLE_VERCEL_SANDBOX` | 민감 설정 | Preview 서버 | 무료 쿼터 확인 뒤에만 `true`; Production 실행은 코드에서 차단 |
 
 ## 신규 경계
 

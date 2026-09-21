@@ -12,6 +12,7 @@ out/
 dist/
 build/
 .turbo/
+.swc/
 coverage/
 *.tsbuildinfo
 next-env.d.ts

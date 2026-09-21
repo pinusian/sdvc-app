@@ -3,6 +3,7 @@ export type TddPhase = "red" | "green";
 export interface TddPhaseInput {
   phase: TddPhase;
   command: string;
+  sourceRevision: string;
   codeHash: string;
   testHash: string;
 }
@@ -11,7 +12,6 @@ export interface TddVerificationRequest {
   runId: string;
   taskId: string;
   repository: string;
-  revision: string;
   phases: readonly [TddPhaseInput, TddPhaseInput];
   signal?: AbortSignal;
 }
@@ -90,7 +90,7 @@ export async function runTddVerification(
       result = await dependencies.sandbox.run({
         ...phase,
         repository: request.repository,
-        revision: request.revision,
+        revision: phase.sourceRevision,
         network: "none",
         environment: {},
         signal: request.signal,
@@ -127,8 +127,21 @@ function hasImmutableTestPlan(
     red.phase === "red" &&
     green.phase === "green" &&
     red.command === green.command &&
-    red.testHash === green.testHash
+    red.testHash === green.testHash &&
+    isSha256(red.codeHash) &&
+    isSha256(green.codeHash) &&
+    isSha256(red.testHash) &&
+    isGitRevision(red.sourceRevision) &&
+    isGitRevision(green.sourceRevision)
   );
+}
+
+function isSha256(value: string): boolean {
+  return /^[a-f0-9]{64}$/.test(value);
+}
+
+function isGitRevision(value: string): boolean {
+  return /^[a-f0-9]{40,64}$/.test(value);
 }
 
 function isMeaningfulRed(result: SandboxCommandResult): boolean {

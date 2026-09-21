@@ -52,8 +52,7 @@ export async function executePersistentRun(
 
   const immutableInputMatches =
     leasedRun.documentBundleHash === input.documentBundleHash &&
-    input.verification.runId === input.runId &&
-    input.verification.revision === input.documentBundleHash;
+    input.verification.runId === input.runId;
 
   const verification: TddVerificationResult = immutableInputMatches
     ? await runTddVerification(
