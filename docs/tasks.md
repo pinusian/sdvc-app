@@ -71,7 +71,7 @@
 - [x] T032 작업 생성·조회·취소·중복 방지·재접속·차단 중단 RED 테스트를 작성한다. 완료: 승인 문서 묶음 해시·멱등키 기반 queued 생성, 같은 키 중복 방지, 소유권 기반 조회, 영속 취소, 순서 있는 이벤트 재접속 복원, 차단 사용자 생성·재개 거부의 8개 테스트가 명시적 미구현 오류로 실패했다. 커밋: `e3a3cdc test: 지속 작업 실행 - RED (T032)`
 - [x] T033 runs/run_events/test_evidence 저장과 lease·idempotency 처리를 구현한다. 완료: 서버 전용 세 테이블, 사용자별 멱등 생성, 만료 lease 원자 인수, 순차 이벤트 RPC, Supabase 저장소와 작업 생성·조회·취소·재접속 서비스를 구현했다. 대상 14개·전체 1016개 테스트와 typecheck·lint가 통과했다. `0016_persistent_runs.sql`을 AI-VC 시험 DB에 적용했고 권한 종합 검증과 롤백 스모크가 모두 true였다. 커밋: `f42bd9b feat: 지속 작업 상태 - GREEN server (T033)`
 - [ ] T034 Workflow와 Sandbox 실행을 연결해 RED→GREEN→REFACTOR 증거를 불변 버전에 결부한다. 로컬 구현 완료: `workflow@4.8.9`·`@vercel/sandbox@3.3.0`을 설치하고 Next Workflow 진입점, 단계별 불변 Git revision, 1 vCPU·120초 비영속 Sandbox, 설치 후 deny-all 네트워크, 인증·소유권 실행 API를 배선했다. 실제 실행은 Preview와 `ENABLE_VERCEL_SANDBOX=true`가 모두 충족될 때만 허용하고 Production은 차단한다. 대상 22개·전체 1032개 테스트와 직접 `tsc`·관련 lint가 통과했다. Vercel Preview 빌드에서도 `77 steps, 1 workflow` 변환과 로그인 화면 로드를 확인했다. 남음: 0017 시험 DB 적용 후 비용 없는 Preview 실 Sandbox 1회 증거. 커밋: `feat: TDD 작업 실행 - GREEN worker (T034)`
-- [ ] T035 진행·로그·취소·재시도·재접속 화면을 구현한다. 커밋: `feat: 구현 진행 화면 - GREEN ui (T035)`
+- [x] T035 진행·로그·취소·재시도·재접속 화면을 구현한다. 완료: 서버가 소유 프로젝트의 승인된 Plan·Tasks 버전으로 문서 묶음 해시를 계산해 run을 생성하고, 소유권 조회·영속 취소·종료 run 재시도 API를 연결했다. 대시보드 진행 화면은 마지막 run ID만 브라우저에 기억하고 상태·순서 로그는 DB에서 복원하며, 실행 중 polling·취소와 실패/취소 뒤 새 멱등 run 재시도를 제공한다. RED `4f255c2`; 대상 11개·전체 1040개 테스트, 직접 TypeScript 검사와 관련 lint가 통과했다. 커밋: `feat: 구현 진행 화면 - GREEN ui (T035)`
 - [ ] T036 작업 복구·취소·차단 경쟁 조건을 정리하고 회귀검사한다. 커밋: `refactor: 지속 작업 실행 - REFACTOR (T036)`
 
 ## Phase 8 — 앱별 DB·배포·URL·복구 (US-04·06, P1/P2)

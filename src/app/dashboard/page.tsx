@@ -12,6 +12,7 @@ import { AppHeader } from "@/components/layout/AppHeader";
 import { canOpenAdminConsole } from "@/lib/admin/entry";
 import type { AdminTier } from "@/lib/admin/access";
 import { OpenAIKeySettings } from "@/components/settings/OpenAIKeySettings";
+import { RunProgressPanel } from "@/components/execution/RunProgressPanel";
 
 const GRADE_LABEL: Record<string, string> = {
   trial: "체험",
@@ -97,6 +98,8 @@ export default async function DashboardPage({
         )}
 
         <ProjectList projects={projectsWithConversation} />
+
+        <RunProgressPanel projects={projects.map(({ id, name }) => ({ id, name }))} />
 
         <OpenAIKeySettings />
 

@@ -1,6 +1,6 @@
 # 진행 상황
 
-> 마지막 업데이트: 2026-09-22 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 7 · 세션 상태: T034 외부 준비 완료, T035 실행 UI 착수 전 휴식
+> 마지막 업데이트: 2026-09-22 · 프로젝트: SDVC 웹서비스 Codex 전환 · 현재 단계: Implement Phase 7 · 세션 상태: T035 로컬 GREEN 완료, Preview 검증과 T036 대기
 
 ## 1. 지금 어디까지 왔나
 - 기존 저장소 복제 및 핵심 소스 읽기 완료.
@@ -225,6 +225,9 @@
 - T034 commit `0ca67fb`를 새 Preview deployment `6PvqeJyhq76v4ZHPrrFXoS2VP1SR`로 재배포했다. 55초 만에 `Ready`가 됐고 새 배포 URL은 `https://sdvc-9cjgw0vk4-sdvc.vercel.app/`이다.
 - 실제 Sandbox 실행을 시작하려 했으나 현재 앱에는 인증·소유권 실행 `POST /api/runs/[runId]/execute`만 있고 run 생성·조회·취소·재접속 UI/API가 아직 없다. 인증 경계를 우회하지 않고 예정된 T035를 먼저 구현한 뒤 무료 1회 검증하기로 했다.
 - 실 Sandbox 검증 후보는 RED `912af934246d22a3c7ab8907291602568a0ffa94`, GREEN `c4a354770120fdc4ad9af82fc164fcc72cb39648`, 동일 `tests/lib/execution/persistent-run-worker.test.ts`이다.
+- T035 RED → 실행 생성·재접속·취소·재시도 API와 진행 화면 모듈 부재로 `2 files failed / 0 tests collected`; 누락 모듈 경계에서 예상대로 실패했다. RED 커밋 `4f255c2`.
+- T035 대상 GREEN → 승인 Plan·Tasks 기반 서버 계산 문서 묶음 해시, 소유권 실행 API, DB 재접속, 영속 취소, 종료 run 재시도와 대시보드 진행·로그 화면을 구현해 `3 files`, `11 tests passed`, 5.28초.
+- T035 정적·전체 회귀 → `next typegen`은 Codex 격리 환경의 기존 `spawn EPERM`으로 실행되지 않았으나 직접 `tsc --noEmit`과 관련 lint는 종료 코드 0; 전체 `116 files passed`, `1040 tests passed`, 95.75초.
 문서 검사: git diff --cached --check에서 오류 출력 없음.
 독립 clone의 저장소 전용 작성자 `홍길동 <hong@example.com>`으로 Phase 1과 T005~T007 커밋을 완료함.
 SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
@@ -289,8 +292,8 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - [x] T033 runs/run_events/test_evidence 저장과 lease·idempotency 처리를 구현하고 `0016_persistent_runs.sql`을 AI-VC 시험 DB에 적용해 테이블·RLS·RPC·롤백 스모크를 확인한다.
 - [ ] T034 SDK 설치, 실제 Workflow 진입점·Vercel Sandbox 포트·인증 실행 API 배선, 0017 DB 적용, Preview 전용 실행 플래그와 재배포까지 완료했다. T035 UI로 Preview 무료 범위의 실 Sandbox 1회 증거를 확인한다.
 - [x] `0017_persistent_run_worker.sql`을 AI-VC Free 시험 DB에 적용하고 권한·멱등성·lease 종료 롤백 스모크를 통과시킨다.
-- [ ] T035 RED 테스트를 작성해 run 생성·조회·취소·재시도·재접속 화면/API 계약을 고정한다.
-- [ ] T035 GREEN 구현 후 대상·전체 회귀와 Next.js typecheck/lint를 실행한다.
+- [x] T035 RED 테스트를 작성해 run 생성·조회·취소·재시도·재접속 화면/API 계약을 고정한다.
+- [x] T035 GREEN 구현 후 대상·전체 회귀와 직접 TypeScript 검사·관련 lint를 통과한다. `next typegen`은 Codex 격리 환경의 기존 `spawn EPERM`으로 Preview에서 재검증한다.
 - [ ] T035 커밋을 원격 브랜치에 push한 뒤 Preview에서 인증 수강생으로 RED/GREEN 실 Sandbox 1회를 실행하고 Workflows·Sandboxes·DB 이벤트 증거를 확인한다.
 
 ## 5. 막힌 것 / 사용자 결정 대기
