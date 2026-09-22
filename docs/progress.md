@@ -228,6 +228,7 @@
 - T035 RED → 실행 생성·재접속·취소·재시도 API와 진행 화면 모듈 부재로 `2 files failed / 0 tests collected`; 누락 모듈 경계에서 예상대로 실패했다. RED 커밋 `4f255c2`.
 - T035 대상 GREEN → 승인 Plan·Tasks 기반 서버 계산 문서 묶음 해시, 소유권 실행 API, DB 재접속, 영속 취소, 종료 run 재시도와 대시보드 진행·로그 화면을 구현해 `3 files`, `11 tests passed`, 5.28초.
 - T035 정적·전체 회귀 → `next typegen`은 Codex 격리 환경의 기존 `spawn EPERM`으로 실행되지 않았으나 직접 `tsc --noEmit`과 관련 lint는 종료 코드 0; 전체 `116 files passed`, `1040 tests passed`, 95.75초.
+- T035 Preview 검증 → GREEN `733f98d`를 push한 뒤 Vercel `SDVC/sdvc-app` Preview deployment `G26BecrNswv9A69a1NvV1vRnRg2p`가 39초 만에 `Ready`가 됐다. URL `https://sdvc-3g433gcxm-sdvc.vercel.app/`; 브랜치 고정 주소의 기존 인증 세션에서 대시보드의 “구현 진행” 패널, 프로젝트 선택, “구현 실행 준비” 버튼을 확인했다. 이 확인에서는 DB run이나 Sandbox를 만들지 않았다.
 문서 검사: git diff --cached --check에서 오류 출력 없음.
 독립 clone의 저장소 전용 작성자 `홍길동 <hong@example.com>`으로 Phase 1과 T005~T007 커밋을 완료함.
 SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
@@ -294,7 +295,7 @@ SDVC 체크포인트 스크립트 시험(격리된 임시 Git 저장소):
 - [x] `0017_persistent_run_worker.sql`을 AI-VC Free 시험 DB에 적용하고 권한·멱등성·lease 종료 롤백 스모크를 통과시킨다.
 - [x] T035 RED 테스트를 작성해 run 생성·조회·취소·재시도·재접속 화면/API 계약을 고정한다.
 - [x] T035 GREEN 구현 후 대상·전체 회귀와 직접 TypeScript 검사·관련 lint를 통과한다. `next typegen`은 Codex 격리 환경의 기존 `spawn EPERM`으로 Preview에서 재검증한다.
-- [ ] T035 커밋을 원격 브랜치에 push한 뒤 Preview에서 인증 수강생으로 RED/GREEN 실 Sandbox 1회를 실행하고 Workflows·Sandboxes·DB 이벤트 증거를 확인한다.
+- [ ] T035 RED/GREEN 커밋 push와 인증 Preview 화면 확인은 완료했다. 승인 문서가 갖춰진 무료 테스트 run으로 RED/GREEN 실 Sandbox 1회를 실행하고 Workflows·Sandboxes·DB 이벤트 증거를 확인한다.
 
 ## 5. 막힌 것 / 사용자 결정 대기
 - Plan·Tasks·Analyze 보완 승인은 완료됐다. 외부 리소스 범위도 Supabase `AI-VC` Free와 Vercel `SDVC` Hobby로 승인됐다.
